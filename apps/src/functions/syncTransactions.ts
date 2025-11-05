@@ -112,3 +112,5 @@ export async function syncTransactions(): Promise<void> {
     throw err;
   }
 }
+
+syncTransactions();
