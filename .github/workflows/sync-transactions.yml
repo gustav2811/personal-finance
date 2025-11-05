@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Sleep for a random duration
-        run: sleep $((RANDOM % 201))
+        run: sleep $((RANDOM % 601))
       - name: Checkout repository
         uses: actions/checkout@v4
       - name: Set up Node.js
@@ -27,7 +27,7 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           MY_22SEVEN_USERNAME: ${{ secrets.MY_22SEVEN_USERNAME }}
           MY_22SEVEN_PASSWORD: ${{ secrets.MY_22SEVEN_PASSWORD }}
-        run: yarn tsx apps/src/functions/syncSnapshots.ts
+        run: yarn tsx apps/src/functions/syncBalances.ts
 
   # --- JOB 2: EXTRACT & LOAD TRANSACTIONS ---
   sync-transactions:
@@ -35,7 +35,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Sleep for a random duration
-        run: sleep $((RANDOM % 201))
+        run: sleep $((RANDOM % 601))
       - name: Checkout repository
         uses: actions/checkout@v4
       - name: Set up Node.js

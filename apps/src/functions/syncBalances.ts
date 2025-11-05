@@ -83,5 +83,4 @@ export async function syncSnapshots(): Promise<void> {
     throw err;
   }
 }
-
 syncSnapshots();
