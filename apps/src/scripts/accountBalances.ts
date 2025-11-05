@@ -14,7 +14,7 @@ import {
   type NewSnapshotRow,
 } from "../repos/snapshots";
 
-async function syncSnapshots(): Promise<void> {
+export async function syncSnapshots(): Promise<void> {
   try {
     const cfg = getConfig();
 
@@ -83,5 +83,3 @@ async function syncSnapshots(): Promise<void> {
     throw err;
   }
 }
-
-syncSnapshots();
