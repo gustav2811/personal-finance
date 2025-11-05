@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { syncSnapshots } from "../apps/src/scripts/accountBalances";
+import { syncSnapshots } from "../apps/src/functions/syncBalances";
 
 export default async function (
   request: VercelRequest,
