@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Sleep for a random duration
-        run: sleep $((RANDOM % 301))
+        run: sleep $((RANDOM % 201))
       - name: Checkout repository
         uses: actions/checkout@v4
       - name: Set up Node.js
@@ -34,8 +34,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: 😴 Sleep for a random duration (0-5 mins)
-        run: sleep $((RANDOM % 601))
+      - name: Sleep for a random duration
+        run: sleep $((RANDOM % 201))
       - name: Checkout repository
         uses: actions/checkout@v4
       - name: Set up Node.js
