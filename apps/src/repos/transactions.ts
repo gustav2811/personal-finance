@@ -20,13 +20,29 @@ export type NewTransactionRow = {
 export async function getExistingTransactionKeys(
   supabase: SupabaseClient
 ): Promise<Set<string>> {
-  const { data, error } = await supabase.from("transactions").select("id");
+  const PAGE_SIZE = 1000;
+  const existingIds = new Set<string>();
+  let from = 0;
 
-  if (error) {
-    throw new Error(`Supabase select error (transactions): ${error.message}`);
+  while (true) {
+    const to = from + PAGE_SIZE - 1;
+    const { data, error } = await supabase
+      .from("transactions")
+      .select("id")
+      .range(from, to);
+
+    if (error) {
+      throw new Error(`Supabase select error (transactions): ${error.message}`);
+    }
+
+    const page = (data ?? []) as { id: string }[];
+    for (const row of page) existingIds.add(row.id);
+
+    if (page.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
   }
 
-  return new Set(data.map((row) => row.id));
+  return existingIds;
 }
 
 /**
@@ -39,7 +55,9 @@ export async function insertTransactions(
   supabase: SupabaseClient,
   transactions: NewTransactionRow[]
 ): Promise<void> {
-  const { error } = await supabase.from("transactions").insert(transactions);
+  const { error } = await supabase
+    .from("transactions")
+    .upsert(transactions, { onConflict: "id" });
 
   if (error) {
     throw new Error(`Supabase insert error (transactions): ${error.message}`);
