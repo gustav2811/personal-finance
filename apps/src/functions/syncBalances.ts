@@ -1,6 +1,6 @@
 import { getConfig } from "../config";
 import { getSupabaseClient } from "../lib/supabase";
-import { loginTwentyTwoSeven, fetchAllSnapshots } from "../lib/22seven";
+import { loginTwentyTwoSeven, fetchAllSnapshots } from "../22seven/22seven";
 import {
   normalizeTimestampToDateString,
   logInfo,
