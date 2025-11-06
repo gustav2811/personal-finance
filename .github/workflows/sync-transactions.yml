@@ -2,9 +2,8 @@ name: Daily fetch
 
 on:
   schedule:
-    - cron: "11 6 * * *"
-
-  workflow_dispatch:
+   - cron: "11 6 * * *"
+  workflow_dispatch: {}
 
 jobs:
   # --- JOB 1: EXTRACT & LOAD SNAPSHOTS ---
