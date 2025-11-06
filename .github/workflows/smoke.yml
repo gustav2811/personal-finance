@@ -1,0 +1,13 @@
+name: Daily fetch (smoke)
+
+on:
+  schedule:
+    - cron: "0 7 * * *"
+    - cron: "*/6 * * * *"   # temporary: every 6 minutes to prove scheduler works
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Triggered by ${{ github.event_name }} at ${{ github.run_started_at }}"
