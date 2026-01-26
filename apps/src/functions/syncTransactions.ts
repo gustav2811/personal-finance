@@ -4,7 +4,6 @@ import { logInfo, logError, chunk } from "../lib/utils";
 import { loginTwentyTwoSeven, fetchAllTransactions } from "../22seven/22seven";
 import { getAccountMap } from "../repos/accounts";
 import {
-  getExistingTransactionKeys,
   insertTransactions,
   type NewTransactionRow,
 } from "../repos/transactions";
@@ -35,30 +34,19 @@ export async function syncTransactions(): Promise<void> {
     const accountMap = await getAccountMap(supabase);
     logInfo("-> Accounts loaded.", { count: accountMap.size });
 
-    // --- Step 3: Get Existing Keys ---
-    logInfo("Step 3/6: Fetching existing transaction keys from Supabase...");
-    const existingKeys = await getExistingTransactionKeys(supabase);
-    logInfo("-> Existing transaction keys loaded.", {
-      count: existingKeys.size,
-    });
-
-    // --- Step 4: Fetch ALL from 22seven ---
-    logInfo("Step 4/6: Fetching ALL (hot + cold) transactions...");
+    // --- Step 3: Fetch ALL from 22seven ---
+    logInfo("Step 3/5: Fetching ALL (hot + cold) transactions...");
     const allTransactions = await fetchAllTransactions(tokens);
     logInfo("-> All transactions fetched.", { count: allTransactions.length });
 
-    // --- Step 5: Transform & Filter ---
-    logInfo("Step 5/6: Transforming and filtering for new transactions...");
-    const toInsert: NewTransactionRow[] = [];
+    // --- Step 4: Transform & Filter ---
+    logInfo("Step 4/5: Transforming and filtering for sync...");
+    const toSync: NewTransactionRow[] = [];
 
     // This Set tracks unknown accounts so we only log them once per run
     const unknownAccountIds = new Set<string>();
 
     for (const tx of allTransactions) {
-      if (existingKeys.has(tx.id)) {
-        continue;
-      }
-
       // 2. Translate 22seven ID to our internal UUID
       const internalAccountId = accountMap.get(tx.accountId);
 
@@ -74,8 +62,8 @@ export async function syncTransactions(): Promise<void> {
         continue;
       }
 
-      // 4. This is a NEW transaction! Transform it.
-      toInsert.push({
+      // 4. Transform for upsert.
+      toSync.push({
         id: tx.id,
         account_id: internalAccountId,
         date: new Date(tx.transactionDate).toISOString(),
@@ -83,27 +71,26 @@ export async function syncTransactions(): Promise<void> {
       });
     }
 
-    // --- Step 6: Batch Insert New Data ---
-    if (toInsert.length > 0) {
+    // --- Step 5: Batch Sync Data ---
+    if (toSync.length > 0) {
       logInfo(
-        `Step 6/6: Found ${toInsert.length} new transactions. Inserting...`
+        `Step 5/5: Syncing ${toSync.length} transactions (insert/update)...`,
       );
 
-      const batches = chunk(toInsert, 500);
+      const batches = chunk(toSync, 500);
       for (const [index, batch] of batches.entries()) {
-        logInfo(`-> Inserting batch ${index + 1}/${batches.length}`, {
+        logInfo(`-> Syncing batch ${index + 1}/${batches.length}`, {
           size: batch.length,
         });
         await insertTransactions(supabase, batch);
       }
       logInfo("--- Transaction Sync COMPLETE ---");
-      logInfo("New transactions successfully added.", {
-        inserted: toInsert.length,
+      logInfo("Transactions successfully synced.", {
+        synced: toSync.length,
       });
     } else {
-      logInfo("Step 6/6: No new transactions found.");
+      logInfo("Step 5/5: No transactions found to sync.");
       logInfo("--- Transaction Sync COMPLETE ---");
-      logInfo("Database is already up-to-date.");
     }
   } catch (err) {
     const message = (err as any)?.message ?? String(err);
