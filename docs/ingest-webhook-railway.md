@@ -1,18 +1,33 @@
 # Ingest Webhook — Railway & SendGrid Setup
 
+## Why two Railway services?
+
+The app has two separate long-running processes:
+
+1. **Web** — Fastify HTTP server. It receives SendGrid’s POST, validates the token, parses multipart form data, pushes a job to Redis, and returns **200 immediately**. That way SendGrid doesn’t time out or retry while we do heavy work.
+2. **Worker** — BullMQ worker. It pulls jobs from Redis, parses the XLSX (bank-specific), talks to Finwise (with retries and idempotency), and writes failures to the DLQ. This can take seconds per email.
+
+If the web server did parsing and Finwise calls itself, SendGrid might retry the webhook on timeout and we’d risk duplicate work. By splitting “accept and enqueue” (web) from “process” (worker), we control retries, scaling, and observability independently. So we run **two services**: one for HTTP, one for the job consumer.
+
+---
+
 ## Railway
 
 ### 1. New project
 
 - Create project → Deploy from GitHub repo (this repo).
-- Optionally use **Monorepo** and set **Root Directory** to `apps/ingest-webhook`.
+- Set **Root Directory** to the **repo root** (leave empty or `.`) so `libs/finwise` is in the build context.
 
-### 2. Services
+### 2. Services (config-as-code)
 
-Run two processes:
+The repo includes two Railway config files. Create **two services** in the same project (same repo, same root directory). For each service, set the **custom config file** in service settings:
 
-- **Web**: start command `yarn start` (or `node --import tsx src/server.ts`). Exposes HTTP for SendGrid webhook and health.
-- **Worker**: same root directory, start command `yarn worker`. Consumes jobs from Redis and posts to Finwise.
+| Service | Config file path |
+|--------|-------------------|
+| Web    | `apps/ingest-webhook/railway-web.toml` |
+| Worker | `apps/ingest-webhook/railway-worker.toml` |
+
+Config-as-code defines build and deploy (see [Railway docs](https://docs.railway.com/config-as-code)); the only difference between the two is `startCommand` (`yarn start` vs `yarn worker`). Generate a **domain** for the **Web** service only (for the SendGrid webhook URL).
 
 ### 3. Redis
 
@@ -36,10 +51,10 @@ Set in Railway → Variables (or per-service):
 
 Do **not** commit these; use Railway (or a secret manager).
 
-### 5. Health check
+### 5. Health check (Web service)
 
 - Path: `/`
-- Expected: `200` with body `{ "status": "ok" }`.
+- Expected: `200` with body `{ "status": "ok" }`. Set in `railway-web.toml` via `healthcheckPath`.
 
 ### 6. Domain
 

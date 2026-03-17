@@ -7,4 +7,5 @@ builder = "railpack"
 buildCommand = "cd apps/ingest-webhook && yarn install --frozen-lockfile"
 
 [deploy]
-startCommand = "cd apps/ingest-webhook && yarn worker"
+# Use node directly so we don't rely on repo .yarn/releases (not in image)
+startCommand = "cd apps/ingest-webhook && node --import tsx src/queue/worker.ts"
