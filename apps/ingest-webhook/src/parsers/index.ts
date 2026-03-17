@@ -30,7 +30,8 @@ export function detectBank(
   const fromLower = from.toLowerCase();
   const toLower = to.toLowerCase();
   const fromDomain = fromLower.includes("@") ? fromLower.split("@")[1] : "";
-  const toLocal = toLower.includes("@") ? toLower.split("@")[0] : "";
+  // Accept either full address "user@domain" or local part "user"
+  const toLocal = toLower.includes("@") ? toLower.split("@")[0] : toLower;
 
   for (const { code, fromDomains, toLocalParts, filenamePatterns } of BANK_DETECTION) {
     if (fromDomains.some((d) => fromDomain === d || fromDomain.endsWith("." + d))) {
