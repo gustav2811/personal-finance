@@ -87,6 +87,8 @@ export async function webhookRoutes(
         // TODO: remove — temporary logging to verify Gmail auto-forward (check Railway logs for verification code)
         console.log("TEXT:", fields["text"]);
         console.log("HTML:", fields["html"]);
+        // Hypothesis: raw MIME in fields.email; attachments may be inside MIME rather than separate parts
+        console.log("EMAIL RAW:", fields["email"]?.slice(0, 500));
 
         const message_id = extractMessageId(headers);
         const payload: IngestJobPayload = {
