@@ -1,6 +1,8 @@
-import { FinWiseClient, FinWiseApiError } from "@investments/finwise";
-import type { CreateTransactionBody } from "@investments/finwise";
+import * as Finwise from "@investments/finwise";
+import type { CreateTransactionBody, FinWiseClient } from "@investments/finwise";
 import type { CanonicalTransaction } from "../parsers/types.js";
+
+const { FinWiseClient: FinWiseClientCtor, FinWiseApiError } = Finwise;
 
 const MAX_RETRIES = 3;
 const INITIAL_BACKOFF_MS = 1000;
@@ -100,7 +102,7 @@ export function createFinwiseClient(
   baseUrl: string,
   logger?: { debug?: (msg: string, meta?: Record<string, unknown>) => void; error?: (msg: string, meta?: Record<string, unknown>) => void }
 ): FinWiseClient {
-  return new FinWiseClient({
+  return new FinWiseClientCtor({
     apiKey,
     baseUrl,
     logger,
