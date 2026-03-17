@@ -1,8 +1,21 @@
-import * as Finwise from "@investments/finwise";
-import type { CreateTransactionBody, FinWiseClient } from "@investments/finwise";
+import * as FinwiseNamespace from "@investments/finwise";
+import type { CreateTransactionBody, FinWiseClient, FinWiseClientConfig } from "@investments/finwise";
 import type { CanonicalTransaction } from "../parsers/types.js";
 
-const { FinWiseClient: FinWiseClientCtor, FinWiseApiError } = Finwise;
+// ESM/CJS interop: some runtimes (e.g. Railway bundler) expose the package as default or nest exports
+type FinwiseModule = typeof FinwiseNamespace & { default?: typeof FinwiseNamespace | (new (config: FinWiseClientConfig) => FinWiseClient) };
+const ns = FinwiseNamespace as FinwiseModule;
+const withDefault = ns.default && typeof ns.default === "object" ? ns.default : ns;
+const FinWiseClientCtorRaw =
+  (typeof withDefault.FinWiseClient === "function" ? withDefault.FinWiseClient : null) ??
+  (typeof ns.default === "function" ? (ns.default as new (config: FinWiseClientConfig) => FinWiseClient) : null);
+const FinWiseApiError = withDefault.FinWiseApiError;
+if (!FinWiseClientCtorRaw) {
+  throw new Error(
+    "@investments/finwise: FinWiseClient not found (ESM/CJS interop). Ensure the package exports FinWiseClient."
+  );
+}
+const FinWiseClientCtor = FinWiseClientCtorRaw as new (config: FinWiseClientConfig) => FinWiseClient;
 
 const MAX_RETRIES = 3;
 const INITIAL_BACKOFF_MS = 1000;
