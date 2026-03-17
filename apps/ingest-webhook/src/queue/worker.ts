@@ -43,13 +43,13 @@ async function processJob(payload: IngestJobPayload): Promise<void> {
         filenames: payload.attachments.map((a) => a.filename),
         mimetypes: payload.attachments.map((a) => a.mimetype),
       },
-      "No XLSX/CSV attachment, sending to DLQ"
+      "No XLSX/XLS/CSV attachment, sending to DLQ"
     );
     await sendToDlq(config, {
       job_id: payload.job_id,
       message_id: payload.message_id,
       bank: "unknown",
-      error: "No XLSX or CSV attachment",
+      error: "No XLSX, XLS, or CSV attachment",
       payload: {
         from: payload.from,
         to: payload.to,

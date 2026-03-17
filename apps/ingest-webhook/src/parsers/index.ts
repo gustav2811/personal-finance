@@ -46,19 +46,20 @@ export function detectBank(
   return undefined;
 }
 
-/** Returns the best XLSX/CSV attachment from the array (prefer .xlsx). Preserves full attachment type for use with payloadToBuffer. */
+/** Returns the best spreadsheet attachment (prefer .xlsx, then .xls, then .csv). Preserves full attachment type for use with payloadToBuffer. */
 export function pickBestAttachment<T extends { filename: string }>(
   attachments: T[],
 ): T | undefined {
   const candidates = attachments.filter(
-    (a) => /\.xlsx$/i.test(a.filename) || /\.csv$/i.test(a.filename),
+    (a) =>
+      /\.xlsx$/i.test(a.filename) ||
+      /\.xls$/i.test(a.filename) ||
+      /\.csv$/i.test(a.filename),
   );
   if (candidates.length === 0) return undefined;
-  return candidates.sort((a, b) => {
-    if (/\.xlsx$/i.test(a.filename) && !/\.xlsx$/i.test(b.filename)) return -1;
-    if (!/\.xlsx$/i.test(a.filename) && /\.xlsx$/i.test(b.filename)) return 1;
-    return 0;
-  })[0];
+  const score = (filename: string) =>
+    /\.xlsx$/i.test(filename) ? 2 : /\.xls$/i.test(filename) ? 1 : 0;
+  return candidates.sort((a, b) => score(b.filename) - score(a.filename))[0];
 }
 
 export function getParserForBank(bankCode: string): BankParser | undefined {
