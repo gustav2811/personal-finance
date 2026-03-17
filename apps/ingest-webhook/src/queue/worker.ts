@@ -143,6 +143,24 @@ async function processJob(payload: IngestJobPayload): Promise<void> {
     return;
   }
 
+  if (!config.uploadToFinwise) {
+    log.info(
+      {
+        transactions_count: valid.length,
+        transactions: valid.map((tx) => ({
+          external_id: tx.external_id,
+          date: tx.date,
+          amount: tx.amount,
+          currency: tx.currency,
+          description: tx.description,
+          counterparty: tx.counterparty,
+        })),
+      },
+      "Upload to Finwise disabled (UPLOAD_TO_FINWISE); would have posted transactions"
+    );
+    return;
+  }
+
   const finwise = createFinwiseClient(
     config.finwiseApiKey,
     config.finwiseBaseUrl,

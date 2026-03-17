@@ -51,10 +51,18 @@ export async function webhookRoutes(
 
       try {
         const fields: Record<string, string> = {};
-        let part = await request.file();
-        while (part) {
-          const buffer = await part.toBuffer();
-          if (part.filename && part.fieldname?.startsWith("attachment")) {
+
+        for await (const part of request.parts()) {
+          log.debug(
+            {
+              type: part.type,
+              fieldname: part.fieldname,
+              ...(part.type === "file" ? { filename: part.filename } : {}),
+            },
+            "multipart part"
+          );
+          if (part.type === "file") {
+            const buffer = await part.toBuffer();
             const buf = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
             attachments.push(
               attachmentToPayload(
@@ -65,15 +73,20 @@ export async function webhookRoutes(
               )
             );
           } else {
-            fields[part.fieldname] = buffer.toString("utf-8");
+            const value = part.value;
+            fields[part.fieldname] =
+              typeof value === "string" ? value : String(value ?? "");
           }
-          part = await request.file();
         }
 
         from = fields["from"] ?? "";
         to = fields["to"] ?? "";
         subject = fields["subject"] ?? "";
         headers = fields["headers"] ?? "";
+
+        // TODO: remove — temporary logging to verify Gmail auto-forward (check Railway logs for verification code)
+        console.log("TEXT:", fields["text"]);
+        console.log("HTML:", fields["html"]);
 
         const message_id = extractMessageId(headers);
         const payload: IngestJobPayload = {

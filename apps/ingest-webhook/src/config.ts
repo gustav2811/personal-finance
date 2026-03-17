@@ -17,6 +17,8 @@ export interface IngestWebhookConfig {
   bankZeroAccountId: string;
   /** Optional: map filename patterns to account IDs (e.g. "Savings" → savings account). First match wins. */
   bankZeroAccountMap: BankZeroAccountMapping[];
+  /** When false, worker processes and logs transactions but does not upload to Finwise. */
+  uploadToFinwise: boolean;
   nodeEnv: string;
   port: number;
 }
@@ -49,6 +51,9 @@ export function getConfig(): IngestWebhookConfig {
     // ignore invalid JSON; use empty map
   }
 
+  const uploadToFinwise =
+    process.env.UPLOAD_TO_FINWISE === "true" ||
+    process.env.UPLOAD_TO_FINWISE === "1";
   const nodeEnv = process.env.NODE_ENV ?? "development";
   const port = parseInt(process.env.PORT ?? "3000", 10);
 
@@ -76,6 +81,7 @@ export function getConfig(): IngestWebhookConfig {
     supabaseServiceRoleKey,
     bankZeroAccountId,
     bankZeroAccountMap,
+    uploadToFinwise,
     nodeEnv,
     port,
   };
