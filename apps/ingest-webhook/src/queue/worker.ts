@@ -101,6 +101,7 @@ async function processJob(payload: IngestJobPayload): Promise<void> {
     config,
     bankCode,
     attachment.filename,
+    payload.subject,
   );
   if (!accountId) {
     log.warn(

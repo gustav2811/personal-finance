@@ -26,7 +26,7 @@ SendGrid Inbound Parse webhook that accepts bank statement emails, extracts XLSX
 | `SUPABASE_URL`          | Yes      | Supabase project URL                                                                                                              |
 | `SUPABASE_SERVICE_KEY`  | Yes      | Supabase service role key (or `SUPABASE_SERVICE_KEY`)                                                                             |
 | `BANK_ZERO_ACCOUNT_ID`  | Yes\*    | Default Finwise account for Bank Zero                                                                                             |
-| `BANK_ZERO_ACCOUNT_MAP` | No       | JSON array `[{ "pattern": "substring", "accountId": "..." }]` to map filename to account (first match wins; use `""` for default) |
+| `BANK_ZERO_ACCOUNT_MAP` | No       | JSON array `[{ "pattern": "substring", "accountId": "...", "accountNumber": "optional" }]` to map subject/filename to account. First match wins; use `""` for default. Use `accountNumber` to distinguish multiple accounts with the same pattern (e.g. two Transactional accounts). |
 | `PORT`                  | No       | Default `3000`                                                                                                                    |
 | `NODE_ENV`              | No       | `development` \| `production`                                                                                                     |
 
@@ -88,7 +88,7 @@ Requires `yarn install` to be run first (vitest, xlsx, etc.).
 
 - The XLSX has two sheets (e.g. "Feb 26 Summary" and "Feb 26 Transactions"). The parser uses the sheet whose name **includes "Transactions"** and ignores Summary.
 - Columns: Date, Day, Time, Type, Description 1, Description 2, Fee, Amount, Balance, Has Attachments. Description 1 is used as counterparty; Description 2 (or Description 1 if empty) as the main description. Amount supports space as thousands separator (e.g. `-1 500.00`).
-- To map **multiple statements to different Finwise accounts** by filename, set `BANK_ZERO_ACCOUNT_MAP` to a JSON array, e.g. `[{"pattern":"Savings","accountId":"..."},{"pattern":"","accountId":"default-account-id"}]`. First matching pattern (substring in filename, case-insensitive) wins.
+- To map **multiple statements to different Finwise accounts** by subject/filename, set `BANK_ZERO_ACCOUNT_MAP` to a JSON array, e.g. `[{"pattern":"Savings","accountId":"..."},{"pattern":"","accountId":"default-account-id"}]`. First matching pattern (substring in subject + filename, case-insensitive) wins. To distinguish two accounts with the same label (e.g. two Transactional accounts), add optional `accountNumber`: `{"pattern":"Transactional","accountNumber":"80204387707","accountId":"..."}` — the account number is matched against the email subject and attachment filename.
 
 ## Acceptance checklist
 

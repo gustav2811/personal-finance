@@ -1,9 +1,11 @@
 import "dotenv/config";
 
 export interface BankZeroAccountMapping {
-  /** Substring to match in filename (case-insensitive). First match wins. Use "" or "*" for default. */
+  /** Substring to match in filename/subject (case-insensitive). First match wins. Use "" or "*" for default. */
   pattern: string;
   accountId: string;
+  /** Optional: require this account number in subject or filename to match. Use to distinguish multiple accounts with same pattern (e.g. two Transactional accounts). */
+  accountNumber?: string;
 }
 
 export interface IngestWebhookConfig {
@@ -44,7 +46,9 @@ export function getConfig(): IngestWebhookConfig {
           "pattern" in x &&
           "accountId" in x &&
           typeof (x as BankZeroAccountMapping).pattern === "string" &&
-          typeof (x as BankZeroAccountMapping).accountId === "string",
+          typeof (x as BankZeroAccountMapping).accountId === "string" &&
+          ((x as BankZeroAccountMapping).accountNumber === undefined ||
+            typeof (x as BankZeroAccountMapping).accountNumber === "string"),
       );
     }
   } catch {
