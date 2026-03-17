@@ -50,6 +50,7 @@ describe("postTransactionsToFinwise", () => {
     expect(created[0]).toEqual({
       accountId: "acc-1",
       date: "2026-01-15",
+      description: "PAYMENT",
       amount: { amount: -100.5, currencyCode: "ZAR" },
       notes: "PAYMENT | Shop",
     });

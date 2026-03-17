@@ -21,10 +21,12 @@ const MAX_RETRIES = 3;
 const INITIAL_BACKOFF_MS = 1000;
 
 function canonicalToCreateBody(tx: CanonicalTransaction): CreateTransactionBody {
+  const description = tx.description?.trim() || tx.counterparty?.trim() || "Statement import";
   const notes = [tx.description, tx.counterparty].filter(Boolean).join(" | ");
   return {
     accountId: tx.account_id,
     date: tx.date,
+    description,
     amount: { amount: tx.amount, currencyCode: tx.currency },
     notes: notes || undefined,
   };

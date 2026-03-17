@@ -57,10 +57,12 @@ export interface TransactionListFilters {
 
 /**
  * Body for creating a transaction (POST /transactions).
+ * API requires description (string); notes is optional.
  */
 export interface CreateTransactionBody {
   accountId: string;
   date: string;
+  description: string;
   effectiveDate?: string | null;
   amount: Money;
   transactionCategoryId?: string | null;
