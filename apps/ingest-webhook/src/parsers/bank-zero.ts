@@ -51,12 +51,12 @@ function parseDate(val: unknown): string | null {
   return null;
 }
 
-/** Handles "1 500.00" and "-1 500.00" (space as thousands separator). */
+/** Handles "1 500.00", "-1,500.00" (space or comma as thousands separator; dot as decimal). */
 function parseAmount(val: unknown): number | null {
   if (val == null || val === "") return null;
   if (typeof val === "number" && !Number.isNaN(val)) return val;
   if (typeof val === "string") {
-    const cleaned = val.replace(/\s/g, "").replace(/,/g, ".");
+    const cleaned = val.replace(/\s/g, "").replace(/,/g, "");
     const n = parseFloat(cleaned);
     if (!Number.isNaN(n)) return n;
   }

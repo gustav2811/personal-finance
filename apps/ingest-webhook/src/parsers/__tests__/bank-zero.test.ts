@@ -61,6 +61,29 @@ describe("bankZeroParser", () => {
     expect(result[0].balance).toBe(32157.91);
   });
 
+  it("parses amount with comma as thousands separator (e.g. from CSV export)", () => {
+    const wb = XLSX.utils.book_new();
+    const rows = [
+      ["Date", "Type", "Description 1", "Description 2", "Amount", "Balance"],
+      ["2026-02-08", "Transfer out", "Travel Savings", "February", "-1,500.00", "30,657.91"],
+      ["2026-02-08", "Pay out", "Gustav Klingbiel", "San Lameer travel", "-1,364.00", "29,293.91"],
+    ];
+    const sheet = XLSX.utils.aoa_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, sheet, "Feb 26 Transactions");
+    const buffer = Buffer.from(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
+    const ctx = {
+      bank: "bank_zero",
+      source_email: "a@b.co",
+      filename: "f.xlsx",
+      account_id: "acc1",
+    };
+    const result = bankZeroParser(buffer, ctx);
+    expect(result[0].amount).toBe(-1500);
+    expect(result[0].balance).toBe(30657.91);
+    expect(result[1].amount).toBe(-1364);
+    expect(result[1].balance).toBe(29293.91);
+  });
+
   it("produces deterministic external_id for same row", () => {
     const buffer = buildBankZeroXlsxBuffer();
     const ctx = {
