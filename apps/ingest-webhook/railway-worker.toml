@@ -1,0 +1,10 @@
+# Railway config-as-code: Worker service (BullMQ job processor).
+# Use this as the custom config path for the worker service only.
+# Root Directory on Railway must be repo root so libs/finwise is available.
+
+[build]
+builder = "railpack"
+buildCommand = "cd apps/ingest-webhook && yarn install --frozen-lockfile"
+
+[deploy]
+startCommand = "cd apps/ingest-webhook && yarn worker"

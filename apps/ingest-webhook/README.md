@@ -62,12 +62,15 @@ Send test emails to e.g. `statements@parse.klingbiel.org`.
 ## Railway deployment
 
 1. Create a new Railway project and link the repo.
-2. Set **Root Directory** to `apps/ingest-webhook` (or configure build to use this path).
-3. Add **Redis** plugin; Railway will set `REDIS_URL`.
-4. Set all required environment variables in the Railway dashboard.
-5. **Start command**: `yarn start` (or `node --import tsx src/server.ts`).
-6. **Worker**: Add a second service in the same project, same root directory, start command: `yarn worker`.
-7. **Health check**: Railway can use `GET /` as the health check path.
+2. Set **Root Directory** to the **repo root** (so `libs/finwise` is available).
+3. Add **Redis**; Railway sets `REDIS_URL` for services in the project.
+4. Create **two services** (Web + Worker). For each, set **Config file path** in service settings:
+   - Web: `apps/ingest-webhook/railway-web.toml`
+   - Worker: `apps/ingest-webhook/railway-worker.toml`
+5. Set all required environment variables (project or per-service).
+6. Generate a **domain** for the **Web** service only; use that URL in SendGrid Inbound Parse.
+
+The web service runs the HTTP server and health check; the worker runs the job processor. See [docs/ingest-webhook-railway.md](../docs/ingest-webhook-railway.md) for why two services and full SendGrid setup.
 
 ## Tests
 
