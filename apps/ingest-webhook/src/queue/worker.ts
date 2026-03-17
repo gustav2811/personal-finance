@@ -21,7 +21,7 @@ import { createProcessedStore, sendToDlq } from "../lib/dlq.js";
 const QUEUE_NAME = "email-ingest";
 const isDev = process.env.NODE_ENV === "development";
 const logger = pino({
-  level: isDev ? "debug" : "info",
+  level: "info",
   transport: isDev
     ? { target: "pino-pretty", options: { translateTime: "HH:MM:ss Z" } }
     : undefined,
@@ -151,17 +151,9 @@ async function processJob(payload: IngestJobPayload): Promise<void> {
   }
 
   if (!config.uploadToFinwise) {
-    const summary = valid.map((tx) => ({
-      external_id: tx.external_id,
-      date: tx.date,
-      amount: tx.amount,
-      currency: tx.currency,
-      description: tx.description,
-      counterparty: tx.counterparty,
-    }));
     log.info(
-      { transactions_count: valid.length, transactions_summary: JSON.stringify(summary) },
-      "Upload to Finwise disabled (UPLOAD_TO_FINWISE); would have posted transactions"
+      { transactions_count: valid.length },
+      "Upload disabled; transactions not posted"
     );
     return;
   }
@@ -169,10 +161,7 @@ async function processJob(payload: IngestJobPayload): Promise<void> {
   const finwise = createFinwiseClient(
     config.finwiseApiKey,
     config.finwiseBaseUrl,
-    {
-      debug: (msg, meta) => log.debug(meta, msg),
-      error: (msg, meta) => log.error(meta, msg),
-    },
+    { error: (msg, meta) => log.error(meta, msg) },
   );
   const processedStore = createProcessedStore(config);
 

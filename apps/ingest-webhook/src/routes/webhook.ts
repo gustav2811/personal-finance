@@ -1,4 +1,9 @@
-import type { FastifyInstance, FastifyPluginOptions } from "fastify";
+import type {
+  FastifyInstance,
+  FastifyPluginOptions,
+  FastifyRequest,
+  FastifyReply,
+} from "fastify";
 import multipart from "@fastify/multipart";
 import { simpleParser } from "mailparser";
 import type { IngestWebhookConfig } from "../config.js";
@@ -10,8 +15,8 @@ import { createHash } from "crypto";
 interface WebhookOptions extends FastifyPluginOptions {
   config: IngestWebhookConfig;
   authPreHandler: (
-    req: unknown,
-    reply: unknown,
+    request: FastifyRequest,
+    reply: FastifyReply,
     context: AuthPreHandlerContext
   ) => Promise<void>;
 }
@@ -86,14 +91,6 @@ export async function webhookRoutes(
         const fields: Record<string, string> = {};
 
         for await (const part of request.parts()) {
-          log.debug(
-            {
-              type: part.type,
-              fieldname: part.fieldname,
-              ...(part.type === "file" ? { filename: part.filename } : {}),
-            },
-            "multipart part"
-          );
           if (part.type === "file") {
             const buffer = await part.toBuffer();
             const buf = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
@@ -151,13 +148,6 @@ export async function webhookRoutes(
               )
             );
           }
-          log.debug(
-            {
-              attachments_from_mime: parsed.attachments?.length ?? 0,
-              messageId: parsedMessageId,
-            },
-            "Parsed raw MIME from fields.email"
-          );
         }
 
         const payload: IngestJobPayload = {

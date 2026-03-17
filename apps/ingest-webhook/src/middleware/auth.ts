@@ -5,12 +5,13 @@ export interface AuthPreHandlerContext {
 }
 
 export async function authPreHandler(
-  request: FastifyRequest<{ Querystring: { token?: string } }>,
+  request: FastifyRequest,
   reply: FastifyReply,
   context: AuthPreHandlerContext
 ): Promise<void> {
+  const query = request.query as { token?: string };
   const token =
-    request.query.token ??
+    query.token ??
     (request.headers.authorization?.startsWith("Bearer ")
       ? request.headers.authorization.slice(7)
       : undefined);

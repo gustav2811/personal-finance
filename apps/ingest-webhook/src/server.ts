@@ -11,7 +11,7 @@ async function build() {
 
   const fastify = Fastify({
     logger: {
-      level: isDev ? "debug" : "info",
+      level: "info",
       transport:
         isDev
           ? { target: "pino-pretty", options: { translateTime: "HH:MM:ss Z" } }

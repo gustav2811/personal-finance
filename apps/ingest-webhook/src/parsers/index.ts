@@ -16,9 +16,9 @@ const BANK_DETECTION: Array<{
 }> = [
   {
     code: "bank_zero",
-    fromDomains: ["bankzero.co.za"],
+    fromDomains: ["bankzero.co.za", "bankzerosa.co.za"],
     toLocalParts: ["bankzero", "statements"],
-    filenamePatterns: [/bankzero/i, /statement.*\.xlsx$/i],
+    filenamePatterns: [/bankzero/i, /statement.*\.(xlsx|xls)$/i, /transactional.*\.(xlsx|xls)$/i],
   },
 ];
 
@@ -37,7 +37,14 @@ export function detectBank(
     if (fromDomains.some((d) => fromDomain === d || fromDomain.endsWith("." + d))) {
       return code;
     }
-    if (toLocalParts.some((p) => toLocal === p)) {
+    if (
+      toLocalParts.some(
+        (p) =>
+          toLocal === p ||
+          toLocal.endsWith("+" + p) ||
+          toLocal.startsWith(p + "+")
+      )
+    ) {
       return code;
     }
     if (filenamePatterns.some((re) => re.test(filename))) {
