@@ -31,6 +31,29 @@ function formatAddress(addr: unknown): string | undefined {
   return undefined;
 }
 
+/** Extension from common MIME types so pickBestAttachment can match when filename is missing from MIME. */
+const MIMETYPE_EXT: Record<string, string> = {
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+  "application/vnd.ms-excel": "xls",
+  "text/csv": "csv",
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/gif": "gif",
+};
+
+function getAttachmentFilename(
+  filename: string | undefined,
+  contentType: string | undefined,
+  index: number
+): string {
+  const name = (typeof filename === "string" && filename.trim()) || "attachment";
+  if (/\.(xlsx|xls|csv)$/i.test(name)) return name;
+  const mt = (contentType ?? "").split(";")[0].trim().toLowerCase();
+  const ext = MIMETYPE_EXT[mt];
+  if (ext) return name.includes(".") ? name : `${name}.${ext}`;
+  return name;
+}
+
 export async function webhookRoutes(
   fastify: FastifyInstance,
   opts: WebhookOptions
@@ -114,10 +137,15 @@ export async function webhookRoutes(
               Buffer.isBuffer(att.content)
                 ? att.content
                 : Buffer.from(att.content ?? []);
+            const filename = getAttachmentFilename(
+              att.filename,
+              att.contentType,
+              i
+            );
             attachments.push(
               attachmentToPayload(
                 `mime-${i}`,
-                att.filename ?? "attachment",
+                filename,
                 att.contentType ?? "application/octet-stream",
                 buf
               )
