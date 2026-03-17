@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyPluginOptions } from "fastify";
 import multipart from "@fastify/multipart";
+import { simpleParser } from "mailparser";
 import type { IngestWebhookConfig } from "../config.js";
 import type { AuthPreHandlerContext } from "../middleware/auth.js";
 import { addIngestJob, attachmentToPayload, type IngestJobPayload } from "../queue/client.js";
@@ -19,6 +20,15 @@ function extractMessageId(headers: string): string {
   const match = /^Message-ID:\s*<?([^>\s]+)>?/im.exec(headers);
   if (match) return match[1].trim();
   return createHash("sha256").update(headers).digest("hex").slice(0, 32);
+}
+
+function formatAddress(addr: unknown): string | undefined {
+  if (addr == null) return undefined;
+  if (typeof addr === "string") return addr.trim() || undefined;
+  if (Array.isArray(addr)) return formatAddress(addr[0]);
+  if (typeof addr === "object" && addr !== null && "text" in addr)
+    return String((addr as { text: string }).text).trim() || undefined;
+  return undefined;
 }
 
 export async function webhookRoutes(
@@ -84,13 +94,44 @@ export async function webhookRoutes(
         subject = fields["subject"] ?? "";
         headers = fields["headers"] ?? "";
 
-        // TODO: remove — temporary logging to verify Gmail auto-forward (check Railway logs for verification code)
-        console.log("TEXT:", fields["text"]);
-        console.log("HTML:", fields["html"]);
-        // Hypothesis: raw MIME in fields.email; attachments may be inside MIME rather than separate parts
-        console.log("EMAIL RAW:", fields["email"]?.slice(0, 500));
+        // When SendGrid sends raw MIME in fields.email, parse it for metadata and attachments (not extracted as separate parts).
+        let message_id = extractMessageId(headers);
+        const rawEmail = fields["email"];
+        if (rawEmail) {
+          const parsed = await simpleParser(rawEmail);
+          from = formatAddress(parsed.from) ?? from;
+          to = formatAddress(parsed.to) ?? to;
+          subject = parsed.subject ?? subject;
+          headers = rawEmail.slice(0, 8192);
+          const parsedMessageId =
+            typeof parsed.messageId === "string"
+              ? parsed.messageId.trim()
+              : undefined;
+          if (parsedMessageId) message_id = parsedMessageId;
+          for (let i = 0; i < (parsed.attachments?.length ?? 0); i++) {
+            const att = parsed.attachments[i];
+            const buf =
+              Buffer.isBuffer(att.content)
+                ? att.content
+                : Buffer.from(att.content ?? []);
+            attachments.push(
+              attachmentToPayload(
+                `mime-${i}`,
+                att.filename ?? "attachment",
+                att.contentType ?? "application/octet-stream",
+                buf
+              )
+            );
+          }
+          log.debug(
+            {
+              attachments_from_mime: parsed.attachments?.length ?? 0,
+              messageId: parsedMessageId,
+            },
+            "Parsed raw MIME from fields.email"
+          );
+        }
 
-        const message_id = extractMessageId(headers);
         const payload: IngestJobPayload = {
           job_id,
           message_id,
