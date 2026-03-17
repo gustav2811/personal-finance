@@ -23,16 +23,16 @@ Run two processes:
 
 Set in Railway → Variables (or per-service):
 
-| Variable | Example / note |
-|----------|-----------------|
-| `INGEST_TOKEN` | Long random secret (e.g. `openssl rand -hex 32`) |
-| `FINWISE_API_KEY` | From Finwise dashboard |
-| `FINWISE_BASE_URL` | Optional; default production |
-| `SUPABASE_URL` | Supabase project URL |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key |
-| `BANK_ZERO_ACCOUNT_ID` | Finwise account ID for Bank Zero |
-| `NODE_ENV` | `production` |
-| `PORT` | Railway sets this; default 3000 |
+| Variable               | Example / note                                   |
+| ---------------------- | ------------------------------------------------ |
+| `INGEST_TOKEN`         | Long random secret (e.g. `openssl rand -hex 32`) |
+| `FINWISE_API_KEY`      | From Finwise dashboard                           |
+| `FINWISE_BASE_URL`     | Optional; default production                     |
+| `SUPABASE_URL`         | Supabase project URL                             |
+| `SUPABASE_SERVICE_KEY` | Supabase service role key                        |
+| `BANK_ZERO_ACCOUNT_ID` | Finwise account ID for Bank Zero                 |
+| `NODE_ENV`             | `production`                                     |
+| `PORT`                 | Railway sets this; default 3000                  |
 
 Do **not** commit these; use Railway (or a secret manager).
 
@@ -54,10 +54,10 @@ Do **not** commit these; use Railway (or a secret manager).
 
 For the receiving domain (e.g. `parse.klingbiel.org`):
 
-- **Type**: MX  
-- **Host**: `parse` (or `@` for root)  
-- **Value**: `mx.sendgrid.net`  
-- **Priority**: 10  
+- **Type**: MX
+- **Host**: `parse` (or `@` for root)
+- **Value**: `mx.sendgrid.net`
+- **Priority**: 10
 
 Confirm with `dig MX parse.klingbiel.org` (or your domain).
 

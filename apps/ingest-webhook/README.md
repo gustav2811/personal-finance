@@ -17,18 +17,18 @@ SendGrid Inbound Parse webhook that accepts bank statement emails, extracts XLSX
 
 ## Configuration
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `INGEST_TOKEN` | Yes | Secret for webhook auth (query `token` or `Authorization: Bearer`) |
-| `FINWISE_API_KEY` | Yes | Finwise API key |
-| `FINWISE_BASE_URL` | No | Default `https://api.finwiseapp.io` |
-| `REDIS_URL` | Yes | Redis connection URL |
-| `SUPABASE_URL` | Yes | Supabase project URL |
-| `SUPABASE_SERVICE_ROLE_KEY` | Yes | Supabase service role key (or `SUPABASE_SERVICE_KEY`) |
-| `BANK_ZERO_ACCOUNT_ID` | Yes* | Default Finwise account for Bank Zero |
-| `BANK_ZERO_ACCOUNT_MAP` | No | JSON array `[{ "pattern": "substring", "accountId": "..." }]` to map filename to account (first match wins; use `""` for default) |
-| `PORT` | No | Default `3000` |
-| `NODE_ENV` | No | `development` \| `production` |
+| Variable                | Required | Description                                                                                                                       |
+| ----------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `INGEST_TOKEN`          | Yes      | Secret for webhook auth (query `token` or `Authorization: Bearer`)                                                                |
+| `FINWISE_API_KEY`       | Yes      | Finwise API key                                                                                                                   |
+| `FINWISE_BASE_URL`      | No       | Default `https://api.finwiseapp.io`                                                                                               |
+| `REDIS_URL`             | Yes      | Redis connection URL                                                                                                              |
+| `SUPABASE_URL`          | Yes      | Supabase project URL                                                                                                              |
+| `SUPABASE_SERVICE_KEY`  | Yes      | Supabase service role key (or `SUPABASE_SERVICE_KEY`)                                                                             |
+| `BANK_ZERO_ACCOUNT_ID`  | Yes\*    | Default Finwise account for Bank Zero                                                                                             |
+| `BANK_ZERO_ACCOUNT_MAP` | No       | JSON array `[{ "pattern": "substring", "accountId": "..." }]` to map filename to account (first match wins; use `""` for default) |
+| `PORT`                  | No       | Default `3000`                                                                                                                    |
+| `NODE_ENV`              | No       | `development` \| `production`                                                                                                     |
 
 ## Run locally
 

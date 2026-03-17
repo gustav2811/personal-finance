@@ -28,8 +28,7 @@ export function getConfig(): IngestWebhookConfig {
     process.env.FINWISE_BASE_URL ?? "https://api.finwiseapp.io";
   const redisUrl = process.env.REDIS_URL ?? "";
   const supabaseUrl = process.env.SUPABASE_URL ?? "";
-  const supabaseServiceRoleKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SERVICE_KEY ?? "";
+  const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_KEY ?? "";
   const bankZeroAccountId = process.env.BANK_ZERO_ACCOUNT_ID ?? "";
   const bankZeroAccountMapRaw = process.env.BANK_ZERO_ACCOUNT_MAP ?? "[]";
   let bankZeroAccountMap: BankZeroAccountMapping[] = [];
@@ -43,7 +42,7 @@ export function getConfig(): IngestWebhookConfig {
           "pattern" in x &&
           "accountId" in x &&
           typeof (x as BankZeroAccountMapping).pattern === "string" &&
-          typeof (x as BankZeroAccountMapping).accountId === "string"
+          typeof (x as BankZeroAccountMapping).accountId === "string",
       );
     }
   } catch {
@@ -58,14 +57,13 @@ export function getConfig(): IngestWebhookConfig {
   if (!finwiseApiKey) missing.push("FINWISE_API_KEY");
   if (!redisUrl) missing.push("REDIS_URL");
   if (!supabaseUrl) missing.push("SUPABASE_URL");
-  if (!supabaseServiceRoleKey)
-    missing.push("SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SERVICE_KEY");
+  if (!supabaseServiceRoleKey) missing.push("SUPABASE_SERVICE_KEY");
   if (!bankZeroAccountId && bankZeroAccountMap.length === 0)
     missing.push("BANK_ZERO_ACCOUNT_ID or BANK_ZERO_ACCOUNT_MAP");
 
   if (missing.length > 0) {
     throw new Error(
-      `Missing required environment variables: ${missing.join(", ")}`
+      `Missing required environment variables: ${missing.join(", ")}`,
     );
   }
 
