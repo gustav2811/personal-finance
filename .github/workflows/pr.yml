@@ -1,0 +1,38 @@
+name: PR
+
+on:
+    pull_request:
+        branches: [main]
+
+concurrency:
+    group: pr-${{ github.repository }}-${{ github.event.pull_request.number || github.head_ref }}
+    cancel-in-progress: true
+
+jobs:
+    validate:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: "20"
+                  cache: yarn
+
+            - name: Install dependencies
+              run: yarn install --frozen-lockfile
+
+            - name: Test (ingest-core)
+              run: yarn workspace @investments/ingest-core test
+
+            - name: Typecheck (ingest-cloudflare)
+              run: yarn workspace @investments/ingest-cloudflare run types
+
+            - name: Wrangler bundle dry-run (ingest + consumer)
+              if: github.event.pull_request.head.repo.fork == false
+              working-directory: apps/ingest-cloudflare
+              env:
+                  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+              run: |
+                  yarn wrangler deploy --dry-run -c wrangler.ingest.toml
+                  yarn wrangler deploy --dry-run -c wrangler.consumer.toml
