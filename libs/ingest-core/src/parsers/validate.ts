@@ -3,7 +3,7 @@ import type { CanonicalTransaction } from "./types.js";
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 export function validateCanonicalTransaction(
-  tx: unknown
+  tx: unknown,
 ): tx is CanonicalTransaction {
   if (tx == null || typeof tx !== "object") return false;
   const t = tx as Record<string, unknown>;
@@ -15,14 +15,18 @@ export function validateCanonicalTransaction(
   if (typeof t.description !== "string") return false;
   if (t.meta == null || typeof t.meta !== "object") return false;
   const meta = t.meta as Record<string, unknown>;
-  if (typeof meta.bank !== "string" || typeof meta.source_email !== "string" || typeof meta.filename !== "string") {
+  if (
+    typeof meta.bank !== "string" ||
+    typeof meta.source_email !== "string" ||
+    typeof meta.filename !== "string"
+  ) {
     return false;
   }
   return true;
 }
 
 export function validateAll(
-  list: unknown[]
+  list: unknown[],
 ): { valid: CanonicalTransaction[]; invalid: unknown[] } {
   const valid: CanonicalTransaction[] = [];
   const invalid: unknown[] = [];

@@ -1,6 +1,3 @@
-/**
- * Canonical transaction schema produced by bank parsers and sent to Finwise.
- */
 export interface CanonicalTransaction {
   external_id: string;
   account_id: string;
@@ -26,8 +23,8 @@ export interface ParserContext {
 }
 
 export type BankParser = (
-  buffer: Buffer,
-  ctx: ParserContext
+  buffer: Uint8Array | Buffer,
+  ctx: ParserContext,
 ) => Promise<CanonicalTransaction[]> | CanonicalTransaction[];
 
 export interface BankConfig {

@@ -2,6 +2,8 @@
 
 SendGrid Inbound Parse webhook that accepts bank statement emails, extracts XLSX attachments, parses them with pluggable bank parsers, and posts transactions to Finwise.
 
+Shared parsing and Finwise logic lives in **`libs/ingest-core`**. For **Cloudflare** (Workers + R2 + Queues), see **[docs/ingest-cloudflare.md](../../docs/ingest-cloudflare.md)** and [`apps/ingest-cloudflare`](../ingest-cloudflare/README.md). This README focuses on the **Fastify + Redis** (e.g. Railway) process.
+
 ## Setup
 
 1. **Environment variables** (see [Configuration](#configuration)).

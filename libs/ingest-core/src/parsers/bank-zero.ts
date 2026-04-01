@@ -6,10 +6,8 @@ const EXCEL_EPOCH_OFFSET = 25569;
 
 const BANK_CODE = "bank_zero";
 
-/** Bank Zero statement: use sheet whose name includes "Transactions" (not "Summary"). */
 const TRANSACTIONS_SHEET_KEYWORD = "Transactions";
 
-/** Column names as in the actual XLSX: Date, Day, Time, Type, Description 1, Description 2, Fee, Amount, Balance, Has Attachments */
 const DEFAULT_COLUMNS = {
   date: ["Date", "Transaction Date", "Posting Date"],
   type: ["Type"],
@@ -22,13 +20,11 @@ const DEFAULT_COLUMNS = {
 
 function findColumn(
   row: Record<string, unknown>,
-  candidates: string[]
+  candidates: string[],
 ): string | undefined {
   const keys = Object.keys(row).map((k) => k.trim());
   for (const c of candidates) {
-    const found = keys.find(
-      (k) => k.toLowerCase() === c.toLowerCase()
-    );
+    const found = keys.find((k) => k.toLowerCase() === c.toLowerCase());
     if (found) return found;
   }
   return undefined;
@@ -51,7 +47,6 @@ function parseDate(val: unknown): string | null {
   return null;
 }
 
-/** Handles "1 500.00", "-1,500.00" (space or comma as thousands separator; dot as decimal). */
 function parseAmount(val: unknown): number | null {
   if (val == null || val === "") return null;
   if (typeof val === "number" && !Number.isNaN(val)) return val;
@@ -66,18 +61,23 @@ function parseAmount(val: unknown): number | null {
 function pickTransactionsSheet(workbook: XLSX.WorkBook): XLSX.WorkSheet | null {
   const keyword = TRANSACTIONS_SHEET_KEYWORD.toLowerCase();
   const name = workbook.SheetNames.find((n) =>
-    n.toLowerCase().includes(keyword)
+    n.toLowerCase().includes(keyword),
   );
   if (!name) return null;
   const sheet = workbook.Sheets[name];
   return sheet ?? null;
 }
 
+function toUint8Array(buffer: Uint8Array | Buffer): Uint8Array {
+  return buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+}
+
 export function bankZeroParser(
-  buffer: Buffer,
-  ctx: ParserContext
+  buffer: Uint8Array | Buffer,
+  ctx: ParserContext,
 ): CanonicalTransaction[] {
-  const workbook = XLSX.read(buffer, { type: "buffer", cellDates: false });
+  const u8 = toUint8Array(buffer);
+  const workbook = XLSX.read(u8, { type: "array", cellDates: false });
   const sheet = pickTransactionsSheet(workbook);
   if (!sheet) return [];
 
@@ -113,14 +113,16 @@ export function bankZeroParser(
     const description = desc2 || desc1 || "Unknown";
     const counterparty = desc1 || undefined;
     const typeStr = typeCol ? String(row[typeCol] ?? "").trim() : "";
-    const balance = balanceCol ? parseAmount(row[balanceCol]) ?? undefined : undefined;
+    const balance = balanceCol
+      ? (parseAmount(row[balanceCol]) ?? undefined)
+      : undefined;
 
     const external_id = buildExternalId(
       BANK_CODE,
       ctx.account_id,
       date,
       amount,
-      [typeStr, desc1, desc2].filter(Boolean).join("|")
+      [typeStr, desc1, desc2].filter(Boolean).join("|"),
     );
 
     results.push({

@@ -35,7 +35,7 @@ describe("validateCanonicalTransaction", () => {
 
 describe("validateAll", () => {
   it("splits valid and invalid", () => {
-    const valid = {
+    const validRow = {
       external_id: "a",
       account_id: "b",
       date: "2026-01-01",
@@ -44,7 +44,7 @@ describe("validateAll", () => {
       description: "x",
       meta: { bank: "b", source_email: "e", filename: "f" },
     };
-    const result = validateAll([valid, null, { ...valid, date: "bad" }]);
+    const result = validateAll([validRow, null, { ...validRow, date: "bad" }]);
     expect(result.valid).toHaveLength(1);
     expect(result.invalid).toHaveLength(2);
   });
