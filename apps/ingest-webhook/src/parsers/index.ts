@@ -18,18 +18,34 @@ const BANK_DETECTION: Array<{
     code: "bank_zero",
     fromDomains: ["bankzero.co.za", "bankzerosa.co.za"],
     toLocalParts: ["bankzero", "statements"],
-    filenamePatterns: [/bankzero/i, /statement.*\.(xlsx|xls)$/i, /transactional.*\.(xlsx|xls)$/i],
+    filenamePatterns: [
+      /bankzero/i,
+      /statement.*\.(xlsx|xls)$/i,
+      /transactional.*\.(xlsx|xls)$/i,
+      // Bank Zero transactional exports use "Transaction 8020…" not "Transactional…"
+      /^transaction\s+.*\.(xlsx|xls)$/i,
+    ],
   },
 ];
+
+/** Domain of the mailbox in a From header (handles `"Name" <user@host>`). */
+export function parseDomainFromFromHeader(from: string): string {
+  const angle = from.match(/<([^>]+)>/);
+  const addr = (angle ? angle[1] : from).trim();
+  const at = addr.lastIndexOf("@");
+  if (at === -1) return "";
+  let host = addr.slice(at + 1).trim();
+  host = host.replace(/[>\s)]+$/g, "");
+  return host.toLowerCase();
+}
 
 export function detectBank(
   from: string,
   to: string,
   filename: string
 ): string | undefined {
-  const fromLower = from.toLowerCase();
   const toLower = to.toLowerCase();
-  const fromDomain = fromLower.includes("@") ? fromLower.split("@")[1] : "";
+  const fromDomain = parseDomainFromFromHeader(from);
   // Accept either full address "user@domain" or local part "user"
   const toLocal = toLower.includes("@") ? toLower.split("@")[0] : toLower;
 
