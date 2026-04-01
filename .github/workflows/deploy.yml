@@ -1,29 +1,48 @@
 name: Deploy ingest (Cloudflare)
 
 on:
-    push:
-        branches: [master]
+  push:
+    branches: [master]
 
 concurrency:
-    group: deploy-ingest-cloudflare-${{ github.ref }}
-    cancel-in-progress: false
+  group: deploy-ingest-cloudflare-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-    deploy:
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v4
+  deploy-ingest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-            - uses: actions/setup-node@v4
-              with:
-                  node-version: "20"
-                  cache: yarn
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: yarn
 
-            - name: Install dependencies
-              run: yarn install --frozen-lockfile
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
 
-            - name: Deploy Workers
-              working-directory: apps/ingest-cloudflare
-              env:
-                  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-              run: yarn deploy:all
+      - name: Deploy ingest Worker
+        working-directory: apps/ingest-cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: yarn deploy:ingest
+
+  deploy-consumer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Deploy consumer Worker
+        working-directory: apps/ingest-cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: yarn deploy:consumer
