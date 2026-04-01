@@ -7,7 +7,12 @@ export {
 } from "./job-payload.js";
 export { finalizeIngestPayload } from "./payload-merge.js";
 export { processIngestJob, type ProcessJobLogger } from "./process-job.js";
-export { sendToDlq, createProcessedStore, type DlqEntry } from "./lib/dlq.js";
+export {
+  sendToDlq,
+  createProcessedStore,
+  countDlqSince,
+  type DlqEntry,
+} from "./lib/dlq.js";
 export {
   createFinwiseClient,
   postTransactionsToFinwise,

@@ -1,5 +1,6 @@
 import {
   attachmentToPayload,
+  countDlqSince,
   finalizeIngestPayload,
   parseBankZeroAccountMapJson,
   processIngestJob,
@@ -117,8 +118,42 @@ function fetchForQueueOnlyWorker(request: Request): Response {
   });
 }
 
+const DLQ_REPORT_WINDOW_DAYS = 7;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
 export default {
   fetch: fetchForQueueOnlyWorker,
+
+  async scheduled(
+    _event: ScheduledEvent,
+    env: ConsumerEnv,
+    _ctx: ExecutionContext,
+  ): Promise<void> {
+    const config = getConsumerConfig(env);
+    if (!config.supabaseUrl?.trim() || !config.supabaseServiceRoleKey?.trim()) {
+      console.log(
+        JSON.stringify({
+          level: "info",
+          msg: "dlq_cron_skipped",
+          reason: "supabase_not_configured",
+        }),
+      );
+      return;
+    }
+    const since = new Date(
+      Date.now() - DLQ_REPORT_WINDOW_DAYS * MS_PER_DAY,
+    );
+    const { count, error } = await countDlqSince(config, since);
+    console.log(
+      JSON.stringify({
+        level: error ? "warn" : "info",
+        msg: "dlq_daily_report",
+        window_days: DLQ_REPORT_WINDOW_DAYS,
+        dlq_count: count,
+        ...(error ? { err: error } : {}),
+      }),
+    );
+  },
 
   async queue(
     batch: MessageBatch<IngestQueueMessageV1>,

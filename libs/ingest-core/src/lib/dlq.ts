@@ -34,6 +34,25 @@ export async function sendToDlq(
   });
 }
 
+/** Count DLQ rows with `created_at >= since` (cheap `head: true` query). */
+export async function countDlqSince(
+  config: IngestCoreConfig,
+  since: Date,
+): Promise<{ count: number; error: string | null }> {
+  if (!config.supabaseUrl?.trim() || !config.supabaseServiceRoleKey?.trim()) {
+    return { count: 0, error: null };
+  }
+  const client = getSupabase(config);
+  const { count, error } = await client
+    .from(DLQ_TABLE)
+    .select("*", { count: "exact", head: true })
+    .gte("created_at", since.toISOString());
+  if (error) {
+    return { count: 0, error: error.message };
+  }
+  return { count: count ?? 0, error: null };
+}
+
 const PROCESSED_TABLE = "processed_transactions";
 
 export interface ProcessedStore {

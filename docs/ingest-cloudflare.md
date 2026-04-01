@@ -161,6 +161,19 @@ SendGrid → Ingest Worker → R2 + Queue → Consumer Worker → Finwise API
 
 ---
 
+## Daily cron (Supabase keep-alive + DLQ summary)
+
+The **consumer** Worker has a **Cron Trigger** (`[triggers]` in [`wrangler.consumer.toml`](../apps/ingest-cloudflare/wrangler.consumer.toml)): **07:00 UTC every day** it runs a lightweight query against `dlq_ingest_jobs` — a `count` with `created_at >= now() - 7 days` (no row payload). That:
+
+1. **Touches Supabase regularly** so a free project is less likely to hit the ~7-day inactivity pause when bank imports only run monthly.
+2. **Logs a small report** you can watch in **Workers → Logs** or `wrangler tail`: JSON with `msg: "dlq_daily_report"`, `window_days`, `dlq_count`.
+
+If `SUPABASE_URL` / `SUPABASE_SERVICE_KEY` are unset, the cron logs `dlq_cron_skipped` and does nothing.
+
+To change the schedule, edit `crons` in `wrangler.consumer.toml` (see [Cron Triggers](https://developers.cloudflare.com/workers/configuration/cron-triggers/)). Local testing: `wrangler dev -c wrangler.consumer.toml --test-scheduled` and visit **`/__scheduled`** in the browser to run the handler once.
+
+---
+
 ## Troubleshooting
 
 | Issue | What to check |
