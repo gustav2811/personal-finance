@@ -1,0 +1,22 @@
+{
+  "name": "@investments/ingest-cloudflare",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy:ingest": "wrangler deploy -c wrangler.ingest.toml",
+    "deploy:consumer": "wrangler deploy -c wrangler.consumer.toml",
+    "deploy:all": "yarn deploy:ingest && yarn deploy:consumer",
+    "dev:ingest": "wrangler dev -c wrangler.ingest.toml",
+    "dev:consumer": "wrangler dev -c wrangler.consumer.toml",
+    "types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@investments/ingest-core": "file:../../libs/ingest-core"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250214.0",
+    "typescript": "^5.7.3",
+    "wrangler": "^4.79.0"
+  }
+}
