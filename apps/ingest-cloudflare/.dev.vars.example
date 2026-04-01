@@ -1,0 +1,20 @@
+# Copy to apps/ingest-cloudflare/.dev.vars (same folder as wrangler.*.toml).
+# Wrangler reads .dev.vars from the current working directory when you run `yarn dev:*` from this app.
+# Do not commit .dev.vars (repo root .gitignore ignores it).
+
+# --- ingest worker (wrangler.ingest.toml) ---
+INGEST_TOKEN=
+
+# --- consumer worker (wrangler.consumer.toml) ---
+FINWISE_API_KEY=
+SUPABASE_SERVICE_KEY=
+
+# Optional for local consumer (override wrangler.consumer.toml [vars]):
+# SUPABASE_URL=
+
+# Bank Zero: prefer BANK_ZERO_ACCOUNT_MAP — same JSON array as Railway / repo account.map.json
+# (pattern → accountId, optional accountNumber). One line; single-quoted value is easiest:
+# BANK_ZERO_ACCOUNT_MAP='[{"pattern":"Emergency Savings","accountId":"00000000-0000-0000-0000-000000000001"}]'
+#
+# Optional fallback when no map row matches (or if you use an empty map):
+# BANK_ZERO_ACCOUNT_ID=

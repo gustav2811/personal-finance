@@ -1,11 +1,8 @@
-import type { IngestWebhookConfig } from "../config.js";
+import type { IngestCoreConfig } from "../config.js";
 
-/**
- * Resolves Finwise account ID for a bank. Use this when you don't have a filename.
- */
 export function getAccountIdForBank(
-  config: IngestWebhookConfig,
-  bankCode: string
+  config: IngestCoreConfig,
+  bankCode: string,
 ): string | undefined {
   switch (bankCode) {
     case "bank_zero":
@@ -15,16 +12,11 @@ export function getAccountIdForBank(
   }
 }
 
-/**
- * Resolves Finwise account ID by bank, attachment filename, and optional email subject.
- * For Bank Zero: if BANK_ZERO_ACCOUNT_MAP is set, first pattern that matches (substring in subject + filename, case-insensitive) wins; else uses BANK_ZERO_ACCOUNT_ID.
- * Optional accountNumber on a mapping requires that number to appear in subject or filename (e.g. to distinguish "Transactional 80204387707" vs "Transactional 80204621122").
- */
 export function getAccountIdForBankAndFilename(
-  config: IngestWebhookConfig,
+  config: IngestCoreConfig,
   bankCode: string,
   filename: string,
-  subject?: string
+  subject?: string,
 ): string | undefined {
   if (bankCode !== "bank_zero") {
     return getAccountIdForBank(config, bankCode);

@@ -1,0 +1,23 @@
+# HTTP ingest: validate SendGrid POST, write attachments to R2, enqueue job.
+# Prerequisites: create queue `investments-email-ingest` and R2 bucket `investments-ingest` (or override names below).
+name = "investments-ingest"
+main = "src/ingest.ts"
+compatibility_date = "2024-11-01"
+# Preserve plain-text vars set in the dashboard (Wrangler’s default is to delete unlisted vars).
+keep_vars = true
+
+[observability]
+[observability.logs]
+enabled = true
+invocation_logs = true
+
+[observability.traces]
+enabled = true
+
+[[r2_buckets]]
+binding = "INGEST_BUCKET"
+bucket_name = "investments-ingest"
+
+[[queues.producers]]
+binding = "INGEST_QUEUE"
+queue = "investments-email-ingest"

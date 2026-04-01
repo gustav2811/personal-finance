@@ -4,6 +4,12 @@
   "license": "MIT",
   "scripts": {},
   "private": true,
+  "workspaces": [
+    "libs/finwise",
+    "libs/ingest-core",
+    "apps/ingest-webhook",
+    "apps/ingest-cloudflare"
+  ],
   "dependencies": {
     "@supabase/supabase-js": "^2.79.0",
     "@vercel/node": "^5.5.4",

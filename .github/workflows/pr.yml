@@ -1,0 +1,82 @@
+name: PR
+
+on:
+  pull_request:
+    branches: [master]
+
+concurrency:
+  group: pr-${{ github.repository }}-${{ github.event.pull_request.number || github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  ingest-core-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Test (ingest-core)
+        run: yarn workspace @investments/ingest-core test
+
+  ingest-cloudflare-types:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Typecheck (ingest-cloudflare)
+        run: yarn workspace @investments/ingest-cloudflare run types
+
+  wrangler-dry-run-ingest:
+    if: github.event.pull_request.head.repo.fork == false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Wrangler bundle dry-run (ingest)
+        working-directory: apps/ingest-cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: yarn wrangler deploy --dry-run -c wrangler.ingest.toml
+
+  wrangler-dry-run-consumer:
+    if: github.event.pull_request.head.repo.fork == false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Wrangler bundle dry-run (consumer)
+        working-directory: apps/ingest-cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: yarn wrangler deploy --dry-run -c wrangler.consumer.toml

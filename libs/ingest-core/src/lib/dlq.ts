@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import type { IngestWebhookConfig } from "../config.js";
+import type { IngestCoreConfig } from "../config.js";
 
 const DLQ_TABLE = "dlq_ingest_jobs";
 
@@ -13,7 +13,7 @@ export interface DlqEntry {
 
 let supabase: SupabaseClient | null = null;
 
-function getSupabase(config: IngestWebhookConfig): SupabaseClient {
+function getSupabase(config: IngestCoreConfig): SupabaseClient {
   if (!supabase) {
     supabase = createClient(config.supabaseUrl, config.supabaseServiceRoleKey);
   }
@@ -21,8 +21,8 @@ function getSupabase(config: IngestWebhookConfig): SupabaseClient {
 }
 
 export async function sendToDlq(
-  config: IngestWebhookConfig,
-  entry: DlqEntry
+  config: IngestCoreConfig,
+  entry: DlqEntry,
 ): Promise<void> {
   const client = getSupabase(config);
   await client.from(DLQ_TABLE).insert({
@@ -41,9 +41,7 @@ export interface ProcessedStore {
   add(externalId: string): Promise<void>;
 }
 
-export function createProcessedStore(
-  config: IngestWebhookConfig
-): ProcessedStore {
+export function createProcessedStore(config: IngestCoreConfig): ProcessedStore {
   return {
     async has(externalId: string): Promise<boolean> {
       const client = getSupabase(config);
@@ -60,7 +58,7 @@ export function createProcessedStore(
       const client = getSupabase(config);
       await client.from(PROCESSED_TABLE).upsert(
         { external_id: externalId, created_at: new Date().toISOString() },
-        { onConflict: "external_id" }
+        { onConflict: "external_id" },
       );
     },
   };

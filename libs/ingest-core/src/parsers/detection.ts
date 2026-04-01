@@ -1,12 +1,5 @@
-import { registerParser, getParser } from "./registry.js";
-import { bankZeroParser } from "./bank-zero.js";
 import type { BankParser } from "./types.js";
-
-registerParser("bank_zero", bankZeroParser);
-
-export { getParser, getRegisteredBanks } from "./registry.js";
-export type { CanonicalTransaction, ParserContext, BankParser } from "./types.js";
-export { bankZeroParser } from "./bank-zero.js";
+import { getParser } from "./registry.js";
 
 const BANK_DETECTION: Array<{
   code: string;
@@ -22,13 +15,11 @@ const BANK_DETECTION: Array<{
       /bankzero/i,
       /statement.*\.(xlsx|xls)$/i,
       /transactional.*\.(xlsx|xls)$/i,
-      // Bank Zero transactional exports use "Transaction 8020…" not "Transactional…"
       /^transaction\s+.*\.(xlsx|xls)$/i,
     ],
   },
 ];
 
-/** Domain of the mailbox in a From header (handles `"Name" <user@host>`). */
 export function parseDomainFromFromHeader(from: string): string {
   const angle = from.match(/<([^>]+)>/);
   const addr = (angle ? angle[1] : from).trim();
@@ -42,15 +33,18 @@ export function parseDomainFromFromHeader(from: string): string {
 export function detectBank(
   from: string,
   to: string,
-  filename: string
+  filename: string,
 ): string | undefined {
   const toLower = to.toLowerCase();
   const fromDomain = parseDomainFromFromHeader(from);
-  // Accept either full address "user@domain" or local part "user"
   const toLocal = toLower.includes("@") ? toLower.split("@")[0] : toLower;
 
   for (const { code, fromDomains, toLocalParts, filenamePatterns } of BANK_DETECTION) {
-    if (fromDomains.some((d) => fromDomain === d || fromDomain.endsWith("." + d))) {
+    if (
+      fromDomains.some(
+        (d) => fromDomain === d || fromDomain.endsWith("." + d),
+      )
+    ) {
       return code;
     }
     if (
@@ -58,7 +52,7 @@ export function detectBank(
         (p) =>
           toLocal === p ||
           toLocal.endsWith("+" + p) ||
-          toLocal.startsWith(p + "+")
+          toLocal.startsWith(p + "+"),
       )
     ) {
       return code;
@@ -70,7 +64,6 @@ export function detectBank(
   return undefined;
 }
 
-/** Returns the best spreadsheet attachment (prefer .xlsx, then .xls, then .csv). Preserves full attachment type for use with payloadToBuffer. */
 export function pickBestAttachment<T extends { filename: string }>(
   attachments: T[],
 ): T | undefined {

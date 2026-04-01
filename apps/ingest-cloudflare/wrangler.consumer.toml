@@ -1,0 +1,32 @@
+# Queue consumer: load R2 objects, finalize payload, parse XLSX, Finwise, Supabase DLQ.
+name = "investments-ingest-consumer"
+main = "src/consumer.ts"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+# Required when SUPABASE_URL / BANK_ZERO_* live only in the dashboard (see docs).
+keep_vars = true
+
+[observability]
+[observability.logs]
+enabled = true
+invocation_logs = true
+
+[observability.traces]
+enabled = true
+
+[[r2_buckets]]
+binding = "INGEST_BUCKET"
+bucket_name = "investments-ingest"
+
+[[queues.consumers]]
+queue = "investments-email-ingest"
+max_batch_size = 5
+max_batch_timeout = 2
+max_retries = 5
+
+# SUPABASE_URL, BANK_ZERO_ACCOUNT_ID, BANK_ZERO_ACCOUNT_MAP — set in the Cloudflare dashboard
+# (Workers → investments-ingest-consumer → Settings → Variables and secrets). Omitting them here
+# avoids `wrangler deploy` replacing your dashboard values with empty defaults.
+[vars]
+FINWISE_BASE_URL = "https://api.finwiseapp.io"
+UPLOAD_TO_FINWISE = "true"

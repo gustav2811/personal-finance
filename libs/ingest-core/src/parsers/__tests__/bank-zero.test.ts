@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import * as XLSX from "xlsx";
 import { bankZeroParser } from "../bank-zero.js";
 
-/** Builds a Bank Zero-style XLSX with Summary + Transactions sheets (parser uses the one containing "Transactions"). */
 function buildBankZeroXlsxBuffer(): Buffer {
   const wb = XLSX.utils.book_new();
   const summaryRows = [["Summary"], ["Total", "1000"]];

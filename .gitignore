@@ -4,6 +4,7 @@
 dist
 tmp
 /out-tsc
+.wrangler/
 
 # dependencies
 node_modules
@@ -38,6 +39,7 @@ testem.log
 .DS_Store
 Thumbs.db
 .env
+.dev.vars
 account.map.json
 
 .nx/cache

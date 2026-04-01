@@ -1,0 +1,25 @@
+{
+  "name": "@investments/ingest-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@investments/finwise": "file:../finwise",
+    "@supabase/supabase-js": "^2.79.0",
+    "mailparser": "^3.9.4",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@types/mailparser": "^3.4.6",
+    "@types/node": "^24.10.0",
+    "vitest": "^2.1.6"
+  },
+  "scripts": {
+    "test": "vitest run"
+  }
+}

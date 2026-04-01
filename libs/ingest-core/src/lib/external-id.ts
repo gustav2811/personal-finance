@@ -1,15 +1,11 @@
 import { createHash } from "crypto";
 
-/**
- * Deterministic external_id for idempotency.
- * Same row always yields the same id.
- */
 export function buildExternalId(
   bankCode: string,
   accountRef: string,
   date: string,
   amount: number,
-  reference: string
+  reference: string,
 ): string {
   const payload = [bankCode, accountRef, date, String(amount), reference]
     .filter(Boolean)

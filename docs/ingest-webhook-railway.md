@@ -1,5 +1,7 @@
 # Ingest Webhook — Railway & SendGrid Setup
 
+> **Prefer serverless?** The recommended deployment for new setups is **Cloudflare Workers + R2 + Queues**, documented in [ingest-cloudflare.md](./ingest-cloudflare.md). The Railway stack below remains supported if you already run it.
+
 ## Why two Railway services?
 
 The app has two separate long-running processes:

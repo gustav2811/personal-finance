@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { detectBank, parseDomainFromFromHeader } from "../index.js";
+import { detectBank, parseDomainFromFromHeader } from "../detection.js";
 
 describe("parseDomainFromFromHeader", () => {
   it("extracts domain from display-name form (Bank Zero)", () => {
