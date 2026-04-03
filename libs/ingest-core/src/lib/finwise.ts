@@ -32,6 +32,26 @@ const FinWiseClientCtor = FinWiseClientCtorRaw as new (
 const MAX_RETRIES = 3;
 const INITIAL_BACKOFF_MS = 1000;
 
+/**
+ * Max FinWise calls per Worker invocation on the free plan (50 subrequest limit).
+ * 40 FinWise calls + 1 hasMany + 1 addMany = 42 subrequests, leaving 8 of headroom.
+ * When a statement has more pending transactions than this, the remainder are deferred
+ * via ChunkIncomplete so the queue retries the message with a fresh subrequest budget.
+ */
+export const CHUNK_SIZE = 40;
+
+/** Thrown when a statement has more pending transactions than CHUNK_SIZE allows in one invocation. */
+export class ChunkIncomplete extends Error {
+  readonly remaining: number;
+  constructor(remaining: number) {
+    super(
+      `postTransactionsToFinwise: ${remaining} transaction(s) deferred to next invocation`,
+    );
+    this.name = "ChunkIncomplete";
+    this.remaining = remaining;
+  }
+}
+
 function canonicalToCreateBody(tx: CanonicalTransaction): CreateTransactionBody {
   const description =
     tx.description?.trim() || tx.counterparty?.trim() || "Statement import";
@@ -87,14 +107,14 @@ export async function postTransactionsToFinwise(
   const allIds = transactions.map((tx) => tx.external_id);
   const alreadyProcessed = await processedStore.hasMany(allIds);
 
+  // Separate already-done from pending, then cap at CHUNK_SIZE
+  const pending = transactions.filter((tx) => !alreadyProcessed.has(tx.external_id));
+  skipped += transactions.length - pending.length;
+
+  const chunk = pending.slice(0, CHUNK_SIZE);
   const toMarkProcessed: string[] = [];
 
-  for (const tx of transactions) {
-    if (alreadyProcessed.has(tx.external_id)) {
-      skipped++;
-      continue;
-    }
-
+  for (const tx of chunk) {
     const body = canonicalToCreateBody(tx);
     let lastError: Error | null = null;
     let attempt = 0;
@@ -151,6 +171,17 @@ export async function postTransactionsToFinwise(
         "processedStore.addMany failed; transactions posted but not marked as processed",
       );
     });
+  }
+
+  // If more transactions remain beyond this chunk, throw so the queue retries
+  // the message with a fresh subrequest budget for the next chunk.
+  const remaining = pending.length - chunk.length;
+  if (remaining > 0) {
+    log.info(
+      { remaining, chunk_processed: chunk.length, created, skipped },
+      "postTransactionsToFinwise: chunk complete, deferring remaining to next invocation",
+    );
+    throw new ChunkIncomplete(remaining);
   }
 
   return { created, skipped, failed };

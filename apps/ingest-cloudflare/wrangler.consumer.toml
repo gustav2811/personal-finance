@@ -20,16 +20,13 @@ bucket_name = "investments-ingest"
 
 [[queues.consumers]]
 queue = "investments-email-ingest"
-max_batch_size = 5
+max_batch_size = 1
 max_batch_timeout = 2
 max_retries = 5
 
 # Daily Supabase touch + DLQ visibility (count rows in last 7 days). Keeps free-tier projects from pausing.
 [triggers]
 crons = ["0 7 * * *"]
-
-[limits]
-subrequests = 1000
 
 # SUPABASE_URL, BANK_ZERO_ACCOUNT_ID, BANK_ZERO_ACCOUNT_MAP — set in the Cloudflare dashboard
 # (Workers → investments-ingest-consumer → Settings → Variables and secrets). Omitting them here
