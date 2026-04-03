@@ -1,5 +1,6 @@
 import {
   attachmentToPayload,
+  ChunkIncomplete,
   countDlqSince,
   finalizeIngestPayload,
   parseBankZeroAccountMapJson,
@@ -180,10 +181,11 @@ export default {
         message.ack();
       } catch (err) {
         const b = message.body;
+        const isChunk = err instanceof ChunkIncomplete;
         console.log(
           JSON.stringify({
-            level: "error",
-            msg: "queue_message_failed",
+            level: isChunk ? "info" : "error",
+            msg: isChunk ? "queue_message_chunk_deferred" : "queue_message_failed",
             component: "ingest-consumer",
             err: err instanceof Error ? err.message : String(err),
             job_id: b.job_id,

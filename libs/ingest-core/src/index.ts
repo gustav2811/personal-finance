@@ -16,6 +16,8 @@ export {
 export {
   createFinwiseClient,
   postTransactionsToFinwise,
+  ChunkIncomplete,
+  CHUNK_SIZE,
 } from "./lib/finwise.js";
 export {
   detectBank,
