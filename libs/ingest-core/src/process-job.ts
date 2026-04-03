@@ -116,6 +116,16 @@ export async function processIngestJob(
     return;
   }
 
+  const plog = log.child({ account_id: accountId, bank: bankCode });
+
+  plog.info(
+    {
+      filename: attachment.filename,
+      mimetype: attachment.mimetype,
+    },
+    "ingest_parse_start",
+  );
+
   let transactions: CanonicalTransaction[];
   try {
     const out = await parser(buffer, {
@@ -126,7 +136,7 @@ export async function processIngestJob(
     });
     transactions = await Promise.resolve(out);
   } catch (err) {
-    log.error({ err }, "Parser failed, sending to DLQ");
+    plog.error({ err }, "Parser failed, sending to DLQ");
     await sendToDlq(config, {
       job_id: payload.job_id,
       message_id: payload.message_id,
@@ -141,18 +151,27 @@ export async function processIngestJob(
   }
 
   const { valid, invalid } = validateAll(transactions);
+  plog.info(
+    {
+      rows_parsed: transactions.length,
+      rows_valid: valid.length,
+      rows_invalid: invalid.length,
+    },
+    "ingest_parse_complete",
+  );
+
   if (invalid.length > 0) {
-    log.warn({ invalid_count: invalid.length }, "Some rows failed validation");
+    plog.warn({ invalid_count: invalid.length }, "Some rows failed validation");
   }
 
   if (valid.length === 0) {
-    log.info("No valid transactions to post");
+    plog.info("No valid transactions to post");
     return;
   }
 
   if (!config.uploadToFinwise) {
-    log.info(
-      { transactions_count: valid.length },
+    plog.info(
+      { transactions_eligible: valid.length },
       "Upload disabled; transactions not posted",
     );
     return;
@@ -161,7 +180,7 @@ export async function processIngestJob(
   const finwise = createFinwiseClient(
     config.finwiseApiKey,
     config.finwiseBaseUrl,
-    { error: (msg, meta) => log.error(meta, msg) },
+    { error: (msg, meta) => plog.error(meta, msg) },
   );
   const processedStore = createProcessedStore(config);
 
@@ -169,16 +188,17 @@ export async function processIngestJob(
     finwise,
     processedStore,
     transactions: valid,
-    log,
+    log: plog,
   });
 
-  log.info(
+  plog.info(
     {
-      created: result.created,
-      skipped: result.skipped,
-      failed_count: result.failed.length,
+      transactions_eligible: valid.length,
+      finwise_created: result.created,
+      finwise_skipped: result.skipped,
+      finwise_failed_count: result.failed.length,
     },
-    "Finwise post complete",
+    "ingest_finwise_post_complete",
   );
 
   if (result.failed.length > 0) {

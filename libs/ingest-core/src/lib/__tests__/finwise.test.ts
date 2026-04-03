@@ -18,8 +18,12 @@ describe("postTransactionsToFinwise", () => {
     const processed = new Set<string>();
     const processedStore = {
       has: vi.fn().mockImplementation(async (id: string) => processed.has(id)),
-      add: vi.fn().mockImplementation(async (id: string) => {
-        processed.add(id);
+      add: vi.fn().mockImplementation(async (id: string) => { processed.add(id); }),
+      hasMany: vi.fn().mockImplementation(async (ids: string[]) =>
+        new Set(ids.filter((id) => processed.has(id)))
+      ),
+      addMany: vi.fn().mockImplementation(async (ids: string[]) => {
+        ids.forEach((id) => processed.add(id));
       }),
     };
 
@@ -63,6 +67,8 @@ describe("postTransactionsToFinwise", () => {
     const processedStore = {
       has: vi.fn().mockResolvedValue(true),
       add: vi.fn().mockResolvedValue(undefined),
+      hasMany: vi.fn().mockImplementation(async (ids: string[]) => new Set(ids)),
+      addMany: vi.fn().mockResolvedValue(undefined),
     };
 
     const tx: CanonicalTransaction = {

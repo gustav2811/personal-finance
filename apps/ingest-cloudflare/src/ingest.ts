@@ -108,6 +108,19 @@ export default {
 
     await env.INGEST_QUEUE.send(message);
 
+    console.log(
+      JSON.stringify({
+        level: "info",
+        msg: "ingest_producer_queued",
+        component: "ingest-producer",
+        job_id,
+        ...(email_r2_key !== undefined ? { email_r2_key } : {}),
+        attachment_r2_keys: attachments.map((a) => a.r2_key),
+        attachment_filenames: attachments.map((a) => a.filename),
+        attachments_count: attachments.length,
+      }),
+    );
+
     return jsonResponse({ job_id, status: "queued" });
   },
 };

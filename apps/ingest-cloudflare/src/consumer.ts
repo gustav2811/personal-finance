@@ -68,6 +68,20 @@ async function processQueueMessage(
     throw new Error(`Unsupported ingest message version: ${String((body as { v?: unknown }).v)}`);
   }
 
+  console.log(
+    JSON.stringify({
+      level: "info",
+      msg: "ingest_consumer_run_start",
+      component: "ingest-consumer",
+      job_id: body.job_id,
+      ...(body.email_r2_key !== undefined
+        ? { email_r2_key: body.email_r2_key }
+        : {}),
+      attachment_r2_keys: body.attachments.map((a) => a.r2_key),
+      attachment_filenames: body.attachments.map((a) => a.filename),
+    }),
+  );
+
   const config = getConsumerConfig(env);
   const fields: Record<string, string> = { ...body.fields };
 
@@ -165,12 +179,18 @@ export default {
         await processQueueMessage(message.body, env);
         message.ack();
       } catch (err) {
+        const b = message.body;
         console.log(
           JSON.stringify({
             level: "error",
             msg: "queue_message_failed",
+            component: "ingest-consumer",
             err: err instanceof Error ? err.message : String(err),
-            job_id: message.body.job_id,
+            job_id: b.job_id,
+            ...(b.email_r2_key !== undefined
+              ? { email_r2_key: b.email_r2_key }
+              : {}),
+            attachment_r2_keys: b.attachments.map((a) => a.r2_key),
           }),
         );
         message.retry();
