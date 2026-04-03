@@ -58,6 +58,8 @@ const PROCESSED_TABLE = "processed_transactions";
 export interface ProcessedStore {
   has(externalId: string): Promise<boolean>;
   add(externalId: string): Promise<void>;
+  hasMany(externalIds: string[]): Promise<Set<string>>;
+  addMany(externalIds: string[]): Promise<void>;
 }
 
 export function createProcessedStore(config: IngestCoreConfig): ProcessedStore {
@@ -77,6 +79,25 @@ export function createProcessedStore(config: IngestCoreConfig): ProcessedStore {
       const client = getSupabase(config);
       await client.from(PROCESSED_TABLE).upsert(
         { external_id: externalId, created_at: new Date().toISOString() },
+        { onConflict: "external_id" },
+      );
+    },
+    async hasMany(externalIds: string[]): Promise<Set<string>> {
+      if (externalIds.length === 0) return new Set();
+      const client = getSupabase(config);
+      const { data, error } = await client
+        .from(PROCESSED_TABLE)
+        .select("external_id")
+        .in("external_id", externalIds);
+      if (error) return new Set();
+      return new Set((data ?? []).map((row) => (row as { external_id: string }).external_id));
+    },
+    async addMany(externalIds: string[]): Promise<void> {
+      if (externalIds.length === 0) return;
+      const client = getSupabase(config);
+      const now = new Date().toISOString();
+      await client.from(PROCESSED_TABLE).upsert(
+        externalIds.map((id) => ({ external_id: id, created_at: now })),
         { onConflict: "external_id" },
       );
     },

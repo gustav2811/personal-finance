@@ -56,6 +56,8 @@ function sleep(ms: number): Promise<void> {
 export interface ProcessedStore {
   has(externalId: string): Promise<boolean>;
   add(externalId: string): Promise<void>;
+  hasMany(externalIds: string[]): Promise<Set<string>>;
+  addMany(externalIds: string[]): Promise<void>;
 }
 
 export interface PostToFinwiseOptions {
@@ -81,9 +83,14 @@ export async function postTransactionsToFinwise(
   let skipped = 0;
   const failed: Array<{ external_id: string; error: string }> = [];
 
+  // Single bulk check: 1 subrequest instead of N
+  const allIds = transactions.map((tx) => tx.external_id);
+  const alreadyProcessed = await processedStore.hasMany(allIds);
+
+  const toMarkProcessed: string[] = [];
+
   for (const tx of transactions) {
-    const already = await processedStore.has(tx.external_id);
-    if (already) {
+    if (alreadyProcessed.has(tx.external_id)) {
       skipped++;
       continue;
     }
@@ -95,14 +102,14 @@ export async function postTransactionsToFinwise(
     while (attempt < MAX_RETRIES) {
       try {
         await finwise.transactions.create(body);
-        await processedStore.add(tx.external_id);
+        toMarkProcessed.push(tx.external_id);
         created++;
         break;
       } catch (err) {
         lastError = err instanceof Error ? err : new Error(String(err));
         if (err instanceof FinWiseApiError) {
           if (err.status === 409) {
-            await processedStore.add(tx.external_id).catch(() => {});
+            toMarkProcessed.push(tx.external_id);
             skipped++;
             break;
           }
@@ -134,6 +141,16 @@ export async function postTransactionsToFinwise(
         }
       }
     }
+  }
+
+  // Single bulk write: 1 subrequest instead of N
+  if (toMarkProcessed.length > 0) {
+    await processedStore.addMany(toMarkProcessed).catch((err: unknown) => {
+      log.warn(
+        { err, count: toMarkProcessed.length },
+        "processedStore.addMany failed; transactions posted but not marked as processed",
+      );
+    });
   }
 
   return { created, skipped, failed };

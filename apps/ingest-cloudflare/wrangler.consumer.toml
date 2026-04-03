@@ -28,6 +28,9 @@ max_retries = 5
 [triggers]
 crons = ["0 7 * * *"]
 
+[limits]
+subrequests = 1000
+
 # SUPABASE_URL, BANK_ZERO_ACCOUNT_ID, BANK_ZERO_ACCOUNT_MAP — set in the Cloudflare dashboard
 # (Workers → investments-ingest-consumer → Settings → Variables and secrets). Omitting them here
 # avoids `wrangler deploy` replacing your dashboard values with empty defaults.
