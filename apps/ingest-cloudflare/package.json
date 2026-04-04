@@ -9,8 +9,7 @@
     "deploy:all": "yarn deploy:ingest && yarn deploy:consumer",
     "dev:ingest": "wrangler dev -c wrangler.ingest.toml",
     "dev:consumer": "wrangler dev -c wrangler.consumer.toml",
-    "types": "tsc --noEmit",
-    "classify-local": "node --import tsx scripts/classify-local.ts"
+    "types": "tsc --noEmit"
   },
   "dependencies": {
     "@investments/ingest-core": "file:../../libs/ingest-core"
@@ -19,7 +18,6 @@
     "@cloudflare/workers-types": "^4.20250214.0",
     "@types/node": "^24.10.0",
     "dotenv": "^17.2.3",
-    "tsx": "^4.20.6",
     "typescript": "^5.7.3",
     "wrangler": "^4.79.0"
   }

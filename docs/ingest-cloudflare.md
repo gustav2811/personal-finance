@@ -1,13 +1,11 @@
 # Ingest — Cloudflare (Workers + R2 + Queues)
 
-This path replaces the always-on **Railway** web + worker + **Redis** stack with:
+Architecture:
 
 - **Ingest Worker** — `POST` from SendGrid, token check, multipart → **R2**, message to **Cloudflare Queue**, fast `200`.
-- **Consumer Worker** — reads queue, loads objects from R2, runs the same pipeline as before (**mailparser** + XLSX parsers + **Finwise** + **Supabase** DLQ / processed ids).
+- **Consumer Worker** — reads queue, loads objects from R2, runs **mailparser** + XLSX parsers + **Finwise** + **Supabase** DLQ / processed ids.
 
 Shared logic lives in [`libs/ingest-core`](../libs/ingest-core). Code for the Workers is in [`apps/ingest-cloudflare`](../apps/ingest-cloudflare).
-
-For the legacy Railway setup, see [ingest-webhook-railway.md](./ingest-webhook-railway.md).
 
 ---
 
@@ -62,7 +60,7 @@ From the **repository root**:
 yarn install
 ```
 
-Yarn workspaces include `libs/finwise`, `libs/ingest-core`, `apps/ingest-webhook`, and `apps/ingest-cloudflare`. Use this single install; do not rely on a separate lockfile under `apps/ingest-webhook`.
+Yarn workspaces include `libs/finwise`, `libs/ingest-core`, and `apps/ingest-cloudflare`. Use a single install at the repo root.
 
 ---
 
@@ -90,7 +88,7 @@ Wrangler loads **`apps/ingest-cloudflare/.dev.vars`** when you run commands from
    yarn dev:consumer
    ```
 
-`[vars]` in `wrangler.consumer.toml` (e.g. `SUPABASE_URL`, `BANK_ZERO_ACCOUNT_MAP`, `BANK_ZERO_ACCOUNT_ID`) apply in dev too. For **Bank Zero**, set **`BANK_ZERO_ACCOUNT_MAP`** to the same JSON array you use on Railway (same shape as local `account.map.json`: `pattern`, `accountId`, optional `accountNumber`). Override in the dashboard or in **`apps/ingest-cloudflare/.dev.vars`** (see `.dev.vars.example`). See [Workers local development](https://developers.cloudflare.com/workers/development-testing/local-development/).
+`[vars]` in `wrangler.consumer.toml` (e.g. `SUPABASE_URL`, `BANK_ZERO_ACCOUNT_MAP`, `BANK_ZERO_ACCOUNT_ID`) apply in dev too. For **Bank Zero**, set **`BANK_ZERO_ACCOUNT_MAP`** to a JSON array (`pattern`, `accountId`, optional `accountNumber`). Override in the dashboard or in **`apps/ingest-cloudflare/.dev.vars`** (see `.dev.vars.example`). See [Workers local development](https://developers.cloudflare.com/workers/development-testing/local-development/).
 
 ---
 
@@ -127,7 +125,7 @@ Set via Wrangler (run from `apps/ingest-cloudflare`):
 
 | Worker | Command | Purpose |
 |--------|---------|---------|
-| Ingest | `yarn wrangler secret put INGEST_TOKEN -c wrangler.ingest.toml` | Same value as `INGEST_TOKEN` on Railway |
+| Ingest | `yarn wrangler secret put INGEST_TOKEN -c wrangler.ingest.toml` | Shared secret for SendGrid `token` query / `Authorization: Bearer` |
 | Consumer | `yarn wrangler secret put FINWISE_API_KEY -c wrangler.consumer.toml` | Finwise API key |
 | Consumer | `yarn wrangler secret put SUPABASE_SERVICE_KEY -c wrangler.consumer.toml` | Supabase service role key |
 
@@ -138,17 +136,15 @@ Set via Wrangler (run from `apps/ingest-cloudflare`):
 ## SendGrid cutover
 
 1. Deploy **both** Workers and confirm the ingest URL responds (e.g. `POST` with wrong token → `401`).
-2. In SendGrid → **Inbound Parse**, set **Destination URL** to (same shape as Railway):
+2. In SendGrid → **Inbound Parse**, set **Destination URL** to:
 
    `https://<your-ingest-worker-host>/webhook/sendgrid?token=<INGEST_TOKEN>`
 
    The ingest Worker also accepts `POST /` for quick tests (e.g. default `workers.dev` root).
 
-3. Keep **Include attachments** enabled; enable **POST raw MIME** if you relied on that for parsing (same as Railway doc).
+3. Keep **Include attachments** enabled; enable **POST raw MIME** if mailparser needs the full MIME.
 
 4. Send a test message; confirm consumer logs (dashboard or `wrangler tail`) and Finwise / Supabase.
-
-5. When satisfied, stop Railway web + worker + Redis to avoid double processing.
 
 ---
 

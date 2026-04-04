@@ -45,7 +45,7 @@ function getAttachmentFilename(
 
 /**
  * After multipart fields and file attachments are collected, merge SendGrid raw MIME (`email` field) if present.
- * Matches behaviour of the Fastify webhook in `apps/ingest-webhook`.
+ * Same shape as the ingest Worker expects after multipart parsing.
  */
 export async function finalizeIngestPayload(options: {
   job_id: string;

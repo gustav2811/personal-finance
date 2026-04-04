@@ -7,7 +7,6 @@
   "workspaces": [
     "libs/finwise",
     "libs/ingest-core",
-    "apps/ingest-webhook",
     "apps/ingest-cloudflare"
   ],
   "dependencies": {

@@ -44,7 +44,7 @@ yarn wrangler secret put SUPABASE_SERVICE_KEY -c wrangler.consumer.toml
 
 ## Full documentation
 
-See **[docs/ingest-cloudflare.md](../../docs/ingest-cloudflare.md)** for SendGrid URLs, variables, cutover from Railway, and troubleshooting.
+See **[docs/ingest-cloudflare.md](../../docs/ingest-cloudflare.md)** for SendGrid URLs, variables, and troubleshooting.
 
 ## Compared to generic Cloudflare tutorials
 

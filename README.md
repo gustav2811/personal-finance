@@ -6,8 +6,7 @@ Yarn monorepo for **bank statement email ingest** (SendGrid webhooks → parse a
 
 | Path | Package | Purpose |
 |------|---------|---------|
-| [`apps/ingest-cloudflare`](apps/ingest-cloudflare) | `@investments/ingest-cloudflare` | **Preferred production path:** Cloudflare Workers — webhook accepts payloads to R2, queue triggers consumer with the same pipeline as before. |
-| [`apps/ingest-webhook`](apps/ingest-webhook) | `@investments/ingest-webhook` | Fastify HTTP server + BullMQ worker + Redis (Railway-oriented); split so SendGrid gets a fast `200` while work runs async. |
+| [`apps/ingest-cloudflare`](apps/ingest-cloudflare) | `@investments/ingest-cloudflare` | Cloudflare Workers — SendGrid webhook accepts payloads to R2, queue triggers consumer (mailparser, XLSX parsers, Finwise, Supabase). |
 | [`libs/ingest-core`](libs/ingest-core) | `@investments/ingest-core` | Shared logic: mailparser, XLSX parsing, Finwise upload, Supabase DLQ / idempotency. |
 | [`libs/finwise`](libs/finwise) | `@investments/finwise` | Small Finwise API client used by ingest code. |
 | [`apps/src/functions`](apps/src/functions) | *(scripts, not a workspace)* | Node scripts invoked by GitHub Actions (e.g. daily 22seven → Supabase sync). |
@@ -35,17 +34,6 @@ Use a single install at the repo root so `file:` links between packages resolve.
 yarn workspace @investments/ingest-core test
 ```
 
-**Ingest webhook** — from `apps/ingest-webhook` after install:
-
-```bash
-yarn dev      # Fastify + watch
-yarn start    # HTTP server
-yarn worker   # BullMQ consumer
-yarn test
-```
-
-Needs Redis and env vars; see [docs/ingest-webhook-railway.md](docs/ingest-webhook-railway.md).
-
 **Cloudflare ingest** — from `apps/ingest-cloudflare`:
 
 ```bash
@@ -69,7 +57,6 @@ yarn tsx apps/src/functions/syncTransactions.ts
 ## Documentation
 
 - [docs/ingest-cloudflare.md](docs/ingest-cloudflare.md) — Cloudflare Workers, R2, Queues, Wrangler, local dev, deploy.
-- [docs/ingest-webhook-railway.md](docs/ingest-webhook-railway.md) — Railway two-service layout (web + worker), Redis, SendGrid.
 
 ## CI and deployment
 
