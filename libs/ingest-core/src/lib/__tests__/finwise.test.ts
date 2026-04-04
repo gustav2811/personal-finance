@@ -60,6 +60,49 @@ describe("postTransactionsToFinwise", () => {
     });
   });
 
+  it("uses canonical notes only when notes field is set (e.g. Bank Zero transfers)", async () => {
+    const created: unknown[] = [];
+    const finwise = {
+      transactions: {
+        create: vi.fn().mockImplementation(async (body: unknown) => {
+          created.push(body);
+          return { id: "tx-1" };
+        }),
+      },
+    } as unknown as FinWiseClient;
+
+    const processedStore = {
+      has: vi.fn().mockResolvedValue(false),
+      add: vi.fn(),
+      hasMany: vi.fn().mockResolvedValue(new Set<string>()),
+      addMany: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const tx: CanonicalTransaction = {
+      external_id: "ext-transfer",
+      account_id: "acc-1",
+      date: "2026-01-15",
+      amount: 100,
+      currency: "ZAR",
+      description: "[TRANSFER] Savings",
+      counterparty: "Bank Zero",
+      notes: "February allocation",
+      meta: { bank: "bank_zero", source_email: "a@b.co", filename: "f.xlsx" },
+    };
+
+    await postTransactionsToFinwise({
+      finwise,
+      processedStore,
+      transactions: [tx],
+      log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+    });
+
+    expect(created[0]).toMatchObject({
+      description: "[TRANSFER] Savings",
+      notes: "February allocation",
+    });
+  });
+
   it("includes transactionCategoryId when set on canonical transaction", async () => {
     const created: unknown[] = [];
     const finwise = {

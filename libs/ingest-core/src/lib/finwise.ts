@@ -55,13 +55,16 @@ export class ChunkIncomplete extends Error {
 function canonicalToCreateBody(tx: CanonicalTransaction): CreateTransactionBody {
   const description =
     tx.description?.trim() || tx.counterparty?.trim() || "Statement import";
-  const notes = [tx.description, tx.counterparty].filter(Boolean).join(" | ");
+  const notes =
+    tx.notes !== undefined
+      ? tx.notes.trim() || undefined
+      : [tx.description, tx.counterparty].filter(Boolean).join(" | ") || undefined;
   const body: CreateTransactionBody = {
     accountId: tx.account_id,
     date: tx.date,
     description,
     amount: { amount: tx.amount, currencyCode: tx.currency },
-    notes: notes || undefined,
+    notes,
   };
   if (tx.transaction_category_id) {
     body.transactionCategoryId = tx.transaction_category_id;

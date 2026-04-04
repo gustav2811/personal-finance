@@ -72,6 +72,36 @@ function toUint8Array(buffer: Uint8Array | Buffer): Uint8Array {
   return buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
 }
 
+function normalizeTransactionType(typeStr: string): string {
+  return typeStr.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+/** Maps Description 1/2 and Type to canonical description, counterparty (merchant), and optional notes. */
+function mapBankZeroRowFields(
+  typeStr: string,
+  desc1: string,
+  desc2: string,
+): { description: string; counterparty?: string; notes?: string } {
+  const t = normalizeTransactionType(typeStr);
+  const d1 = desc1.trim();
+  const d2 = desc2.trim();
+
+  if (t === "transfer in" || t === "transfer out") {
+    const description = d1 ? `[TRANSFER] ${d1}` : "[TRANSFER]";
+    return {
+      description,
+      counterparty: "Bank Zero",
+      ...(d2 ? { notes: d2 } : {}),
+    };
+  }
+
+  // Card purchase, Pay In, Pay Out, and any other type: merchant = Description 1, description = Description 2
+  return {
+    description: d2 || d1 || "Unknown",
+    ...(d1 ? { counterparty: d1 } : {}),
+  };
+}
+
 export function bankZeroParser(
   buffer: Uint8Array | Buffer,
   ctx: ParserContext,
@@ -110,9 +140,12 @@ export function bankZeroParser(
 
     const desc1 = desc1Col ? String(row[desc1Col] ?? "").trim() : "";
     const desc2 = desc2Col ? String(row[desc2Col] ?? "").trim() : "";
-    const description = desc2 || desc1 || "Unknown";
-    const counterparty = desc1 || undefined;
     const typeStr = typeCol ? String(row[typeCol] ?? "").trim() : "";
+    const { description, counterparty, notes } = mapBankZeroRowFields(
+      typeStr,
+      desc1,
+      desc2,
+    );
     const balance = balanceCol
       ? (parseAmount(row[balanceCol]) ?? undefined)
       : undefined;
@@ -133,6 +166,7 @@ export function bankZeroParser(
       currency,
       description,
       counterparty,
+      ...(notes !== undefined ? { notes } : {}),
       balance,
       raw: row as Record<string, unknown>,
       meta: {

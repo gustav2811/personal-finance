@@ -12,6 +12,8 @@ export interface CanonicalTransaction {
   currency: string;
   description: string;
   counterparty?: string;
+  /** When set, FinWise `notes` uses this only; otherwise notes default to `description | counterparty`. */
+  notes?: string;
   balance?: number;
   raw?: Record<string, unknown>;
   meta: {

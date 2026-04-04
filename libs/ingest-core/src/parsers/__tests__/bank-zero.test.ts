@@ -42,8 +42,9 @@ describe("bankZeroParser", () => {
       meta: { bank: "bank_zero", source_email: ctx.source_email, filename: ctx.filename },
     });
     expect(result[1].amount).toBe(7300);
-    expect(result[1].description).toBe("February");
-    expect(result[1].counterparty).toBe("Gustav Klingbiel");
+    expect(result[1].description).toBe("[TRANSFER] Gustav Klingbiel");
+    expect(result[1].counterparty).toBe("Bank Zero");
+    expect(result[1].notes).toBe("February");
   });
 
   it("parses amount with space as thousands separator", () => {
@@ -79,8 +80,14 @@ describe("bankZeroParser", () => {
     const result = bankZeroParser(buffer, ctx);
     expect(result[0].amount).toBe(-1500);
     expect(result[0].balance).toBe(30657.91);
+    expect(result[0].description).toBe("[TRANSFER] Travel Savings");
+    expect(result[0].counterparty).toBe("Bank Zero");
+    expect(result[0].notes).toBe("February");
     expect(result[1].amount).toBe(-1364);
     expect(result[1].balance).toBe(29293.91);
+    expect(result[1].description).toBe("San Lameer travel");
+    expect(result[1].counterparty).toBe("Gustav Klingbiel");
+    expect(result[1].notes).toBeUndefined();
   });
 
   it("produces deterministic external_id for same row", () => {
