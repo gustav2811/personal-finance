@@ -13,6 +13,16 @@ export interface IngestCoreConfig {
   bankZeroAccountId: string;
   bankZeroAccountMap: BankZeroAccountMapping[];
   uploadToFinwise: boolean;
+  /** When true, fetch FinWise categories and assign transaction_category_id (rules + batched Gemini). */
+  categorisationEnabled: boolean;
+  /** Google AI Gemini API key (Worker secret). Empty disables LLM; rules still apply. */
+  geminiApiKey: string;
+  geminiModel: string;
+  /** REST host only, e.g. https://generativelanguage.googleapis.com */
+  geminiApiBase: string;
+  categorisationLlmTimeoutMs: number;
+  /** 0–1; below this, FinWise create omits category even if the model returned a name. */
+  categorisationMinConfidence: number;
 }
 
 export function parseBankZeroAccountMapJson(raw: string): BankZeroAccountMapping[] {

@@ -60,6 +60,48 @@ describe("postTransactionsToFinwise", () => {
     });
   });
 
+  it("includes transactionCategoryId when set on canonical transaction", async () => {
+    const created: unknown[] = [];
+    const finwise = {
+      transactions: {
+        create: vi.fn().mockImplementation(async (body: unknown) => {
+          created.push(body);
+          return { id: "tx-1" };
+        }),
+      },
+    } as unknown as FinWiseClient;
+
+    const processedStore = {
+      has: vi.fn(),
+      add: vi.fn(),
+      hasMany: vi.fn().mockResolvedValue(new Set<string>()),
+      addMany: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const catId = "658cf931-3f20-4f4a-9626-09e8427a82b0";
+    const tx: CanonicalTransaction = {
+      external_id: "ext-cat",
+      account_id: "acc-1",
+      date: "2026-01-15",
+      amount: -50,
+      currency: "ZAR",
+      description: "Coffee shop",
+      transaction_category_id: catId,
+      meta: { bank: "bank_zero", source_email: "a@b.co", filename: "f.xlsx" },
+    };
+
+    await postTransactionsToFinwise({
+      finwise,
+      processedStore,
+      transactions: [tx],
+      log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+    });
+
+    expect(created[0]).toMatchObject({
+      transactionCategoryId: catId,
+    });
+  });
+
   it("skips when processedStore.has returns true", async () => {
     const finwise = {
       transactions: { create: vi.fn() },

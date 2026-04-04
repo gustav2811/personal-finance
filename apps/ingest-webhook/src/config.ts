@@ -1,5 +1,8 @@
 import "dotenv/config";
-import type { BankZeroAccountMapping, IngestCoreConfig } from "@investments/ingest-core";
+import type {
+  BankZeroAccountMapping,
+  IngestCoreConfig,
+} from "@investments/ingest-core";
 import { parseBankZeroAccountMapJson } from "@investments/ingest-core";
 
 export type { BankZeroAccountMapping };
@@ -27,6 +30,20 @@ export function getConfig(): IngestWebhookConfig {
   const uploadToFinwise =
     process.env.UPLOAD_TO_FINWISE === "true" ||
     process.env.UPLOAD_TO_FINWISE === "1";
+  const categorisationEnabled =
+    process.env.CATEGORISATION_ENABLED === "true" ||
+    process.env.CATEGORISATION_ENABLED === "1";
+  const geminiApiKey = process.env.GEMINI_API_KEY ?? "";
+  const geminiModel = process.env.GEMINI_MODEL ?? "gemini-3-flash-preview";
+  const geminiApiBase =
+    process.env.GEMINI_API_BASE ?? "https://generativelanguage.googleapis.com";
+  const categorisationLlmTimeoutMs = parseInt(
+    process.env.CATEGORISATION_LLM_TIMEOUT_MS ?? "45000",
+    10,
+  );
+  const categorisationMinConfidence = parseFloat(
+    process.env.CATEGORISATION_MIN_CONFIDENCE ?? "0.35",
+  );
   const nodeEnv = process.env.NODE_ENV ?? "development";
   const port = parseInt(process.env.PORT ?? "3000", 10);
 
@@ -55,6 +72,16 @@ export function getConfig(): IngestWebhookConfig {
     bankZeroAccountId,
     bankZeroAccountMap,
     uploadToFinwise,
+    categorisationEnabled,
+    geminiApiKey,
+    geminiModel,
+    geminiApiBase,
+    categorisationLlmTimeoutMs: Number.isFinite(categorisationLlmTimeoutMs)
+      ? categorisationLlmTimeoutMs
+      : 45_000,
+    categorisationMinConfidence: Number.isFinite(categorisationMinConfidence)
+      ? categorisationMinConfidence
+      : 0.35,
     nodeEnv,
     port,
   };

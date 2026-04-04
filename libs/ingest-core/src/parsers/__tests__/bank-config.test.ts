@@ -14,6 +14,12 @@ function configWithMap(
     bankZeroAccountId: defaultId,
     bankZeroAccountMap: map,
     uploadToFinwise: true,
+    categorisationEnabled: false,
+    geminiApiKey: "",
+    geminiModel: "gemini-gemini-3-flash-preview",
+    geminiApiBase: "https://generativelanguage.googleapis.com",
+    categorisationLlmTimeoutMs: 45_000,
+    categorisationMinConfidence: 0.35,
   };
 }
 
@@ -24,7 +30,11 @@ describe("getAccountIdForBankAndFilename", () => {
       { pattern: "Transactional", accountId: "tx-id" },
     ]);
     expect(
-      getAccountIdForBankAndFilename(config, "bank_zero", "Feb 26 Savings.xlsx"),
+      getAccountIdForBankAndFilename(
+        config,
+        "bank_zero",
+        "Feb 26 Savings.xlsx",
+      ),
     ).toBe("savings-id");
     expect(
       getAccountIdForBankAndFilename(

@@ -1,3 +1,9 @@
+export type ClassificationSource =
+  | "rule"
+  | "llm"
+  | "llm_error"
+  | "none";
+
 export interface CanonicalTransaction {
   external_id: string;
   account_id: string;
@@ -13,6 +19,10 @@ export interface CanonicalTransaction {
     source_email: string;
     filename: string;
   };
+  /** FinWise UUID when categorisation assigned a category above confidence threshold */
+  transaction_category_id?: string;
+  classification_source?: ClassificationSource;
+  classification_confidence?: number;
 }
 
 export interface ParserContext {

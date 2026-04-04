@@ -19,6 +19,7 @@ export {
   ChunkIncomplete,
   CHUNK_SIZE,
 } from "./lib/finwise.js";
+export { HISTORY_LOOKUP_DEFERRED } from "./lib/categorisation/history.js";
 export {
   detectBank,
   pickBestAttachment,
@@ -27,9 +28,19 @@ export {
 } from "./parsers/index.js";
 export type {
   CanonicalTransaction,
+  ClassificationSource,
   ParserContext,
   BankParser,
 } from "./parsers/types.js";
+export { validateAll } from "./parsers/validate.js";
+export {
+  categoriseTransactions,
+  type CategorisationLogger,
+} from "./lib/categorisation/pipeline.js";
+export {
+  fetchAllTransactionCategories,
+  categoriesToIdNameMap,
+} from "./lib/categorisation/fetch-categories.js";
 
 /** Queue message from ingest Worker → consumer (v1 schema). */
 export type IngestQueueMessageV1 = {

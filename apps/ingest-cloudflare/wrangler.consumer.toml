@@ -28,7 +28,8 @@ max_retries = 5
 [triggers]
 crons = ["0 7 * * *"]
 
-# SUPABASE_URL, BANK_ZERO_ACCOUNT_ID, BANK_ZERO_ACCOUNT_MAP — set in the Cloudflare dashboard
+# Dashboard secrets: FINWISE_API_KEY, SUPABASE_*, BANK_ZERO_*.
+# Optional: GEMINI_API_KEY when CATEGORISATION_ENABLED=true (batched Gemini for uncategorized rows).
 # (Workers → investments-ingest-consumer → Settings → Variables and secrets). Omitting them here
 # avoids `wrangler deploy` replacing your dashboard values with empty defaults.
 [vars]

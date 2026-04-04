@@ -7,7 +7,12 @@
     "strict": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": ["@cloudflare/workers-types"]
+    "types": ["@cloudflare/workers-types"],
+    "baseUrl": ".",
+    "paths": {
+      "@investments/ingest-core": ["../../libs/ingest-core/src/index.ts"],
+      "@investments/ingest-core/*": ["../../libs/ingest-core/src/*"]
+    }
   },
   "include": ["src/**/*.ts"]
 }

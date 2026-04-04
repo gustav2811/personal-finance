@@ -9,6 +9,7 @@ import {
 } from "./parsers/index.js";
 import { getAccountIdForBankAndFilename } from "./parsers/bank-config.js";
 import { validateAll } from "./parsers/validate.js";
+import { categoriseTransactions } from "./lib/categorisation/pipeline.js";
 import {
   createFinwiseClient,
   postTransactionsToFinwise,
@@ -182,12 +183,34 @@ export async function processIngestJob(
     config.finwiseBaseUrl,
     { error: (msg, meta) => plog.error(meta, msg) },
   );
+
+  let transactionsToPost = valid;
+  if (config.categorisationEnabled) {
+    transactionsToPost = await categoriseTransactions(
+      config,
+      finwise,
+      valid,
+      plog,
+    );
+    plog.info(
+      {
+        categorisation_per_tx: transactionsToPost.map((t) => ({
+          external_id: t.external_id,
+          classification_source: t.classification_source,
+          classification_confidence: t.classification_confidence,
+          category_id: t.transaction_category_id,
+        })),
+      },
+      "categorisation_per_transaction",
+    );
+  }
+
   const processedStore = createProcessedStore(config);
 
   const result = await postTransactionsToFinwise({
     finwise,
     processedStore,
-    transactions: valid,
+    transactions: transactionsToPost,
     log: plog,
   });
 

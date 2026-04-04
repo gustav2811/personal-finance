@@ -33,10 +33,10 @@ const MAX_RETRIES = 3;
 const INITIAL_BACKOFF_MS = 1000;
 
 /**
- * Max FinWise calls per Worker invocation on the free plan (50 subrequest limit).
- * 40 FinWise calls + 1 hasMany + 1 addMany = 42 subrequests, leaving 8 of headroom.
- * When a statement has more pending transactions than this, the remainder are deferred
- * via ChunkIncomplete so the queue retries the message with a fresh subrequest budget.
+ * Max FinWise creates per queue retry invocation under the Workers free-plan cap (~50
+ * subrequests). Budget per successful chunk is roughly: 1 hasMany + K creates + 1 addMany,
+ * plus P category list pages + L batched LLM when categorisation runs earlier in the same
+ * invocation (see process-job). Keep K conservative so DLQ and retries still have headroom.
  */
 export const CHUNK_SIZE = 40;
 
@@ -56,13 +56,17 @@ function canonicalToCreateBody(tx: CanonicalTransaction): CreateTransactionBody 
   const description =
     tx.description?.trim() || tx.counterparty?.trim() || "Statement import";
   const notes = [tx.description, tx.counterparty].filter(Boolean).join(" | ");
-  return {
+  const body: CreateTransactionBody = {
     accountId: tx.account_id,
     date: tx.date,
     description,
     amount: { amount: tx.amount, currencyCode: tx.currency },
     notes: notes || undefined,
   };
+  if (tx.transaction_category_id) {
+    body.transactionCategoryId = tx.transaction_category_id;
+  }
+  return body;
 }
 
 function isRetryableStatus(status: number): boolean {

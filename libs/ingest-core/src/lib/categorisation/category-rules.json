@@ -1,0 +1,32 @@
+[
+  {
+    "id": "tfsa",
+    "categoryName": "Investments",
+    "combinedRegex": "tfsa",
+    "maxAmountExclusive": 0
+  },
+  {
+    "id": "mortgage-memo",
+    "categoryName": "Mortgage",
+    "combinedRegex": "mortgage",
+    "maxAmountExclusive": 0
+  },
+  {
+    "id": "gods-money",
+    "categoryName": "Donations",
+    "combinedRegex": "gods money",
+    "maxAmountExclusive": 0
+  },
+  {
+    "id": "salary-sal",
+    "categoryName": "Salaries & Wages",
+    "combinedRegex": "\\bsal\\b",
+    "minAmountExclusive": 0
+  },
+  {
+    "id": "tsafrika-canteen",
+    "categoryName": "Work Eats",
+    "combinedRegex": "tsafrika",
+    "maxAmountExclusive": 0
+  }
+]
