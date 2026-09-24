@@ -1,72 +1,100 @@
-My honest take: do **not** start with “send the whole PDF to an LLM every month.”
-The strongest setup here is a **hybrid pipeline**:
+# Transaction categorisation
 
-`XLS as source of truth -> normalize -> rules/aliases -> historical lookup -> small local model -> LLM fallback -> FinWise create API`
+The classifier is a separate Cloudflare Worker, `investments-categoriser`. Email ingest still applies the existing hand rules and optional Gemini batch before create. A model failure must not fail statement ingest, so the ingest consumer does not call JEV.
 
-That fits your current Cloudflare flow well, keeps costs low, and will get smarter over time.
+## Why JEV, and why this integration
 
-The reason I’d do it this way is that your sample statement already has a lot of deterministic signal. On pages 2–3 of the PDF, the row text includes merchant strings, location, wallet/channel hints, and useful memo text like “TFSA”, “CPT flights”, “Kruger trip”, and “Mortgage Add April”. Your category set is also fairly specific — things like Coffee, Work Eats, Groceries, Clothing, Mortgage, Donations, Savings, Transfers, Vacation & Travel, and Salaries & Wages — so a lot of rows can be mapped without an LLM at all.  
+JEV (`typesafe/jev`, observed model `jev-1.13.0`) is an evaluation model. It returns a choice, probabilities, and confidence. It does not generate text. Do not call it with `generateText`.
 
-A good first layer is **merchant normalization + alias rules**. Plaid describes merchant parsing and location parsing as the core enrichment problem, and notes that many transaction strings do not need a heavy model at all — a light fuzzy-matching step is often enough when the descriptor is obvious. ([Plaid][1])
-So normalize things like:
+Cloudflare's `ai-gateway-provider` (docs, 20 Apr 2026) only adapts language models. Vercel `experimental_evaluate` bills Vercel AI Gateway (`typesafe-ai/jev`), not the Cloudflare AI Gateway credit on this account. The working path, verified with a live call, is:
 
-* lowercase
-* strip branch/store numbers
-* remove wallet/channel noise like `apple pay on ...`
-* collapse `yoco *father coffee` and `yoco *plato coffee` into stable merchant names
-* split out memo tokens like `tfsa`, `mortgage`, `salary`, `trip`
+`POST /accounts/{account}/ai/run` with `cf-aig-gateway-id: finance-ai-gateway`, or in a Worker:
 
-With just that, I’d expect examples like these to fall out pretty fast from your sample:
+`env.AI.run("typesafe/jev", { state, questions }, { gateway: { id: "finance-ai-gateway", skipCache: true, collectLog: false } })`
 
-* `Seattle Liberty`, `Starbucks Fx Melrose A`, `Naked Coffee - Illovo`, `Yoco *father Coffee`, `Yoco *plato Coffee` -> **Coffee**
-* `Tsafrika Headoffice` -> probably **Work Eats**
-* `H&m Cresta Mall`, likely `Pnp Clt Cresta` -> **Clothing**
-* `Superspar Blackheath` -> **Groceries**
-* `Standard bank ... SAL ...` -> **Salaries & Wages**
-* `Carina Van Der Colff` with memo `TFSA` -> **Investments**
-* `Carina Van Der Colff` with memo `Mortgage Add April` -> **Mortgage**
-* `Gods Money` -> **Donations**
-* `Emergency Savings` / `Travel Savings` -> **Savings** or **Transfers**, depending on how you want internal buckets treated.  
+`gatewayMetadata.keySource` was `Unified`, so the call spent the Cloudflare AI Gateway credit. Logs are not collected, because the state contains transaction text. Notional cost is tracked from `usage.input_tokens` at $0.042 / 1M input tokens. Output tokens are free. A Vercel promotional price existed through 25 Sep 2026; this account's gateway path is billed as unified credit, and this experiment recorded charged cost as $0 in the response (no charge field was returned).
 
-The next layer should be **historical retrieval**, because your categories are personal. `Tsafrika Headoffice -> Work Eats` is exactly the kind of mapping that generic AI can miss, but your own history will learn immediately. FinWise’s API supports bulk `GET /transactions` with pagination, and the search filter does wildcard matching across transaction description and merchant name. The transaction object also exposes both `transactionCategoryId` and `originalTransactionCategoryId`, which is useful for learning from later manual corrections. ([finwiseapp.io][2])
+## Flow
 
-That means you can build a very solid **no-token-cost classifier** from your own data:
+`correction fingerprint -> high-purity merchant history -> hand rules -> JEV choice -> accept or abstain`
 
-* exact normalized merchant match -> use prior category
-* fuzzy merchant match -> use majority category if consistent
-* same counterparty + memo token -> use prior category
-* then a lightweight model on top of your history
+That order was measured, not assumed. History and rules are not precise enough to auto-apply. JEV is the generaliser. It still does not clear the auto-apply bar.
 
-For the model, I would start very plain: **TF-IDF over normalized description + memo + sign + amount bucket**, then logistic regression or linear SVM. You do not need anything fancy first. In messy transaction strings, simple text models plus your own labels usually beat generic models surprisingly quickly once you have enough corrected history.
+Shadow mode records the decision and does not PATCH FinWise. `suggest` and `auto` exist in code. `auto` PATCHes only when the mode is `auto`, the decision is accepted, the transaction has no category, and the change is not a human correction or our own write. The deployed var is `CLASSIFIER_MODE=shadow`.
 
-Then use an **LLM only as the fallback**, not the main engine. If you go the Gemini route, use structured output / JSON schema or function calling so the model can only return a valid category choice plus confidence and rationale. Google’s Gemini docs explicitly support structured outputs for predefined classifications and function calling for external tool/data workflows. ([Google AI for Developers][3])
-Crucially, send it **one normalized transaction row**, not the whole PDF. For example:
+## FinWise
 
-```json
-{
-  "description": "carina van der colff",
-  "memo": "mortgage add april",
-  "amount": -11500,
-  "direction": "debit",
-  "location": null,
-  "allowedCategories": ["Mortgage", "Transfers", "Friends & Family", ...]
-}
+`PATCH /transactions/:id` is real. A notes update and a category update were applied and restored. `originalTransactionCategoryId` did not change on either write. It is FinWise's original category, not "the value before our PATCH" and not "the value before a human edit". Where it is present, agreement with the cleaned `transactionCategoryId` is the FinWise baseline.
+
+There is no transaction webhook in the API index, and the MCP connection is request/response only. The worker polls the last 14 days, 3 transactions per cron, every 15 minutes. Repeats are skipped with `(transaction_id, classifier_version, feature_hash)`.
+
+There is no `GET /transactions/:id`. Use list filters.
+
+## Learning
+
+Human corrections win. If we applied category A and a later poll shows category B, and B is not in our `writes` table, that fingerprint is stored as a correction and future matches use it. Our own PATCH is recorded in `writes`, so we do not treat it as a correction or overwrite it.
+
+Merchant stats are support, purity, and last date. They are built from older transactions only during eval. The worker reads D1 `merchant_stats`. That table is empty until a seed is loaded. Do not seed it for auto-apply: purity 1.0 and support >= 5 was only 60% precise on the later holdout, mostly because a merchant key that was stable in the past later split across categories.
+
+## Storage
+
+D1 database `investments-categoriser` (free tier: 5 GB, 5M reads/day, 100k writes/day). Tables: `audits`, `corrections`, `writes`, `merchant_stats`, `cursors`. Migration: `apps/categorise-cloudflare/migrations/0001_init.sql`.
+
+Supabase stays the ingest DLQ. It is the wrong place for this state: the classifier should keep working if Supabase is paused, and D1 is already inside the free Worker account.
+
+## Worker limits
+
+Workers Free is 10 ms CPU, 50 subrequests, and 5 cron triggers per account. Ingest already uses one cron. This worker uses `*/15 * * * *` (96 runs/day) and at most 3 classifications per run. Waiting on JEV does not count as CPU. A household's new transactions fit in that budget.
+
+## Evaluation
+
+Live eval is `LIVE_EVAL=1 yarn tsx tools/categorise-eval/run.ts`. It is not part of CI. It refuses to run without `LIVE_EVAL=1`. Raw transactions are not committed. Metrics land in `reports/categoriser/` (gitignored).
+
+Splits, leakage-safe (evidence built only from older rows, or from merchants not in the holdout):
+
+- reference: before 2026-04-01 (1378)
+- tune: 2026-04-01 to 2026-07-01 (683, stratified sample 208 for JEV)
+- final: after 2026-07-01 (649, first 500 sent to JEV, not used to pick the threshold)
+- merchant-unseen: 20% of merchant keys held out (95 JEV calls)
+
+Dataset: 2712 transactions, 2710 labelled, 2023-09-05 to 2026-09-23, 410 merchants. 2026 labels were checked: 0 uncategorised. Treat current labels as the gold set. 11 rows were `needsReview` at survey time; a category can still be set.
+
+| system | split | n | top-1 | selective precision | coverage |
+| --- | --- | --- | --- | --- | --- |
+| FinWise original vs cleaned label | final | 504 comparable | 0.744 | n/a | n/a |
+| history, purity 1, support >= 5 | final | 649 | 0.603 on accepted | 0.603 | 0.089 |
+| hand rules | final | 649 | 0.529 on accepted | 0.529 | 0.026 |
+| JEV names only | tune | 208 | 0.577 | 0.877 | 0.389 |
+| JEV + descriptions | tune | 208 | 0.606 | 0.859 | 0.442 |
+| hybrid history/rules/JEV | tune | 208 | 0.678 | 0.861 | 0.486 |
+| hybrid | final | 500 | 0.734 | 0.884 | 0.482 |
+| JEV descriptions, merchant unseen | held-out merchants | 95 | 0.684 | 0.868 | 0.400 |
+
+No threshold on the tune grid reached 98% selective precision. Macro F1 on the final hybrid was 0.55. FinWise's own original category, on the same final window, matches the cleaned label at 74.4%, slightly above the hybrid's 73.4% top-1. The hybrid is not better than leaving FinWise's original category in place, and it is not precise enough to PATCH automatically.
+
+Cost for 1103 JEV requests: 1,380,314 input tokens, notional $0.058 at $0.042/1M. Charged field was not returned. Hard stop in code is $4.50. This run plus the earlier killed run stayed under $0.15 notional.
+
+Hard categories: Coffee vs Eating Out, Groceries vs Transport & Fuel, Savings vs Mortgage (the mortgage memo rule), Interest vs Rewards, Investments vs Cash. Low-support categories (Pets, Education, Rewards, Dividends, Flowers) should not be auto-applied.
+
+## Deploy
+
+```sh
+cd apps/categorise-cloudflare
+yarn wrangler d1 execute investments-categoriser --remote --file migrations/0001_init.sql
+yarn wrangler secret put FINWISE_API_KEY
+yarn deploy
 ```
 
-That is cheaper, more deterministic, and easier to debug than monthly full-document vision prompts.
+Vars: `CLASSIFIER_MODE=shadow`, `AI_GATEWAY_ID=finance-ai-gateway`, `CLASSIFIER_VERSION=1`. Binding `AI`, D1 binding `DB`. Gateway log collection is off.
 
-So between your two ideas:
+Shadow check on 24 Sep 2026: two remote scheduled runs wrote 6 audits, 6 distinct transaction ids, `applied = 0`. The second run continued with the next unprocessed rows rather than repeating the first three. Ingest was not changed.
 
-* **Pure PDF + AI first:** fastest to prototype, but higher cost and lower determinism.
-* **Pure historical ML first:** cheapest long-term, but weaker on day 1 if you do not have enough labeled examples.
+Rollback: mode is already shadow, so there are no category writes to undo. To stop the worker, remove the cron or `wrangler delete investments-categoriser`. Ingest is unchanged.
 
-My recommendation is the middle path: **rules + historical retrieval first, local model second, LLM fallback last**.
+## Local tests
 
-One more practical point: querying categories dynamically is the right idea, because FinWise categories are user-customizable. I would just do it **once per batch/file**, not once per transaction. FinWise’s docs say categories can be created, edited, and deleted, so keeping the enum dynamic is correct. ([finwiseapp.io][5])
+`yarn --cwd libs/categoriser test` and `yarn --cwd libs/ingest-core test`.
 
-Given the public FinWise API docs, I found documented transaction endpoints for create, list, aggregated, and archive, and I did **not** find a documented transaction update endpoint. That makes correct categorization at ingest time more important, and it argues for a confidence threshold: high confidence -> categorize; low confidence -> leave as Unknown and log for review. ([finwiseapp.io][2])
+## Recommendation
 
-
-[2]: https://finwiseapp.io/docs/api "FinWise API Reference | FinWise"
-[3]: https://ai.google.dev/gemini-api/docs/structured-output?utm_source=chatgpt.com "Structured outputs | Gemini API | Google AI for Developers"
-[5]: https://finwiseapp.io/docs/hub/categories "Categories | FinWise Hub"
+Do not enable `auto`. FinWise's original category is a slightly stronger match to the cleaned label than this hybrid, and the best selective precision observed was about 88% at under half coverage. Next evidence that would change that: a merchant key that does not collapse unrelated counterparties, a correction log from a few weeks of shadow mode, and a retune that actually clears 98% precision on a fresh later window.

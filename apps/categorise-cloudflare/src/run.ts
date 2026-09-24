@@ -1,0 +1,275 @@
+import {
+  buildCategoryOptions,
+  buildJevRequest,
+  classifyTransaction,
+  CONSERVATIVE_POLICY,
+  correctionFingerprint,
+  createBindingJevModel,
+  notionalUsd,
+  mayAutoApply,
+  observeCategoryChange,
+  toFeatures,
+  txFeatureHash,
+  type AiBinding,
+} from "@investments/categoriser";
+import { FinwiseHttp, merchantNameOf, signedAmount, type FinwiseTxn } from "./finwise.js";
+
+export interface ClassifierEnv {
+  AI: AiBinding;
+  DB: D1Database;
+  FINWISE_API_KEY: string;
+  FINWISE_BASE_URL: string;
+  CLASSIFIER_MODE: string;
+  CLASSIFIER_VERSION: string;
+  AI_GATEWAY_ID: string;
+  POLL_LOOKBACK_DAYS: string;
+  MAX_PER_RUN: string;
+}
+
+export interface RunSummary {
+  seen: number;
+  classified: number;
+  skipped: number;
+  applied: number;
+  corrections: number;
+  inputTokens: number;
+  notionalUsd: number;
+  mode: string;
+}
+
+function isoDaysAgo(days: number): string {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() - days);
+  return d.toISOString().slice(0, 10);
+}
+
+async function merchantCounts(
+  db: D1Database,
+  merchantKey: string,
+): Promise<{ total: number; counts: Record<string, number>; majority: string | null; majorityCount: number; purity: number; lastDate: string }> {
+  const rows = await db
+    .prepare(
+      "SELECT category_name, support, last_date FROM merchant_stats WHERE merchant_key = ?",
+    )
+    .bind(merchantKey)
+    .all<{ category_name: string; support: number; last_date: string }>();
+  const counts: Record<string, number> = {};
+  let total = 0;
+  let majority: string | null = null;
+  let majorityCount = 0;
+  let lastDate = "";
+  for (const row of rows.results ?? []) {
+    counts[row.category_name] = row.support;
+    total += row.support;
+    if (row.support > majorityCount) {
+      majority = row.category_name;
+      majorityCount = row.support;
+    }
+    if (row.last_date > lastDate) lastDate = row.last_date;
+  }
+  return {
+    total,
+    counts,
+    majority,
+    majorityCount,
+    purity: total === 0 ? 0 : majorityCount / total,
+    lastDate,
+  };
+}
+
+export async function runClassifier(env: ClassifierEnv): Promise<RunSummary> {
+  const mode = env.CLASSIFIER_MODE === "auto" || env.CLASSIFIER_MODE === "suggest"
+    ? env.CLASSIFIER_MODE
+    : "shadow";
+  const max = Math.min(5, Math.max(1, Number(env.MAX_PER_RUN) || 3));
+  const lookback = Math.min(30, Math.max(1, Number(env.POLL_LOOKBACK_DAYS) || 14));
+  const finwise = new FinwiseHttp(env.FINWISE_API_KEY, env.FINWISE_BASE_URL);
+  const summary: RunSummary = {
+    seen: 0,
+    classified: 0,
+    skipped: 0,
+    applied: 0,
+    corrections: 0,
+    inputTokens: 0,
+    notionalUsd: 0,
+    mode,
+  };
+
+  const [categories, txns] = await Promise.all([
+    finwise.listCategories(),
+    finwise.listRecent(isoDaysAgo(lookback), 20),
+  ]);
+  const options = buildCategoryOptions(categories);
+  const byName = new Map(options.map((category) => [category.name, category.id]));
+  const model = createBindingJevModel({ ai: env.AI, gatewayId: env.AI_GATEWAY_ID });
+
+  for (const txn of txns) {
+    if (summary.classified >= max) break;
+    summary.seen += 1;
+    const features = toFeatures({
+      id: txn.id,
+      date: txn.date,
+      description: txn.description,
+      amount: signedAmount(txn),
+      merchantName: merchantNameOf(txn),
+      notes: txn.notes,
+      categoryId: txn.transactionCategoryId,
+      categoryName: options.find((c) => c.id === txn.transactionCategoryId)?.name ?? null,
+      originalCategoryId: txn.originalTransactionCategoryId,
+      accountId: txn.accountId,
+      isTransfer: txn.isTransfer,
+      needsReview: txn.needsReview,
+      updatedAt: txn.updatedAt,
+    });
+    const hash = txFeatureHash(features);
+    const existing = await env.DB.prepare(
+      "SELECT observed_category_id, predicted_category_name, applied FROM audits WHERE transaction_id = ? AND classifier_version = ? AND feature_hash = ?",
+    )
+      .bind(txn.id, env.CLASSIFIER_VERSION, hash)
+      .first<{ observed_category_id: string | null; predicted_category_name: string | null; applied: number }>();
+
+    const writes = await env.DB.prepare(
+      "SELECT transaction_id, category_id, written_at FROM writes WHERE transaction_id = ?",
+    )
+      .bind(txn.id)
+      .all<{ transaction_id: string; category_id: string; written_at: string }>();
+    const writeRows = (writes.results ?? []).map((row) => ({
+      transactionId: row.transaction_id,
+      categoryId: row.category_id,
+      writtenAt: row.written_at,
+    }));
+    const kind = observeCategoryChange({
+      transactionId: txn.id,
+      currentCategoryId: txn.transactionCategoryId,
+      lastAppliedCategoryId: existing?.applied
+        ? byName.get(existing.predicted_category_name ?? "") ?? null
+        : null,
+      writes: writeRows,
+    });
+    if (kind === "human_correction" && existing) {
+      const name = options.find((c) => c.id === txn.transactionCategoryId)?.name;
+      if (name) {
+        await env.DB.prepare(
+          "INSERT INTO corrections (fingerprint, category_name, transaction_id, detected_at) VALUES (?, ?, ?, ?) ON CONFLICT(fingerprint) DO UPDATE SET category_name = excluded.category_name, transaction_id = excluded.transaction_id, detected_at = excluded.detected_at",
+        )
+          .bind(correctionFingerprint(features), name, txn.id, new Date().toISOString())
+          .run();
+        summary.corrections += 1;
+      }
+      summary.skipped += 1;
+      continue;
+    }
+    if (existing) {
+      summary.skipped += 1;
+      continue;
+    }
+    if (kind === "our_write") {
+      summary.skipped += 1;
+      continue;
+    }
+
+    const stat = await merchantCounts(env.DB, features.merchantKey);
+    const evidence = {
+      byMerchant: new Map([[features.merchantKey, { merchantKey: features.merchantKey, ...stat }]]),
+      exemplarsByCategory: new Map<string, string[]>(),
+    };
+    const correctionRows = await env.DB.prepare(
+      "SELECT fingerprint, category_name FROM corrections WHERE fingerprint = ?",
+    )
+      .bind(correctionFingerprint(features))
+      .first<{ fingerprint: string; category_name: string }>();
+    const corrections = new Map<string, string>();
+    if (correctionRows) corrections.set(correctionRows.fingerprint, correctionRows.category_name);
+
+    const jevRequest = buildJevRequest({
+      tx: features,
+      categories: options,
+      variant: "history_hint",
+      evidence,
+      includeAmount: true,
+    });
+    const decision = await classifyTransaction({
+      tx: features,
+      categories: options,
+      evidence,
+      corrections,
+      policy: CONSERVATIVE_POLICY,
+      mode: "hybrid",
+      model,
+      jevRequest,
+    });
+    summary.classified += 1;
+    summary.inputTokens += decision.inputTokens;
+    summary.notionalUsd += notionalUsd(decision.inputTokens);
+
+    let applied = 0;
+    const predictedId = decision.categoryName ? byName.get(decision.categoryName) ?? null : null;
+    const uncategorised = !txn.transactionCategoryId;
+    if (
+      mayAutoApply({
+        mode,
+        accept: decision.accept,
+        uncategorised,
+        kind,
+      }) &&
+      predictedId
+    ) {
+      await finwise.updateCategory(txn.id, predictedId);
+      await env.DB.prepare(
+        "INSERT INTO writes (id, transaction_id, category_id, written_at) VALUES (?, ?, ?, ?)",
+      )
+        .bind(crypto.randomUUID(), txn.id, predictedId, new Date().toISOString())
+        .run();
+      applied = 1;
+      summary.applied += 1;
+    }
+
+    await env.DB.prepare(
+      `INSERT INTO audits (
+        id, transaction_id, feature_hash, observed_category_id, predicted_category_name,
+        source, confidence, margin, top_probability, model, classifier_version,
+        input_tokens, notional_usd, applied, accept, mode, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+      .bind(
+        crypto.randomUUID(),
+        txn.id,
+        hash,
+        txn.transactionCategoryId,
+        decision.categoryName,
+        decision.source,
+        decision.confidence,
+        decision.margin,
+        decision.topProbability,
+        decision.model,
+        env.CLASSIFIER_VERSION,
+        decision.inputTokens,
+        notionalUsd(decision.inputTokens),
+        applied,
+        decision.accept ? 1 : 0,
+        mode,
+        new Date().toISOString(),
+      )
+      .run();
+  }
+
+  return summary;
+}
+
+export function logSummary(summary: RunSummary): void {
+  console.log(
+    JSON.stringify({
+      msg: "classifier_run",
+      mode: summary.mode,
+      seen: summary.seen,
+      classified: summary.classified,
+      skipped: summary.skipped,
+      applied: summary.applied,
+      corrections: summary.corrections,
+      input_tokens: summary.inputTokens,
+      notional_usd: Number(summary.notionalUsd.toFixed(6)),
+    }),
+  );
+}
+
+export type { FinwiseTxn };

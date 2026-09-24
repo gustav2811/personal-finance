@@ -1,0 +1,25 @@
+name = "investments-categoriser"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = false
+preview_urls = false
+
+[ai]
+binding = "AI"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "investments-categoriser"
+database_id = "c5251f2c-b3b5-41d5-9e62-46d859f31b1c"
+
+[triggers]
+crons = ["*/15 * * * *"]
+
+[vars]
+CLASSIFIER_MODE = "shadow"
+CLASSIFIER_VERSION = "1"
+AI_GATEWAY_ID = "finance-ai-gateway"
+FINWISE_BASE_URL = "https://api.finwiseapp.io"
+POLL_LOOKBACK_DAYS = "14"
+MAX_PER_RUN = "3"

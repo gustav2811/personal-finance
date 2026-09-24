@@ -72,6 +72,22 @@ export interface CreateTransactionBody {
 }
 
 /**
+ * Body for PATCH /transactions/:id.
+ * Send only fields to change. Null clears nullable fields.
+ */
+export interface UpdateTransactionBody {
+  date?: string;
+  effectiveDate?: string | null;
+  description?: string;
+  amount?: Money;
+  transactionCategoryId?: string | null;
+  merchantId?: string | null;
+  notes?: string | null;
+  isTransfer?: boolean | null;
+  needsReview?: boolean | null;
+}
+
+/**
  * Aggregate-by options for GET /transactions/aggregated3.
  */
 export type TransactionAggregateBy = "day" | "week" | "Month" | "Year";
