@@ -11,16 +11,16 @@ created: 2026-08-25
 
 ## Summary
 
-Build a household-owned financial dataset in Supabase and improve transaction
-categorisation with a Vercel AI SDK `ToolLoopAgent`. The dataset must combine
-all accounts in one relational model: FinWise-connected accounts such as Easy
-Equities, Discovery Bank, and IBKR, plus manually imported Bank Zero data.
+Build a household-owned financial dataset in Supabase and classify transactions
+with JEV. An agent is only the escalation path for novel or ambiguous rows.
+The dataset must combine all accounts in one relational model: FinWise-connected
+accounts such as Easy Equities, Discovery Bank, and IBKR, plus manually imported
+Bank Zero data.
 
-Supabase owns the consolidated facts and the household’s current
-categorisation. FinWise remains an upstream source for connected accounts and a
-create-only projection for manually imported transactions. This direction is
-required because the FinWise API does not provide a supported transaction
-update operation.
+Supabase owns the consolidated facts and the household’s current categorisation.
+FinWise is an upstream source and an optional projection. New Bank Zero rows
+are created in FinWise. Category updates use the tested `PATCH /transactions/:id`.
+That projection stays off until accepted overwrites are precise.
 
 The agent uses an authenticated finance MCP for scoped reads, historical
 examples, category metadata, semantic search, and confirmed household rules.
@@ -42,8 +42,9 @@ provide:
 - an evaluation loop that separates source labels, confirmed labels, and model
   predictions.
 
-FinWise’s existing categorisation is useful as an imported baseline, but it
-cannot be treated as the final household taxonomy when it cannot be updated.
+FinWise’s existing categorisation is an imported baseline, not the owned
+decision. The source category stays in the observation. The owned category
+lives in Supabase.
 
 ## Goals
 
@@ -53,7 +54,7 @@ cannot be treated as the final household taxonomy when it cannot be updated.
    owned classifications.
 3. Ingest Bank Zero into Supabase before any FinWise write.
 4. Store FinWise’s category separately from the owned category.
-5. Improve categorisation with a first-class Vercel AI SDK `ToolLoopAgent`.
+5. Classify with JEV. Use an agent only when the row is novel or ambiguous.
 6. Give the agent read access to relevant prior transactions, category
    definitions, semantic matches, and approved household rules.
 7. Provide dashboard review for proposals and corrections.
@@ -344,8 +345,8 @@ The original FinWise category remains visible as source metadata.
 
 - **Given** a transaction requiring context,
 - **When** the classifier runs,
-- **Then** the `ToolLoopAgent` can call scoped MCP tools over multiple steps and
-  returns schema-valid output or an explicit abstention.
+- **Then** JEV returns a schema-valid category or an explicit abstention. An
+  escalation agent may call scoped MCP tools only for that unresolved tail.
 - **Check:** agent contract test with mocked MCP responses.
 
 ### AC-007 — Review authorization
@@ -383,7 +384,7 @@ Initial success is operational rather than a fixed accuracy target:
 4. Build the scheduled FinWise-to-Supabase sync.
 5. Change Bank Zero to stage in Supabase before FinWise creation.
 6. Build finance MCP read tools and semantic indexing.
-7. Add the `ToolLoopAgent` in shadow mode.
+7. Run JEV in shadow, writing owned decisions to Supabase and not to FinWise.
 8. Add dashboard proposal review and correction capture.
 9. Enable high-confidence Bank Zero publishing.
 10. Reclassify connected-account history in batches, starting with proposals.

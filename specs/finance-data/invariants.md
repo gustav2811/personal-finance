@@ -617,7 +617,7 @@ Before implementation is marked complete:
 - [ ] Active-confirmed classification uniqueness exists.
 - [ ] Classification history cannot be silently rewritten.
 - [ ] Sync write allowlists preserve owned fields.
-- [ ] FinWise publication is create-only and idempotent.
+- [ ] FinWise creates are idempotent. Category projection is a separate, gated write.
 - [ ] Proposal output is schema- and catalogue-validated.
 - [ ] Evidence retrieval is household-scoped and evaluation-safe.
 - [ ] Embeddings carry input hashes and versions.

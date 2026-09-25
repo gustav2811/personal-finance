@@ -196,16 +196,17 @@ final Bank Zero decision
   → published
 ```
 
-Connected FinWise transactions stop after owned classification. Their source
-category remains unchanged in Supabase.
+Connected FinWise transactions keep their source category. An owned decision
+may differ. Projecting that decision back to FinWise is optional and currently
+disabled.
 
-## ToolLoopAgent contract
+## Escalation agent
 
-The implementation SHALL use the current installed Vercel AI SDK API and
-verify it against the local package documentation before coding. In current
-AI SDK versions, the intended pattern is `ToolLoopAgent` with a bounded
-`stopWhen` condition such as `stepCountIs(...)`; do not copy obsolete
-`maxSteps` or `Experimental_Agent` examples.
+JEV is the normal classifier. This contract applies only to the unresolved
+tail. If that tail uses the Vercel AI SDK, use the current installed API. The
+intended pattern is `ToolLoopAgent` with a bounded `stopWhen` condition such
+as `stepCountIs(...)`; do not copy obsolete `maxSteps` or `Experimental_Agent`
+examples. Do not make the agent the default classifier.
 
 The model SHALL be supplied through the Vercel AI Gateway. Model selection is
 configuration-driven:
@@ -385,7 +386,9 @@ the originating feedback.
 
 ## FinWise publication
 
-Publication is a create-only projection:
+New Bank Zero rows are created in FinWise. Category updates use
+`PATCH /transactions/:id` and stay disabled until the write gate is precise.
+Publication of a new row:
 
 1. check the canonical transaction is `ready_to_publish`;
 2. acquire the persisted publication idempotency key;
@@ -505,7 +508,7 @@ retried only when every side effect is idempotent.
 
 - Build read-only finance MCP.
 - Add semantic embeddings.
-- Run `ToolLoopAgent` without auto-approval.
+- Run JEV in shadow. Do not auto-apply category projection.
 - Compare agent output with deterministic rules and reviewed labels.
 
 ### Phase 4 — Dashboard review
