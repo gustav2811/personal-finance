@@ -32,7 +32,7 @@ A fourth slice compared one JEV call with a sequential nature-then-category call
 
 Account kind is `type:subType` from FinWise (`loan:mortgage`, `investment:brokerage`, `depository:savings`). `accountType` is the sparse legacy field and is not the classifier input. `isTransfer` is a weak flag, not a movement gate. A paired opposite leg can have a different category. Planned transactions are a candidate feature, not an automatic label.
 
-The deployed worker only retrieves from the current 14-day poll. It does not load account meanings from Supabase. The old `classifier.*` hooks were removed so a future credential does not write to a schema that is not the finance model.
+The deployed worker polls the current 14-day window, upserts that overlap into Supabase through narrow finance RPCs, then asks JEV. Proposals stay `proposed`. Category PATCH stays off in shadow, so the FinWise `JEV` tag is not applied.
 
 On a fifth April–June slice, full-catalogue JEV without those sentences was 77.5%. The same rows with all 32 sentences were 75.0% (2 losses, 0 wins). The sentences did not raise accuracy. The movement slice went from 66.7% to 60.0%.
 
@@ -42,7 +42,7 @@ Across the three slices JEV-alone accuracy is about 75–84%, not 90%. Of 58 dev
 
 `PATCH /transactions/:id` is real. A notes update and a category update were applied and restored. `originalTransactionCategoryId` did not change on either write. It is FinWise's original category, not "the value before our PATCH" and not "the value before a human edit". Where it is present, agreement with the cleaned `transactionCategoryId` is the FinWise baseline.
 
-There is no transaction webhook in the API index, and the MCP connection is request/response only. The worker polls the last 14 days. It pages past the first 20 rows so an already-audited head cannot hide an older unprocessed transaction. A category change since the last audit is an observation, not a skip. Those observations stay in the D1 audit. They are not written to a Supabase classifier table.
+There is no transaction webhook in the API index, and the MCP connection is request/response only. The worker polls the last 14 days. It pages past the first 20 rows so an already-audited head cannot hide an older unprocessed transaction. A category change since the last audit is an observation, not a skip. The D1 audit remains the operational skip record. Owned proposals are written to `finance.classification_runs` and stay unconfirmed.
 
 There is no `GET /transactions/:id`. Use list filters.
 

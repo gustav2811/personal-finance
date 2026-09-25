@@ -85,6 +85,7 @@ export interface UpdateTransactionBody {
   notes?: string | null;
   isTransfer?: boolean | null;
   needsReview?: boolean | null;
+  tagIds?: string[];
 }
 
 /**
