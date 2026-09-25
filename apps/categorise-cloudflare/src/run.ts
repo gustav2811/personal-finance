@@ -6,7 +6,6 @@ import {
   buildRetrieval,
   classifyTransaction,
   CONSERVATIVE_POLICY,
-  correctionFingerprint,
   createBindingJevModel,
   resolveRelations,
   selectCandidates,
@@ -17,7 +16,6 @@ import {
   shouldSkipRewrite,
   toFeatures,
   txFeatureHash,
-  type AccountSemantic,
   type AiBinding,
 } from "@investments/categoriser";
 import { FinwiseHttp, merchantNameOf, signedAmount, type FinwiseTxn } from "./finwise.js";
@@ -116,7 +114,6 @@ export async function runClassifier(env: ClassifierEnv): Promise<RunSummary> {
     startDate: plan.startDate,
     endDate: plan.endDate,
   }));
-  const householdAccounts = await loadHouseholdAccounts(env);
   const featuresById = new Map(windowFeatures.map((row) => [row.id, row]));
   const relations = resolveRelations(windowFeatures, accounts);
   const byName = new Map(options.map((category) => [category.name, category.id]));
@@ -156,30 +153,7 @@ export async function runClassifier(env: ClassifierEnv): Promise<RunSummary> {
       existing && existing.observed_category_id !== txn.transactionCategoryId,
     );
     if (categoryChanged && txn.transactionCategoryId) {
-      const name = options.find((c) => c.id === txn.transactionCategoryId)?.name ?? null;
-      await recordCategoryEvent(env, {
-        transactionId: txn.id,
-        categoryId: txn.transactionCategoryId,
-        categoryName: name,
-        previousCategoryId: existing?.observed_category_id ?? null,
-        merchantId: txn.merchantId,
-        accountId: txn.accountId,
-        descriptionFingerprint: correctionFingerprint(features),
-        observedAt: txn.updatedAt,
-      });
       summary.corrections += 1;
-    }
-    if (!existing && txn.transactionCategoryId) {
-      await recordCategoryEvent(env, {
-        transactionId: txn.id,
-        categoryId: txn.transactionCategoryId,
-        categoryName: nameById.get(txn.transactionCategoryId) ?? null,
-        previousCategoryId: null,
-        merchantId: txn.merchantId,
-        accountId: txn.accountId,
-        descriptionFingerprint: correctionFingerprint(features),
-        observedAt: txn.updatedAt,
-      });
     }
     if (existing && !categoryChanged) {
       summary.skipped += 1;
@@ -226,7 +200,6 @@ export async function runClassifier(env: ClassifierEnv): Promise<RunSummary> {
         retrieval,
         categories: options,
         candidates,
-        householdAccounts,
         planned: plannedMatch,
       }),
     });
@@ -294,75 +267,6 @@ export async function runClassifier(env: ClassifierEnv): Promise<RunSummary> {
   }
 
   return summary;
-}
-
-async function loadHouseholdAccounts(env: ClassifierEnv): Promise<AccountSemantic[]> {
-  const url = env.SUPABASE_URL?.trim();
-  const key = env.SUPABASE_SERVICE_KEY?.trim();
-  if (!url || !key) return [];
-  const response = await fetch(`${url}/rest/v1/rpc/classifier_current_account_semantics`, {
-    method: "POST",
-    headers: {
-      apikey: key,
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-    },
-    body: "{}",
-  });
-  if (!response.ok) return [];
-  const rows = await response.json() as {
-    finwise_account_id: string;
-    display_name: string;
-    role: AccountSemantic["role"];
-    owner_scope: "household" | "external";
-    context: string;
-  }[];
-  if (!Array.isArray(rows)) return [];
-  return rows.filter((row) => row.context).map((row) => ({
-    finwiseAccountId: row.finwise_account_id,
-    displayName: row.display_name,
-    role: row.role,
-    ownerScope: row.owner_scope,
-    context: row.context,
-  }));
-}
-
-async function recordCategoryEvent(
-  env: ClassifierEnv,
-  event: {
-    transactionId: string;
-    categoryId: string;
-    categoryName: string | null;
-    previousCategoryId: string | null;
-    merchantId: string | null;
-    accountId: string;
-    descriptionFingerprint: string;
-    observedAt: string | null;
-  },
-): Promise<void> {
-  const url = env.SUPABASE_URL?.trim();
-  const key = env.SUPABASE_SERVICE_KEY?.trim();
-  if (!url || !key) return;
-  await fetch(`${url}/rest/v1/classifier_category_events`, {
-    method: "POST",
-    headers: {
-      apikey: key,
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-      Prefer: "return=minimal",
-    },
-    body: JSON.stringify({
-      transaction_id: event.transactionId,
-      observed_at: event.observedAt ?? new Date().toISOString(),
-      category_id: event.categoryId,
-      category_name: event.categoryName,
-      previous_category_id: event.previousCategoryId,
-      merchant_id: event.merchantId,
-      account_id: event.accountId,
-      description_fingerprint: event.descriptionFingerprint,
-      source: "poll",
-    }),
-  });
 }
 
 export function logSummary(summary: RunSummary): void {
