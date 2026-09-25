@@ -33,8 +33,9 @@ the same place shows what the home consumed, what caused it, and what it cost.
 
 The source of truth is the existing finance-data Supabase project. Household
 consumption lives in its own `consumption` schema and is ingested by existing
-ISMRT and smart-plug runners. The dashboard is read-only for now and will
-eventually deploy to Vercel.
+ISMRT and smart-plug runners. Consumption stays read-only. Classification writes go through household
+RPCs. The dashboard will eventually deploy to Vercel; until then it runs
+on localhost.
 
 ## Capabilities and Constraints
 
@@ -44,8 +45,8 @@ eventually deploy to Vercel.
   a service-role key in the web app.
 - Google sign-in only, restricted to `gustav@klingbiel.org` and
   `cara@klingbiel.org`.
-- Keep the first surface mostly read-only; ingestion remains outside the
-  dashboard.
+- Consumption views stay read-only. Transaction classification is written
+  through household RPCs. Ingestion remains outside the dashboard.
 - Preserve native-resolution data and source provenance for investigation.
 - Support responsive desktop and mobile web layouts.
 
