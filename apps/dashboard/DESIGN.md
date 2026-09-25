@@ -89,7 +89,7 @@ Default controls are the registry sizes (`h-8` default, `h-7` sm). Transaction r
 
 `AppShell` owns auth, the sidebar, and theme. It does not load page data. Each feature exports `getXData()` / `loadXData()` and a feature-specific type. `DataGate` takes that loader. Do not add fields to a shared dashboard bag. Pages own their header and filters. The sidebar does not host range controls. Membership is `finance.household_members`, checked for presentation through `finance_caller_membership_v1`. Row-level policies remain the authorization boundary.
 
-Database types live in `lib/supabase/database.types.ts`. They cover the tables this app reads. Regenerate them with a logged-in Supabase CLI when the schema changes; do not go back to `Record<string, unknown>`.
+Database types live in `lib/supabase/database.types.ts`. `public` was generated from the finance-data project. `consumption` was taken from that same live schema, because the generator only emitted `public`. `finance_caller_membership_v1` is declared for the migration in this PR and is not on the remote database yet. Regenerate when the schema changes. Do not go back to `Record<string, unknown>`.
 
 ```text
 Household

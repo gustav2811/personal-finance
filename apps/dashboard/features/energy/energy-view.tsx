@@ -67,7 +67,8 @@ function EnergyBody({ data, days }: { data: EnergyData; days: RangeDays }) {
                       <TableCell>{shortDate(reading.period_start)}</TableCell>
                       <TableCell>{reading.measurement_target}</TableCell>
                       <TableCell>
-                        {deviceNames.get(reading.device_id) ?? reading.source}
+                        {(reading.device_id ? deviceNames.get(reading.device_id) : null) ??
+                          reading.source}
                       </TableCell>
                       <TableCell className="type-numeric text-right">
                         {value === null

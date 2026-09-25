@@ -23,9 +23,7 @@ export async function readDevices(client: BrowserClient): Promise<DeviceRow[]> {
   const { data, error } = await client
     .schema("consumption")
     .from("devices")
-    .select(
-      "id,source,external_id,kind,name,utility_type,location,timezone,active_from,active_to,metadata",
-    )
+    .select("*")
     .order("name")
   assertOk(error, "device")
   return data ?? []
@@ -35,9 +33,7 @@ export async function readReadings(client: BrowserClient): Promise<ReadingRow[]>
   const { data, error } = await client
     .schema("consumption")
     .from("readings")
-    .select(
-      "id,device_id,source,source_record_id,period_start,period_end,metric,measurement_target,value,unit,quality,metadata",
-    )
+    .select("*")
     .gte("period_start", windowStart())
     .order("period_start")
   assertOk(error, "reading")
@@ -48,9 +44,7 @@ export async function readLedger(client: BrowserClient): Promise<LedgerRow[]> {
   const { data, error } = await client
     .schema("consumption")
     .from("ledger_entries")
-    .select(
-      "id,source,source_record_id,device_id,utility_type,entry_type,direction,amount,currency,quantity,quantity_unit,rate,occurred_at,posted_at,description,reference,metadata",
-    )
+    .select("*")
     .gte("occurred_at", windowStart())
     .order("occurred_at")
   assertOk(error, "ledger")
@@ -61,7 +55,7 @@ export async function readIngestionRuns(client: BrowserClient): Promise<Ingestio
   const { data, error } = await client
     .schema("consumption")
     .from("ingestion_runs")
-    .select("id,source,runner,status,started_at,finished_at,rows_fetched,rows_written")
+    .select("*")
     .order("started_at", { ascending: false })
     .limit(100)
   assertOk(error, "ingestion")
@@ -73,7 +67,7 @@ export async function readLatestSnapshot(
 ): Promise<{ snapshot: SnapshotRow | null; error: string | null }> {
   const { data, error } = await client
     .from("snapshots")
-    .select("account_id,date,amount_cents,currency_code")
+    .select("*")
     .gte("date", windowStart())
     .order("date", { ascending: false })
     .limit(1)
