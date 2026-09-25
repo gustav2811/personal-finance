@@ -7,7 +7,9 @@
   "workspaces": [
     "libs/finwise",
     "libs/ingest-core",
-    "apps/ingest-cloudflare"
+    "apps/ingest-cloudflare",
+    "apps/categorise-cloudflare",
+    "libs/categoriser"
   ],
   "dependencies": {
     "@supabase/supabase-js": "^2.79.0",

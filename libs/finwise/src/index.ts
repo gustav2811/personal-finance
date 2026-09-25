@@ -25,6 +25,7 @@ export type {
   Transaction,
   TransactionListFilters,
   CreateTransactionBody,
+  UpdateTransactionBody,
   TransactionAggregateBy,
   TransactionAggregateFn,
   TransactionAggregatedParams,

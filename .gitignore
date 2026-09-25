@@ -46,3 +46,13 @@ account.map.json
 
 # Data dumps
 data/
+
+# Private generated reports and downloaded evidence
+/reports/
+/tools/categorise-eval/out/
+/tools/ismrt/evidence/
+
+# Dashboard build and review artifacts
+/apps/dashboard/.next/
+/apps/dashboard/.impeccable/review/
+/apps/dashboard/.impeccable/questions/

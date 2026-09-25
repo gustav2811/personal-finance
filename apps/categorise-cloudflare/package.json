@@ -1,0 +1,20 @@
+{
+  "name": "@investments/categorise-cloudflare",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "types": "tsc --noEmit",
+    "migrate": "wrangler d1 execute investments-categoriser --remote --file migrations/0001_init.sql"
+  },
+  "dependencies": {
+    "@investments/categoriser": "file:../../libs/categoriser"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250214.0",
+    "typescript": "^5.7.3",
+    "wrangler": "^4.79.0"
+  }
+}

@@ -30,7 +30,7 @@ Get and manage API keys in the [FinWise Dashboard](https://app.finwiseapp.io/set
 
 - **accounts** – `list`, `get`, `create`, `update`, `archive`
 - **accountBalances** – `list`, `getAggregated`, `create`, `archive`
-- **transactions** – `list`, `getAggregated`, `create`, `archive`
+- **transactions** – `list`, `getAggregated`, `create`, `update` (`PATCH /transactions/:id`), `archive`
 - **transactionCategories** – `list`, `create`, `delete`
 
 ## Errors

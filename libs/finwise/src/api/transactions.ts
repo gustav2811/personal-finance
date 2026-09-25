@@ -4,6 +4,7 @@ import type {
   TransactionAggregatedParams,
   TransactionAggregatedItem,
   CreateTransactionBody,
+  UpdateTransactionBody,
 } from "../types/transaction";
 import type { PaginationParams } from "../types/common";
 import type { RequestQuery } from "../client";
@@ -41,6 +42,7 @@ export interface TransactionsApi {
     params: TransactionAggregatedParams
   ): Promise<TransactionAggregatedItem[]>;
   create(body: CreateTransactionBody): Promise<Transaction>;
+  update(id: string, body: UpdateTransactionBody): Promise<Transaction>;
   archive(id: string): Promise<Transaction>;
 }
 
@@ -69,6 +71,13 @@ export function createTransactionsApi(request: RequestFn): TransactionsApi {
     },
     create(body) {
       return request<Transaction>("POST", "/transactions", body);
+    },
+    update(id, body) {
+      return request<Transaction>(
+        "PATCH",
+        `/transactions/${encodeURIComponent(id)}`,
+        body
+      );
     },
     archive(id) {
       return request<Transaction>(

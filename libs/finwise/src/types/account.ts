@@ -24,6 +24,8 @@ export interface Account {
   accountType: string | null;
   type: AccountType;
   subType: string | null;
+  providerType?: string | null;
+  providerSubtype?: string | null;
   logoBase64: string | null;
   emoji: string | null;
   data: Record<string, unknown> | null;
