@@ -8,7 +8,8 @@ import { correctionFingerprint, toFeatures } from "./features.js";
 import { buildCategoryOptions, buildJevRequest } from "./jev/build.js";
 import { parseJevChoice } from "./jev/parse.js";
 import { accuracy, bestThreshold, coverageCurve, labelledAccuracy, pairedLift, selective } from "./metrics.js";
-import { resolveRelations } from "./relations.js";
+import { accountKind, resolveRelations } from "./relations.js";
+import { matchPlannedTransaction } from "./planned.js";
 import { householdState } from "./household.js";
 import { buildContrastiveJevRequest, buildRetrieval, candidatesForNature, descriptorKey, selectCandidates } from "./retrieve.js";
 import { sampleStratifiedSeeded } from "./splits.js";
@@ -225,6 +226,9 @@ describe("relations and candidates", () => {
     const relations = resolveRelations([debit, credit], accounts);
     expect(relations.get("d")?.pair?.otherId).toBe("c");
     expect(relations.get("d")?.nature).toBe("loan_payment");
+    expect(relations.get("d")?.pairKey).toContain("|debit");
+    expect(relations.get("c")?.pairKey).toContain("|credit");
+    expect(relations.get("d")?.pairKey).not.toBe(relations.get("c")?.pairKey);
     const history = tx({
       id: "h",
       description: "woolworths",
@@ -407,5 +411,86 @@ describe("finwise patch client", () => {
       path: "/transactions/t%201",
       body: { transactionCategoryId: "cat", needsReview: false },
     });
+  });
+});
+
+describe("account kind", () => {
+  it("keeps subtype instead of collapsing to the coarse type", () => {
+    expect(accountKind({ type: "loan", subType: "mortgage" })).toBe("loan:mortgage");
+    expect(accountKind({ type: "investment", subType: "brokerage" })).toBe("investment:brokerage");
+  });
+
+  it("does not treat a transfer flag as a movement", () => {
+    const donation = tx({
+      id: "church",
+      description: "church donation",
+      amount: -100,
+      categoryName: "Donations",
+    });
+    donation.isTransfer = true;
+    const relation = resolveRelations([donation], [{ id: "acc", name: "Current", type: "depository", subType: "checking" }]).get("church");
+    expect(relation?.nature).toBe("purchase");
+  });
+
+  it("does not call a savings reserve a mortgage because the text says mortgage", () => {
+    const debit = tx({
+      id: "reserve",
+      description: "Mortgage home",
+      amount: -2000,
+      date: "2026-05-01",
+    });
+    debit.accountId = "current";
+    const credit = tx({
+      id: "pot",
+      description: "Mortgage home",
+      amount: 2000,
+      date: "2026-05-01",
+    });
+    credit.accountId = "pot";
+    const relations = resolveRelations([debit, credit], [
+      { id: "current", name: "Current", type: "depository", subType: "checking" },
+      { id: "pot", name: "Mortgage reserve", type: "depository", subType: "savings" },
+    ]);
+    expect(relations.get("reserve")?.nature).toBe("savings_transfer");
+    expect(relations.get("reserve")?.accountType).toBe("depository:checking");
+    expect(relations.get("reserve")?.otherAccountKind).toBe("depository:savings");
+  });
+});
+
+describe("planned transaction match", () => {
+  it("matches a monthly amount window and ignores a different merchant", () => {
+    const mortgage = tx({
+      id: "bond",
+      description: "standard bank",
+      amount: -13500,
+      merchantName: "Standard Bank",
+      date: "2026-05-04",
+    });
+    mortgage.accountId = "current";
+    mortgage.merchantId = "m-bank";
+    const plan = {
+      id: "plan-bond",
+      accountId: "current",
+      merchantId: "m-bank",
+      categoryName: "Mortgage",
+      description: "Home loan",
+      frequency: "monthly" as const,
+      amount: null,
+      amountMin: 13000,
+      amountMax: 14000,
+      startDate: "2026-01-04",
+      endDate: null,
+    };
+    expect(matchPlannedTransaction(mortgage, [plan])?.categoryName).toBe("Mortgage");
+    const other = tx({
+      id: "shop",
+      description: "checkers",
+      amount: -13500,
+      merchantName: "Checkers",
+      date: "2026-05-04",
+    });
+    other.accountId = "current";
+    other.merchantId = "m-shop";
+    expect(matchPlannedTransaction(other, [plan])).toBeNull();
   });
 });

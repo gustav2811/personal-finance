@@ -30,6 +30,8 @@ A third slice was 83.8% for JEV alone. Adding a Llama business-type hint on low-
 
 A fourth slice compared one JEV call with a sequential nature-then-category call. Single-stage was 85.0%. Two-stage was 83.8% (1 loss, 0 wins). Generic two-stage does not help. Do not spend more experiments on candidate lists or question shape.
 
+Account kind is `type:subType` from FinWise (`loan:mortgage`, `investment:brokerage`, `depository:savings`). `accountType` is the sparse legacy field and is not the classifier input. `isTransfer` is a weak flag, not a movement gate. A paired opposite leg can have a different category. Planned transactions are a candidate feature, not an automatic label.
+
 The deployed worker only retrieves from the current 14-day poll. It does not know what each account is for, and it does not see history outside that window. Account meanings live in Supabase `classifier.account_semantics`, loaded by `classifier_current_account_semantics()`. The gitignored JSON under `reports/` is only the local draft. It is not deployed.
 
 On a fifth April–June slice, full-catalogue JEV without those sentences was 77.5%. The same rows with all 32 sentences were 75.0% (2 losses, 0 wins). The sentences did not raise accuracy. The movement slice went from 66.7% to 60.0%.

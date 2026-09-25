@@ -25,12 +25,14 @@ import {
   labelledAccuracy,
   macroF1,
   pairedLift,
+  matchPlannedTransaction,
   resolveRelations,
   sampleStratifiedSeeded,
   selectCandidates,
   toFeatures,
   type AccountLookup,
   type DecisionModel,
+  type PlannedTemplate,
   type ResolvedRelation,
   type TxFeatures,
 } from "../../libs/categoriser/src/index.js";
@@ -98,6 +100,45 @@ async function listAll(client: FinWiseClient): Promise<Transaction[]> {
   return out;
 }
 
+function moneyAmount(value: { amount?: string | null } | null | undefined): number | null {
+  const raw = value?.amount;
+  if (!raw) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? Math.abs(n) : null;
+}
+
+async function listPlanned(client: FinWiseClient, nameById: ReadonlyMap<string, string>): Promise<PlannedTemplate[]> {
+  const batch = await client.request<{
+    id: string;
+    accountId?: string | null;
+    merchantId?: string | null;
+    transactionCategoryId?: string | null;
+    description?: string | null;
+    frequency: PlannedTemplate["frequency"];
+    amount?: { amount?: string | null } | null;
+    flexibleAmountMin?: { amount?: string | null } | null;
+    flexibleAmountMax?: { amount?: string | null } | null;
+    startDate: string;
+    endDate?: string | null;
+    status?: string | null;
+  }[]>("GET", "/planned-transactions", undefined, { pagination: { pageNumber: 1, pageSize: 100 } });
+  return batch
+    .filter((plan) => plan.status !== "archived")
+    .map((plan) => ({
+      id: plan.id,
+      accountId: plan.accountId ?? null,
+      merchantId: plan.merchantId ?? null,
+      categoryName: plan.transactionCategoryId ? nameById.get(plan.transactionCategoryId) ?? null : null,
+      description: plan.description ?? "",
+      frequency: plan.frequency,
+      amount: moneyAmount(plan.amount),
+      amountMin: moneyAmount(plan.flexibleAmountMin),
+      amountMax: moneyAmount(plan.flexibleAmountMax),
+      startDate: plan.startDate,
+      endDate: plan.endDate ?? null,
+    }));
+}
+
 async function merchantNames(client: FinWiseClient): Promise<Map<string, string>> {
   const names = new Map<string, string>();
   for (let page = 1; page <= 10; page++) {
@@ -159,7 +200,8 @@ async function main(): Promise<void> {
   });
   const token = cloudflareToken();
   if (!token) throw new Error("missing cloudflare token");
-  const budget = new ExperimentBudget();
+  const full = process.env.FULL === "1";
+  const budget = new ExperimentBudget(full ? 0.5 : undefined);
   const model: DecisionModel = createCloudflareJevModel({
     accountId: ACCOUNT_ID,
     apiToken: token,
@@ -179,7 +221,8 @@ async function main(): Promise<void> {
   const accountLookups: AccountLookup[] = accounts.map((account) => ({
     id: account.id,
     name: account.displayName || account.friendlyName || account.name,
-    type: account.type,
+    type: account.providerType || account.type || account.accountType,
+    subType: account.providerSubtype || account.subType,
   }));
   const accountNameById = new Map(accountLookups.map((account) => [account.id, account.name]));
   const rows = rawTxns.map((txn) =>
@@ -217,7 +260,9 @@ async function main(): Promise<void> {
     const right = fnv1a(`${SEED}|${b.id}`);
     return left < right ? -1 : left > right ? 1 : a.id.localeCompare(b.id);
   });
-  const sample = memory
+  const sample = full
+    ? rankedDev
+    : memory
     ? rankedDev.slice(SAMPLE_CAP * 4, SAMPLE_CAP * 5)
     : staged
     ? rankedDev.slice(SAMPLE_CAP * 3, SAMPLE_CAP * 4)
@@ -229,6 +274,7 @@ async function main(): Promise<void> {
       ? rankedDev.slice(0, SAMPLE_CAP)
       : sampleStratifiedSeeded(devPool, 2, SAMPLE_CAP, SEED);
   const options = buildCategoryOptions(categories);
+  const plans = full ? await listPlanned(client, nameById) : [];
   const byId = new Map(rows.map((row) => [row.id, row]));
   const relations = resolveRelations(labelled, accountLookups);
   if (process.env.AUDIT_ONLY === "1") {
@@ -247,9 +293,10 @@ async function main(): Promise<void> {
       const relation = visibleRelation(
         row,
         relations.get(row.id) ?? {
-          accountName: row.accountName,
-          accountType: null,
-          counterpartyKey: row.merchantKey,
+        accountName: row.accountName,
+        accountType: null,
+        otherAccountKind: null,
+        counterpartyKey: row.merchantKey,
           ownAccount: null,
           pair: null,
           nature: row.direction === "debit" ? "purchase" : "other",
@@ -443,7 +490,7 @@ async function main(): Promise<void> {
 
   const householdAccounts = memory ? loadHousehold(root) : [];
 
-  async function predict(arm: "v1" | "v3" | "v4full" | "v4cand" | "v5hint" | "v6single" | "v7plain" | "v7memory", row: TxFeatures): Promise<SavedCall> {
+  async function predict(arm: "v1" | "v3" | "v4full" | "v4cand" | "v5hint" | "v6single" | "v7plain" | "v7memory" | "v8cand" | "v8full", row: TxFeatures): Promise<SavedCall> {
     const key = `${arm}:${row.id}`;
     const cached = savedKey.get(key);
     if (cached) return cached;
@@ -462,8 +509,16 @@ async function main(): Promise<void> {
       byId,
     );
     const retrieval = buildRetrieval(history, relations);
-    const candidates = selectCandidates({ tx: row, relation, retrieval, categories: options });
+    const plannedMatch = arm === "v8cand" || arm === "v8full" ? matchPlannedTransaction(row, plans) : null;
+    const candidates = selectCandidates({
+      tx: row,
+      relation,
+      retrieval,
+      categories: options,
+      plannedCategory: plannedMatch?.categoryName,
+    });
     const fullSet = { names: options.map((category) => category.name), reasons: {} };
+    const unrestricted = arm === "v4full" || arm === "v7plain" || arm === "v7memory" || arm === "v8full";
     const jevRequest = arm === "v1"
       ? buildJevRequest({ tx: row, categories: options, variant: "descriptions" })
       : buildContrastiveJevRequest({
@@ -471,13 +526,14 @@ async function main(): Promise<void> {
           relation,
           retrieval,
           categories: options,
-          candidates: arm === "v4full" || arm === "v7plain" || arm === "v7memory" ? fullSet : candidates,
+          candidates: unrestricted ? fullSet : candidates,
           businessHint: arm === "v5hint" ? await businessHint(row) : null,
           householdAccounts: arm === "v7memory" ? householdAccounts : [],
+          planned: plannedMatch,
         });
     const decision = await classifyTransaction({
       tx: row,
-      categories: arm === "v4cand" || arm === "v3" || arm === "v5hint" || arm === "v6single"
+      categories: arm === "v4cand" || arm === "v3" || arm === "v5hint" || arm === "v6single" || arm === "v8cand"
         ? options.filter((category) => candidates.names.includes(category.name))
         : options,
       evidence: { byMerchant: new Map(), exemplarsByCategory: new Map() },
@@ -502,6 +558,9 @@ async function main(): Promise<void> {
     return call;
   }
 
+  const previouslySeen = new Set(
+    saved.filter((call) => call.arm !== "v8cand" && call.arm !== "v8full").map((call) => call.id),
+  );
   const v1: SavedCall[] = [];
   const v2: SavedCall[] = [];
   for (let index = 0; index < sample.length; index++) {
@@ -509,7 +568,10 @@ async function main(): Promise<void> {
     if (!row) continue;
     const history = labelled.filter((item) => item.id !== row.id && dayOf(item) < dayOf(row));
     const merchantSupport = buildRetrieval(history, relations).merchant.get(row.merchantId || row.merchantKey)?.total ?? 0;
-    const [first, second] = memory
+    if (full && !budget.canSpend(40_000)) break;
+    const [first, second] = full
+      ? await Promise.all([predict("v8cand", row), predict("v8full", row)] as const)
+      : memory
       ? await Promise.all([predict("v7plain", row), predict("v7memory", row)] as const)
       : staged
       ? [await predict("v6single", row), await predictStaged(row)] as const
@@ -535,7 +597,8 @@ async function main(): Promise<void> {
     }
   }
 
-  const scored = sample.map((row, index) => ({
+  const completed = sample.slice(0, v1.length);
+  const scored = completed.map((row, index) => ({
     actual: row.categoryName as string,
     v1: v1[index]?.predicted ?? null,
     v2: v2[index]?.predicted ?? null,
@@ -566,11 +629,15 @@ async function main(): Promise<void> {
       sacredUntouched: sacred.length,
       devPool: devPool.length,
       sample: sample.length,
+      completed: completed.length,
       natural,
       fresh,
-      arms: memory ? ["v7plain", "v7memory"] : staged ? ["v6single", "v6stage"] : escalate ? ["v4cand", "v5hint"] : fresh ? ["v4full", "v4cand"] : ["v1", "v3"],
+      full,
+      arms: full ? ["v8cand", "v8full"] : memory ? ["v7plain", "v7memory"] : staged ? ["v6single", "v6stage"] : escalate ? ["v4cand", "v5hint"] : fresh ? ["v4full", "v4cand"] : ["v1", "v3"],
+      plannedTemplates: plans.length,
       householdAccounts: householdAccounts.length,
-      note: "April-June development sample only. Post-2026-07-01 and the sacred window were not sent to JEV.",
+      budgetUsd: full ? 0.5 : null,
+      note: "April-June development sample only. Post-2026-07-01 and the sacred window were not sent to JEV. v8 is the new model: account kind, planned match, directional pairs. v8cand is the deployed candidate cap. v8full is the same model with every category.",
     },
     v1: {
       accuracy: labelledAccuracy(asRows("v1")),
@@ -597,6 +664,11 @@ async function main(): Promise<void> {
     slices: {
       movement: { n: movement.length, v1: sliceAccuracy(movement, "v1"), v2: sliceAccuracy(movement, "v2") },
       purchases: { n: purchases.length, v1: sliceAccuracy(purchases, "v1"), v2: sliceAccuracy(purchases, "v2") },
+      unseen: {
+        n: scored.filter((row, index) => !previouslySeen.has(completed[index]?.id ?? "")).length,
+        v8cand: sliceAccuracy(scored.filter((row, index) => !previouslySeen.has(completed[index]?.id ?? "")), "v1"),
+        v8full: sliceAccuracy(scored.filter((row, index) => !previouslySeen.has(completed[index]?.id ?? "")), "v2"),
+      },
     },
     efficiency: {
       calls: saved.filter((call) => call.inputTokens > 0).length,

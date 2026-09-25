@@ -1,4 +1,5 @@
 import { criterionFor } from "./criteria.js";
+import type { PlannedTemplate } from "./planned.js";
 import { householdState, type AccountSemantic, type RelationshipSemantic } from "./household.js";
 import { slugOf } from "./jev/build.js";
 import { matchFirstRule } from "./rules.js";
@@ -74,6 +75,7 @@ export function selectCandidates(input: {
   relation: ResolvedRelation;
   retrieval: RetrievalIndex;
   categories: readonly CategoryOption[];
+  plannedCategory?: string | null;
 }): CandidateSet {
   const known = new Set(input.categories.map((category) => category.name));
   const names: string[] = [];
@@ -84,6 +86,7 @@ export function selectCandidates(input: {
     reasons[name] = reason;
   };
   push(input.tx.finwiseCategoryName, "finwise_hint");
+  push(input.plannedCategory, "planned_transaction");
   const described = input.retrieval.descriptor.get(descriptorKey(input.tx));
   if (described && described.total >= 2) push(described.majority, "descriptor_history");
   const merchant = input.retrieval.merchant.get(input.tx.merchantId || input.tx.merchantKey);
@@ -174,6 +177,7 @@ export function buildContrastiveJevRequest(input: {
   businessHint?: string | null;
   householdAccounts?: readonly AccountSemantic[];
   householdRelationships?: readonly RelationshipSemantic[];
+  planned?: PlannedTemplate | null;
 }): { state: Record<string, unknown>; questions: Record<string, unknown> } {
   const chosen = input.categories.filter((category) => input.candidates.names.includes(category.name));
   const merchant = input.retrieval.merchant.get(input.tx.merchantId || input.tx.merchantKey);
@@ -191,8 +195,8 @@ export function buildContrastiveJevRequest(input: {
     direction: input.tx.direction,
     exact_amount: Number(input.tx.signedAmount.toFixed(2)),
     account_name: input.relation.accountName,
-    account_type: input.relation.accountType,
-    transfer: input.tx.isTransfer,
+    account_kind: input.relation.accountType,
+    transfer_flag: input.tx.isTransfer,
     nature: input.relation.nature,
     recurring_hint: pair && pair.total >= 3 ? "recurring_account_pattern" : null,
   };
@@ -212,9 +216,19 @@ export function buildContrastiveJevRequest(input: {
       needs_review: input.tx.needsReview,
     };
   }
+  if (input.planned?.categoryName) {
+    state.planned_match = {
+      category: input.planned.categoryName,
+      frequency: input.planned.frequency,
+      description: input.planned.description.slice(0, 80),
+    };
+  }
   if (input.relation.pair) {
     state.pair = {
       other_account: input.relation.pair.otherAccountName,
+      other_account_kind: input.relation.otherAccountKind,
+      this_direction: input.tx.direction,
+      other_leg_may_differ: true,
       day_gap: input.relation.pair.dayGap,
       amount_match: input.relation.pair.amountMatch,
       history: topCounts(pair),
@@ -249,7 +263,7 @@ export function buildContrastiveJevRequest(input: {
       category: {
         type: "choice",
         instructions:
-          "Choose one category from the criteria only. Discriminate between those candidates. Do not treat FinWise's proposed category as correct. Use the account, the exact amount, any paired opposite transaction, and this user's history.",
+          "Choose one category from the criteria only. Discriminate between those candidates. Do not treat FinWise's proposed category as correct. The transfer flag is a weak bank hint, not the category. A paired opposite leg can have a different category; classify this leg only. Use the account kind, the exact amount, a planned-transaction match, and this user's history.",
         criteria,
       },
     },

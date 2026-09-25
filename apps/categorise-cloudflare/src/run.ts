@@ -1,6 +1,8 @@
 import {
   buildCategoryOptions,
   buildContrastiveJevRequest,
+  matchPlannedTransaction,
+  type PlannedTemplate,
   buildRetrieval,
   classifyTransaction,
   CONSERVATIVE_POLICY,
@@ -67,11 +69,12 @@ export async function runClassifier(env: ClassifierEnv): Promise<RunSummary> {
     mode,
   };
 
-  const [categories, txns, merchants, accounts] = await Promise.all([
+  const [categories, txns, merchants, accounts, plannedRows] = await Promise.all([
     finwise.listCategories(),
     finwise.listRecent(isoDaysAgo(lookback), 50),
     finwise.listMerchants(),
     finwise.listAccounts(),
+    finwise.listPlanned(),
   ]);
   const options = buildCategoryOptions(categories);
   const nameById = new Map(options.map((category) => [category.id, category.name]));
@@ -98,6 +101,19 @@ export async function runClassifier(env: ClassifierEnv): Promise<RunSummary> {
       updatedAt: txn.updatedAt,
     }),
   );
+  const planned: PlannedTemplate[] = plannedRows.map((plan) => ({
+    id: plan.id,
+    accountId: plan.accountId,
+    merchantId: plan.merchantId,
+    categoryName: plan.transactionCategoryId ? nameById.get(plan.transactionCategoryId) ?? null : null,
+    description: plan.description,
+    frequency: plan.frequency,
+    amount: plan.amount,
+    amountMin: plan.amountMin,
+    amountMax: plan.amountMax,
+    startDate: plan.startDate,
+    endDate: plan.endDate,
+  }));
   const householdAccounts = await loadHouseholdAccounts(env);
   const featuresById = new Map(windowFeatures.map((row) => [row.id, row]));
   const relations = resolveRelations(windowFeatures, accounts);
@@ -178,6 +194,7 @@ export async function runClassifier(env: ClassifierEnv): Promise<RunSummary> {
     const relation = relations.get(features.id) ?? {
       accountName: features.accountName,
       accountType: null,
+      otherAccountKind: null,
       counterpartyKey: features.merchantKey,
       ownAccount: null,
       pair: null,
@@ -185,7 +202,14 @@ export async function runClassifier(env: ClassifierEnv): Promise<RunSummary> {
       pairKey: `${features.accountName} -> ${features.merchantKey}`,
     };
     const retrieval = buildRetrieval(history, relations);
-    const candidates = selectCandidates({ tx: features, relation, retrieval, categories: options });
+    const plannedMatch = matchPlannedTransaction(features, planned);
+    const candidates = selectCandidates({
+      tx: features,
+      relation,
+      retrieval,
+      categories: options,
+      plannedCategory: plannedMatch?.categoryName,
+    });
     const decision = await classifyTransaction({
       tx: features,
       categories: options.filter((category) => candidates.names.includes(category.name)),
@@ -201,6 +225,7 @@ export async function runClassifier(env: ClassifierEnv): Promise<RunSummary> {
         categories: options,
         candidates,
         householdAccounts,
+        planned: plannedMatch,
       }),
     });
     summary.classified += 1;

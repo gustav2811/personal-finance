@@ -68,19 +68,78 @@ export class FinwiseHttp {
     return names;
   }
 
-  listAccounts(): Promise<{ id: string; name: string; type: string | null }[]> {
+  listAccounts(): Promise<{ id: string; name: string; type: string | null; subType: string | null }[]> {
     const query = new URLSearchParams({
       pagination: JSON.stringify({ pageNumber: 1, pageSize: 100 }),
     });
-    return this.request<{ id: string; name: string; displayName?: string | null; type?: string | null }[]>(
+    return this.request<{
+      id: string;
+      name: string;
+      displayName?: string | null;
+      type?: string | null;
+      subType?: string | null;
+      accountType?: string | null;
+      providerType?: string | null;
+      providerSubtype?: string | null;
+    }[]>(
       `/accounts?${query.toString()}`,
     ).then((accounts) =>
       accounts.map((account) => ({
         id: account.id,
         name: account.displayName || account.name,
-        type: account.type ?? null,
+        type: account.providerType || account.type || account.accountType || null,
+        subType: account.providerSubtype || account.subType || null,
       })),
     );
+  }
+
+  async listPlanned(): Promise<{
+    id: string;
+    accountId: string | null;
+    merchantId: string | null;
+    transactionCategoryId: string | null;
+    description: string;
+    frequency: "weekly" | "monthly" | "quarterly" | "yearly";
+    amount: number | null;
+    amountMin: number | null;
+    amountMax: number | null;
+    startDate: string;
+    endDate: string | null;
+    status: string | null;
+  }[]> {
+    const query = new URLSearchParams({
+      pagination: JSON.stringify({ pageNumber: 1, pageSize: 100 }),
+    });
+    const batch = await this.request<{
+      id: string;
+      accountId?: string | null;
+      merchantId?: string | null;
+      transactionCategoryId?: string | null;
+      description?: string | null;
+      frequency: "weekly" | "monthly" | "quarterly" | "yearly";
+      amount?: { amount?: string | null } | null;
+      flexibleAmountMin?: { amount?: string | null } | null;
+      flexibleAmountMax?: { amount?: string | null } | null;
+      startDate: string;
+      endDate?: string | null;
+      status?: string | null;
+    }[]>(`/planned-transactions?${query.toString()}`);
+    return batch
+      .filter((plan) => plan.status !== "archived")
+      .map((plan) => ({
+        id: plan.id,
+        accountId: plan.accountId ?? null,
+        merchantId: plan.merchantId ?? null,
+        transactionCategoryId: plan.transactionCategoryId ?? null,
+        description: plan.description ?? "",
+        frequency: plan.frequency,
+        amount: moneyAmount(plan.amount),
+        amountMin: moneyAmount(plan.flexibleAmountMin),
+        amountMax: moneyAmount(plan.flexibleAmountMax),
+        startDate: plan.startDate,
+        endDate: plan.endDate ?? null,
+        status: plan.status ?? null,
+      }));
   }
 
   listCategories(): Promise<FinwiseCategory[]> {
@@ -104,6 +163,13 @@ export class FinwiseHttp {
 export function merchantNameOf(tx: FinwiseTxn, merchants?: ReadonlyMap<string, string>): string | null {
   const named = tx as FinwiseTxn & { merchantName?: string | null };
   return named.merchantName ?? tx.merchant?.name ?? (tx.merchantId ? merchants?.get(tx.merchantId) ?? null : null);
+}
+
+function moneyAmount(value: { amount?: string | null } | null | undefined): number | null {
+  const raw = value?.amount;
+  if (!raw) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? Math.abs(n) : null;
 }
 
 export function signedAmount(tx: FinwiseTxn): number {

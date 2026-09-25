@@ -16,11 +16,13 @@ export interface AccountLookup {
   id: string;
   name: string;
   type: string | null;
+  subType?: string | null;
 }
 
 export interface ResolvedRelation {
   accountName: string;
   accountType: string | null;
+  otherAccountKind: string | null;
   counterpartyKey: string;
   ownAccount: { id: string; name: string } | null;
   pair: {
@@ -43,6 +45,28 @@ const MOVEMENT: ReadonlySet<TransactionNature> = new Set([
 
 export function isMovement(nature: TransactionNature): boolean {
   return MOVEMENT.has(nature);
+}
+
+export function accountKind(account: Pick<AccountLookup, "type"> & { subType?: string | null }): string | null {
+  const type = account.type?.trim() || null;
+  const subType = account.subType?.trim() || null;
+  if (type && subType && !type.includes(":")) return `${type}:${subType}`;
+  return type;
+}
+
+export function kindFamily(
+  kind: string | null,
+): "loan" | "investment" | "savings" | "checking" | "credit" | "rewards" | null {
+  if (!kind) return null;
+  const [type, sub = ""] = kind.split(":");
+  if (type === "loan" || sub === "mortgage" || sub === "home equity") return "loan";
+  if (type === "investment") return "investment";
+  if (sub === "savings" || kind === "savings") return "savings";
+  if (sub === "checking") return "checking";
+  if (type === "depository") return "checking";
+  if (type === "credit") return "credit";
+  if (type === "rewards") return "rewards";
+  return null;
 }
 
 function dayNumber(iso: string): number {
@@ -85,18 +109,17 @@ export function resolveRelations(
         }
       : null;
     const destName = resolvedPair?.otherAccountName || own?.name || "";
-    const destType = otherAccount?.type ?? (own ? byId.get(own.id)?.type ?? null : null);
-    const trusted = isTrustedLink(row, destName, destType, Boolean(own), other?.isTransfer === true);
-    const nature = natureOf(row, destName, destType, trusted);
+    const destAccount = otherAccount ?? (own ? byId.get(own.id) : undefined);
+    const destKind = destAccount ? accountKind(destAccount) : null;
+    const trusted = isTrustedLink(row, destName, destKind, Boolean(own) || Boolean(resolvedPair));
+    const nature = natureOf(row, destName, destKind, trusted);
     const counterpartyKey = row.merchantKey || "unknown";
-    const pairKey = resolvedPair
-      ? `${accountName} -> ${resolvedPair.otherAccountName}`
-      : own
-        ? `${accountName} -> ${own.name}`
-        : `${accountName} -> ${counterpartyKey}`;
+    const destination = resolvedPair?.otherAccountName || own?.name || counterpartyKey;
+    const pairKey = `${accountName} -> ${destination}|${row.direction}`;
     out.set(row.id, {
       accountName,
-      accountType: account?.type ?? null,
+      accountType: account ? accountKind(account) : null,
+      otherAccountKind: destKind,
       counterpartyKey,
       ownAccount: own,
       pair: resolvedPair,
@@ -185,17 +208,16 @@ function assignPairs(rows: readonly TxFeatures[]): Map<string, AssignedPair> {
 function isTrustedLink(
   row: TxFeatures,
   destName: string,
-  destType: string | null,
+  destKind: string | null,
   namedOwnAccount: boolean,
-  otherIsTransfer: boolean,
 ): boolean {
+  const family = kindFamily(destKind);
   const text = normalizeText(`${row.notesNorm} ${row.descriptionNorm} ${row.merchantKey} ${destName}`);
   return (
     namedOwnAccount ||
-    row.isTransfer ||
-    otherIsTransfer ||
-    destType === "loan" ||
-    destType === "investment" ||
+    family === "loan" ||
+    family === "investment" ||
+    family === "savings" ||
     /\b(tfsa|mortgage|bond)\b/.test(text) ||
     text.includes("home loan") ||
     normalizeText(destName).includes("saving")
@@ -205,18 +227,21 @@ function isTrustedLink(
 function natureOf(
   row: TxFeatures,
   destName: string,
-  destType: string | null,
+  destKind: string | null,
   linked: boolean,
 ): TransactionNature {
   const text = normalizeText(`${row.notesNorm} ${row.descriptionNorm} ${row.merchantKey} ${destName}`);
+  const family = kindFamily(destKind);
   if (linked) {
-    if (destType === "investment" || /\b(tfsa|easyequities|investment)\b/.test(text)) {
+    if (family === "investment" || (family == null && /\b(tfsa|easyequities|investment)\b/.test(text))) {
       return "investment_contribution";
     }
-    if (destType === "loan" || /\b(mortgage|bond)\b/.test(text) || text.includes("home loan")) {
+    if (family === "loan" || (family == null && (/\b(mortgage|bond)\b/.test(text) || text.includes("home loan")))) {
       return "loan_payment";
     }
-    if (normalizeText(destName).includes("saving")) return "savings_transfer";
+    if (family === "savings" || (family == null && normalizeText(destName).includes("saving"))) {
+      return "savings_transfer";
+    }
     return "internal_transfer";
   }
   if (row.direction === "credit" && /\b(salary|salaries|wages)\b/.test(text)) return "income";
