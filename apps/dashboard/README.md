@@ -1,17 +1,16 @@
-# Household
+# Common Orbit
 
-Private household dashboard for energy, utility wallet movement, devices,
-transactions, and source freshness. The UI is the shadcn design system
-documented in `DESIGN.md`.
+Private, read-only household dashboard for energy, utility wallet movement,
+devices, and source freshness.
 
 ## Local development
 
-From `apps/dashboard` (this app is not a yarn workspace):
+From the repository root:
 
 ```bash
 yarn install
-set -a; source ../../.env; set +a
-yarn dev
+set -a; source .env; set +a
+yarn workspace @investments/dashboard dev
 ```
 
 Local development intentionally skips the login screen and reads through a
