@@ -169,7 +169,7 @@ export type TransactionFilters = {
   toDate?: string;
   accountId?: string;
   categoryId?: string;
-  reviewState?: ReviewState;
+  reviewState?: ReviewState | "needs_review";
   sourceSystem?: string;
   transfer?: "yes" | "no" | "unknown";
   spend?: "included" | "excluded" | "unknown";

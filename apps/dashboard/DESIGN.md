@@ -64,11 +64,11 @@ components:
 
 ## Overview
 
-Common Orbit is a dark household instrument, not an admin console. Graphite panels, vellum type, and mint, amber, and blue signals. The ledger inherits that world: a reading log on the left, an inspection plate on the right, provenance shown as a tick rather than a badge.
+Common Orbit is a dark household instrument, not an admin console. Graphite panels, vellum type, and mint, amber, and blue signals. The ledger inherits that world: a reading log of movements, each with a visible decision. Provenance is a word under the category, not a badge.
 
 ## Colors
 
-Ink is the page. Panels step up through raised and soft. Mint means a decision you made or money in. Amber means a proposal that still needs a look, or a warning. Coral is money out. Blue is a FinWise observation. Muted type carries secondary facts; quiet is for ticks and rules, not body copy.
+Ink is the page. Panels step up through raised and soft. Mint means a decision you made or money in. Amber is a gentle mark that JEV differs from FinWise, not an alert. Coral is money out, and the only strong warning, used when the classifier failed. Blue is a FinWise observation. Muted type carries secondary facts; quiet is for rules, not body copy.
 
 ## Typography
 
@@ -76,7 +76,7 @@ One sans for the interface, mono for dates, amounts, and instrument labels. Disp
 
 ## Layout
 
-A sticky side nav on desktop, a compact icon bar on small screens. Observatory views use a left field and a right rail. Transactions keeps that split: the log owns about two thirds, the plate the rest. The plate drops under the log below 920px.
+A sticky side nav on desktop, a compact icon bar on small screens. Observatory views use a left field and a right rail. The transaction log owns the width until a row is chosen; then an inspection plate takes the right third. Below 920px that plate is a sheet over the log, not a second column squeezed underneath.
 
 ## Elevation & Depth
 
@@ -84,12 +84,12 @@ Depth is a panel step and a 1px rule, not a shadow. The category picker is the e
 
 ## Shapes
 
-Controls are 8px. Larger frames are 12px. Status marks are pills. Provenance is a 7px dot, not a lozenge.
+Controls are 8px. Larger frames are 12px. Status marks are pills. Provenance is words under the category name, not a dot or a lozenge.
 
 ## Components
 
-Navigation, range controls, and review filters share the same quiet button. The selected review state turns mint. Category choice is an inline control with a tick. Accept is mint text on the row, not a dialog. The inspection plate is a column with a hairline, not a card.
+Navigation and range controls share the same quiet button. The ledger bar is Search, Account, Category, All or Review, and Date. Category choice is the inline control. Accept is a mint tick, and only when JEV differs. The inspection plate is a column with a hairline once a row is open, otherwise absent.
 
 ## Do's and Don'ts
 
-Do keep source facts and owned decisions visually separate. Do show the newest movement before any summary number. Don't introduce a second palette, a modal for classification, or a table of status pills.
+Do keep source facts and owned decisions visually separate. Do show the newest movement before any summary number. Do leave the next movement one gesture away. Don't ask to accept a category merely because JEV agrees with FinWise. Don't turn disagreement into an alert, trap review inside the plate, introduce a second palette, open a modal for classification, or build a table of status pills.

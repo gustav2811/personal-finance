@@ -112,8 +112,7 @@ const VIEW_COPY: Record<
   transactions: {
     title: "Read the",
     accent: "ledger.",
-    subtitle:
-      "The newest movements, with the category you can trust and where it came from.",
+    subtitle: "The newest movements, and the decision attached to each.",
   },
   sources: {
     title: "Know what is",

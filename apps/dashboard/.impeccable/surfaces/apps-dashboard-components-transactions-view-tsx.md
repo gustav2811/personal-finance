@@ -25,9 +25,9 @@ THESIS: The ledger is a reading log of household movements, each with a visible 
 
 OWN-WORLD: Common Orbit graphite, mint for a decision you made, amber for a JEV proposal that differs, blue for a FinWise observation, mono for dates and amounts, a date gutter like a logbook rule.
 
-STORY: The visitor sees the newest movement and whether the category is theirs, JEV's, or FinWise's, accepts or corrects it in place, and opens the row to read the audit.
+STORY: The visitor sees the newest movement and its working category, accepts a disagreement or corrects it in place, and moves to the next row. Opening a row reads the audit as a short timeline. The next transaction should always feel one gesture away. Reviewing must never trap the user in a transaction.
 
-FIRST VIEWPORT: The log owns the left two-thirds and starts at the newest row; a thin instrument bar sits above it; an inspection plate owns the right third and stays quiet until a row is chosen. Accept sits on the proposed category, not in a dialog.
+FIRST VIEWPORT: The log owns the width and starts at the newest row. A thin instrument bar sits above it: Search, Account, Category, All or Review, Date. The inspection plate is absent until a row is chosen, then takes the right third. Below 920px it is a sheet. Accept is a tick on a JEV disagreement, not a dialog, and is omitted when JEV agrees with FinWise.
 
 FORM: Reading log inside the established observatory, inherited world, code-led, seed user-locked-prd.
 
