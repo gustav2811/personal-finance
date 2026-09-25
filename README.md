@@ -1,6 +1,6 @@
 # Investments
 
-Yarn monorepo for **bank statement email ingest** (SendGrid webhooks → parse attachments → Finwise and Supabase) plus scheduled balance/transaction sync scripts.
+Yarn monorepo for **bank statement email ingest** (SendGrid webhooks → parse attachments → Finwise and Supabase) and the owned household finance dataset.
 
 ## Layout
 
@@ -9,7 +9,6 @@ Yarn monorepo for **bank statement email ingest** (SendGrid webhooks → parse a
 | [`apps/ingest-cloudflare`](apps/ingest-cloudflare) | `@investments/ingest-cloudflare` | Cloudflare Workers — SendGrid webhook accepts payloads to R2, queue triggers consumer (mailparser, XLSX parsers, Finwise, Supabase). |
 | [`libs/ingest-core`](libs/ingest-core) | `@investments/ingest-core` | Shared logic: mailparser, XLSX parsing, Finwise upload, Supabase DLQ / idempotency. |
 | [`libs/finwise`](libs/finwise) | `@investments/finwise` | Small Finwise API client used by ingest code. |
-| [`apps/src/functions`](apps/src/functions) | *(scripts, not a workspace)* | Node scripts invoked by GitHub Actions (e.g. daily 22seven → Supabase sync). |
 | [`tools/ismrt`](tools/ismrt) | *(Python tools)* | ISMRT wallet API client, probes, exports, and API notes. |
 | [`tools/electricity`](tools/electricity) | *(Python tools)* | Household electricity analysis and dark HTML report builder. |
 | [`apps/dashboard`](apps/dashboard) | `@investments/dashboard` | Common Orbit — private, read-only household usage dashboard. |
@@ -52,13 +51,6 @@ yarn deploy:all
 ```
 
 Wrangler is a devDependency of that app; prefer `yarn wrangler` from `apps/ingest-cloudflare`. Setup (R2, queues, secrets, `.dev.vars`) is in [docs/ingest-cloudflare.md](docs/ingest-cloudflare.md).
-
-**One-off scripts** (examples)
-
-```bash
-yarn tsx apps/src/functions/syncBalances.ts
-yarn tsx apps/src/functions/syncTransactions.ts
-```
 
 **Household consumption tools**
 
@@ -105,7 +97,6 @@ Bneta retrieval is not wired yet.
 |----------|------|------|
 | [`.github/workflows/pr.yml`](.github/workflows/pr.yml) | Pull requests to `master` | `ingest-core` tests, `ingest-cloudflare` typecheck, Wrangler bundle dry-runs for ingest and consumer (non-fork PRs with Cloudflare secrets). |
 | [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) | Push to `master` | Deploys both Cloudflare Workers (`CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`). |
-| [`.github/workflows/sync-transactions.yml`](.github/workflows/sync-transactions.yml) | Daily schedule + manual | Runs snapshot and transaction sync scripts under `apps/src/functions/` with Supabase / 22seven secrets. |
 
 ## License
 

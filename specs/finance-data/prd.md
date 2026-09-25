@@ -68,8 +68,7 @@ cannot be treated as the final household taxonomy when it cannot be updated.
 - Treating FinWise’s category as the permanent household truth.
 - Giving the model unrestricted SQL or unrestricted write access.
 - Creating separate tables per account, bank, or provider.
-- Direct 22seven ingestion or a separate 22seven dataset. Use FinWise export or
-  sync for overlapping historical data.
+- 22seven. That source is retired and must not be reintroduced.
 - Replacing FinWise as a connected-account data source on day one.
 - Training or fine-tuning a model as part of the initial implementation.
 - Automatically extracting episodic rules from unconfirmed model predictions.

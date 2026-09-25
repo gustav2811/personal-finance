@@ -605,13 +605,9 @@ rebuildable.
 
 1. Inspected 2026-09-25. `public.accounts` has `account_id`, `name`,
    `source_account_id`, `source_platform`, and `type`. `public.transactions`
-   has `id`, `account_id`, `date`, and `details`. `details` is a 22seven-shaped
-   payload, not a FinWise transaction. Transaction ids are not UUIDs. About
-   5,000 rows are already loaded. Do not treat this table as the FinWise ledger
-   and do not create a second permanent transaction store. Evolve these rows
-   as quarantined legacy history, and sync FinWise into the same canonical
-   tables only after source identity columns exist. DDL cannot be applied from
-   this repo until a database URL is available. The service role can read.
+   has `id`, `account_id`, `date`, and `details`. The old 22seven rows were
+   removed. FinWise is the only financial source. Do not create a second
+   transaction store.
 2. Export or sync all accounts visible in the user’s FinWise account, together
    with their transactions and categories.
 3. Reconcile overlapping existing rows against FinWise source identities.
