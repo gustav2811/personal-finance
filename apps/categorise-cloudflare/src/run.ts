@@ -13,6 +13,7 @@ import {
   observeCategoryChange,
   toFeatures,
   txFeatureHash,
+  type AccountSemantic,
   type AiBinding,
 } from "@investments/categoriser";
 import { FinwiseHttp, merchantNameOf, signedAmount, type FinwiseTxn } from "./finwise.js";
@@ -97,6 +98,7 @@ export async function runClassifier(env: ClassifierEnv): Promise<RunSummary> {
       updatedAt: txn.updatedAt,
     }),
   );
+  const householdAccounts = await loadHouseholdAccounts(env);
   const featuresById = new Map(windowFeatures.map((row) => [row.id, row]));
   const relations = resolveRelations(windowFeatures, accounts);
   const byName = new Map(options.map((category) => [category.name, category.id]));
@@ -198,6 +200,7 @@ export async function runClassifier(env: ClassifierEnv): Promise<RunSummary> {
         retrieval,
         categories: options,
         candidates,
+        householdAccounts,
       }),
     });
     summary.classified += 1;
@@ -256,6 +259,37 @@ export async function runClassifier(env: ClassifierEnv): Promise<RunSummary> {
   }
 
   return summary;
+}
+
+async function loadHouseholdAccounts(env: ClassifierEnv): Promise<AccountSemantic[]> {
+  const url = env.SUPABASE_URL?.trim();
+  const key = env.SUPABASE_SERVICE_KEY?.trim();
+  if (!url || !key) return [];
+  const response = await fetch(`${url}/rest/v1/rpc/classifier_current_account_semantics`, {
+    method: "POST",
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+    },
+    body: "{}",
+  });
+  if (!response.ok) return [];
+  const rows = await response.json() as {
+    finwise_account_id: string;
+    display_name: string;
+    role: AccountSemantic["role"];
+    owner_scope: "household" | "external";
+    context: string;
+  }[];
+  if (!Array.isArray(rows)) return [];
+  return rows.filter((row) => row.context).map((row) => ({
+    finwiseAccountId: row.finwise_account_id,
+    displayName: row.display_name,
+    role: row.role,
+    ownerScope: row.owner_scope,
+    context: row.context,
+  }));
 }
 
 async function recordCategoryEvent(

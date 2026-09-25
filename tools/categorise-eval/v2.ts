@@ -8,10 +8,13 @@ import {
   DEV_END,
   DEV_START,
   SACRED_START,
+  type AccountSemantic,
   buildCategoryOptions,
   buildContrastiveJevRequest,
   buildJevRequest,
+  buildNatureRequest,
   buildRetrieval,
+  candidatesForNature,
   classScores,
   classifyTransaction,
   confusionPairs,
@@ -48,6 +51,22 @@ interface SavedCall {
   margin: number;
   topProbability: number;
   inputTokens: number;
+}
+
+function loadHousehold(repoRoot: string): AccountSemantic[] {
+  const file = path.join(repoRoot, "reports", "categoriser", "account-semantics.json");
+  const seed = JSON.parse(readFileSync(file, "utf8")) as {
+    accounts: { finwiseAccountId: string; displayName: string; role: string; ownerScope: string; context: string }[];
+  };
+  return seed.accounts
+    .filter((account) => account.role && account.context)
+    .map((account) => ({
+      finwiseAccountId: account.finwiseAccountId,
+      displayName: account.displayName,
+      role: account.role as AccountSemantic["role"],
+      ownerScope: account.ownerScope === "external" ? "external" : "household",
+      context: account.context,
+    }));
 }
 
 function required(name: string): string {
@@ -191,12 +210,18 @@ async function main(): Promise<void> {
   const natural = process.env.NATURAL === "1";
   const fresh = process.env.FRESH === "1";
   const escalate = process.env.ESCALATE === "1";
+  const staged = process.env.STAGE === "1";
+  const memory = process.env.MEMORY === "1";
   const rankedDev = [...devPool].sort((a, b) => {
     const left = fnv1a(`${SEED}|${a.id}`);
     const right = fnv1a(`${SEED}|${b.id}`);
     return left < right ? -1 : left > right ? 1 : a.id.localeCompare(b.id);
   });
-  const sample = escalate
+  const sample = memory
+    ? rankedDev.slice(SAMPLE_CAP * 4, SAMPLE_CAP * 5)
+    : staged
+    ? rankedDev.slice(SAMPLE_CAP * 3, SAMPLE_CAP * 4)
+    : escalate
     ? rankedDev.slice(SAMPLE_CAP * 2, SAMPLE_CAP * 3)
     : fresh
     ? rankedDev.slice(SAMPLE_CAP, SAMPLE_CAP * 2)
@@ -363,7 +388,62 @@ async function main(): Promise<void> {
     return text ? text.slice(0, 80) : null;
   }
 
-  async function predict(arm: "v1" | "v3" | "v4full" | "v4cand" | "v5hint", row: TxFeatures): Promise<SavedCall> {
+  async function predictStaged(row: TxFeatures): Promise<SavedCall> {
+    const key = `v6stage:${row.id}`;
+    const cached = savedKey.get(key);
+    if (cached) return cached;
+    const history = labelled.filter((item) => item.id !== row.id && dayOf(item) < dayOf(row));
+    const relation = visibleRelation(
+      row,
+      relations.get(row.id) ?? {
+        accountName: row.accountName,
+        accountType: null,
+        counterpartyKey: row.merchantKey,
+        ownAccount: null,
+        pair: null,
+        nature: row.direction === "debit" ? "purchase" : "other",
+        pairKey: `${row.accountName} -> ${row.merchantKey}`,
+      },
+      byId,
+    );
+    const retrieval = buildRetrieval(history, relations);
+    const base = selectCandidates({ tx: row, relation, retrieval, categories: options });
+    const natureChoice = await model.classify(buildNatureRequest({ tx: row, relation }));
+    const stagedCandidates = candidatesForNature(natureChoice.choice, base, options);
+    const decision = await classifyTransaction({
+      tx: row,
+      categories: options.filter((category) => stagedCandidates.names.includes(category.name)),
+      evidence: { byMerchant: new Map(), exemplarsByCategory: new Map() },
+      corrections: new Map(),
+      policy: { historyMinSupport: 99, historyMinPurity: 1, jevMinConfidence: 0, jevMinProbability: 0, jevMinMargin: 0 },
+      mode: "jev",
+      model,
+      jevRequest: buildContrastiveJevRequest({
+        tx: row,
+        relation,
+        retrieval,
+        categories: options,
+        candidates: stagedCandidates,
+      }),
+    });
+    const call: SavedCall = {
+      id: row.id,
+      arm: "v6stage",
+      predicted: decision.categoryName,
+      confidence: decision.confidence,
+      margin: decision.margin,
+      topProbability: decision.topProbability,
+      inputTokens: natureChoice.usage.inputTokens + decision.inputTokens,
+    };
+    saved.push(call);
+    savedKey.set(key, call);
+    writeFileSync(checkpointPath, JSON.stringify(saved));
+    return call;
+  }
+
+  const householdAccounts = memory ? loadHousehold(root) : [];
+
+  async function predict(arm: "v1" | "v3" | "v4full" | "v4cand" | "v5hint" | "v6single" | "v7plain" | "v7memory", row: TxFeatures): Promise<SavedCall> {
     const key = `${arm}:${row.id}`;
     const cached = savedKey.get(key);
     if (cached) return cached;
@@ -391,12 +471,13 @@ async function main(): Promise<void> {
           relation,
           retrieval,
           categories: options,
-          candidates: arm === "v4full" ? fullSet : candidates,
+          candidates: arm === "v4full" || arm === "v7plain" || arm === "v7memory" ? fullSet : candidates,
           businessHint: arm === "v5hint" ? await businessHint(row) : null,
+          householdAccounts: arm === "v7memory" ? householdAccounts : [],
         });
     const decision = await classifyTransaction({
       tx: row,
-      categories: arm === "v4cand" || arm === "v3"
+      categories: arm === "v4cand" || arm === "v3" || arm === "v5hint" || arm === "v6single"
         ? options.filter((category) => candidates.names.includes(category.name))
         : options,
       evidence: { byMerchant: new Map(), exemplarsByCategory: new Map() },
@@ -428,7 +509,11 @@ async function main(): Promise<void> {
     if (!row) continue;
     const history = labelled.filter((item) => item.id !== row.id && dayOf(item) < dayOf(row));
     const merchantSupport = buildRetrieval(history, relations).merchant.get(row.merchantId || row.merchantKey)?.total ?? 0;
-    const [first, second] = escalate
+    const [first, second] = memory
+      ? await Promise.all([predict("v7plain", row), predict("v7memory", row)] as const)
+      : staged
+      ? [await predict("v6single", row), await predictStaged(row)] as const
+      : escalate
       ? await (async () => {
           const base = await predict("v4cand", row);
           if (merchantSupport >= 2) return [base, { ...base, arm: "v5hint" }] as const;
@@ -483,7 +568,8 @@ async function main(): Promise<void> {
       sample: sample.length,
       natural,
       fresh,
-      arms: escalate ? ["v4cand", "v5hint"] : fresh ? ["v4full", "v4cand"] : ["v1", "v3"],
+      arms: memory ? ["v7plain", "v7memory"] : staged ? ["v6single", "v6stage"] : escalate ? ["v4cand", "v5hint"] : fresh ? ["v4full", "v4cand"] : ["v1", "v3"],
+      householdAccounts: householdAccounts.length,
       note: "April-June development sample only. Post-2026-07-01 and the sacred window were not sent to JEV.",
     },
     v1: {

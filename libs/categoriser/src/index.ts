@@ -3,6 +3,7 @@ export { classifyTransaction, type ClassifyMode } from "./classify.js";
 export { mayAutoApply, observeCategoryChange, shouldSkipRewrite, type ObservationKind, type RecordedWrite } from "./corrections.js";
 export { ExperimentBudget, EXPERIMENT_BUDGET_USD, EXPERIMENT_STOP_USD, JEV_USD_PER_INPUT_TOKEN, notionalUsd } from "./cost.js";
 export { buildEvidence, suspiciousMerchants } from "./evidence.js";
+export { householdState, type AccountRole, type AccountSemantic, type RelationshipSemantic } from "./household.js";
 export { correctionFingerprint, toFeatures, txFeatureHash, type RawTransaction } from "./features.js";
 export { buildCategoryOptions, buildJevRequest, CATEGORY_QUESTION, slugOf } from "./jev/build.js";
 export { createBindingJevModel, createCloudflareJevModel, type AiBinding, type CloudflareJevConfig } from "./jev/cloudflare.js";
@@ -12,7 +13,7 @@ export { amountBucket, categorySlug, directionOf, featureHash, fnv1a, memoTokens
 export { CONSERVATIVE_POLICY, historyAccepts, jevAccepts, probabilityMargin } from "./policy.js";
 export { DEFAULT_CATEGORY_RULES, matchFirstRule, signedAmount, type CategoryRule } from "./rules.js";
 export { isMovement, resolveRelations, type AccountLookup, type ResolvedRelation, type TransactionNature } from "./relations.js";
-export { buildContrastiveJevRequest, buildRetrieval, selectCandidates, type CandidateSet, type RetrievalIndex, type SignatureStat } from "./retrieve.js";
+export { NATURE_FAMILIES, buildContrastiveJevRequest, buildNatureRequest, buildRetrieval, candidatesForNature, selectCandidates, type CandidateSet, type RetrievalIndex, type SignatureStat } from "./retrieve.js";
 export { DEV_END, DEV_START, SACRED_START, merchantHoldout, sampleStratifiedSeeded, temporalSplit } from "./splits.js";
 export type {
   AcceptancePolicy,

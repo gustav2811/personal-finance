@@ -9,7 +9,8 @@ import { buildCategoryOptions, buildJevRequest } from "./jev/build.js";
 import { parseJevChoice } from "./jev/parse.js";
 import { accuracy, bestThreshold, coverageCurve, labelledAccuracy, pairedLift, selective } from "./metrics.js";
 import { resolveRelations } from "./relations.js";
-import { buildContrastiveJevRequest, buildRetrieval, descriptorKey, selectCandidates } from "./retrieve.js";
+import { householdState } from "./household.js";
+import { buildContrastiveJevRequest, buildRetrieval, candidatesForNature, descriptorKey, selectCandidates } from "./retrieve.js";
 import { sampleStratifiedSeeded } from "./splits.js";
 import { merchantKey, normalizeText } from "./normalize.js";
 import { CONSERVATIVE_POLICY } from "./policy.js";
@@ -304,6 +305,15 @@ describe("relations and candidates", () => {
     });
     expect(splitCandidates.names).toContain("Clothing");
     expect(splitCandidates.reasons.Clothing).toBe("descriptor_history");
+    const expanded = candidatesForNature(
+      "purchase",
+      { names: ["Eating Out & Takeaways"], reasons: {} },
+      buildCategoryOptions([
+        { id: "eat", name: "Eating Out & Takeaways" },
+        { id: "work", name: "Work Eats" },
+      ]),
+    );
+    expect(expanded.names).toContain("Work Eats");
     expect(request.state).toMatchObject({ exact_amount: -80, merchant_name: "woolworths" });
   });
 
@@ -323,6 +333,56 @@ describe("relations and candidates", () => {
     ]);
     expect(lift.bOnly).toBe(1);
     expect(lift.aOnly).toBe(1);
+  });
+});
+
+describe("household memory", () => {
+  it("injects owned account meaning instead of inferring it from a transfer flag", () => {
+    const state = householdState({
+      accountId: "cheque",
+      destinationAccountId: "reserve",
+      counterpartyKey: "housekeeping",
+      accounts: [
+        {
+          finwiseAccountId: "reserve",
+          displayName: "Housekeeping Holding",
+          role: "expense_reserve",
+          ownerScope: "household",
+          context: "Monthly transfers into this account are recognised Housekeeping expense.",
+        },
+      ],
+      relationships: [
+        {
+          sourceFinwiseAccountId: "cheque",
+          destinationFinwiseAccountId: "reserve",
+          counterpartyKey: null,
+          context: "Cheque to Housekeeping Holding is Housekeeping, not Transfers.",
+        },
+      ],
+    });
+    const ownedTx = tx({ id: "owned", description: "groceries", amount: -20 });
+    const request = buildContrastiveJevRequest({
+      tx: ownedTx,
+      relation: resolveRelations([ownedTx], [{ id: "acc", name: "Everyday", type: "depository" }]).get("owned")!,
+      retrieval: buildRetrieval([], new Map()),
+      categories,
+      candidates: { names: ["Groceries"], reasons: {} },
+      householdAccounts: [
+        {
+          finwiseAccountId: "acc",
+          displayName: "Everyday",
+          role: "current",
+          ownerScope: "household",
+          context: "Everyday spending account.",
+        },
+      ],
+      householdRelationships: [],
+    });
+    expect(JSON.stringify(request.state)).toContain("Everyday spending account.");
+    expect(state).toMatchObject({
+      destination_account: { role: "expense_reserve" },
+      relationship_context: "Cheque to Housekeeping Holding is Housekeeping, not Transfers.",
+    });
   });
 });
 

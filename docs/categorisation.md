@@ -28,6 +28,12 @@ A second April–June slice, not used to design that prompt, tied: relational st
 
 A third slice was 83.8% for JEV alone. Adding a Llama business-type hint on low-support merchants lowered that to 80.0% (3 losses, 0 wins). Do not adopt the hint.
 
+A fourth slice compared one JEV call with a sequential nature-then-category call. Single-stage was 85.0%. Two-stage was 83.8% (1 loss, 0 wins). Generic two-stage does not help. Do not spend more experiments on candidate lists or question shape.
+
+The deployed worker only retrieves from the current 14-day poll. It does not know what each account is for, and it does not see history outside that window. Account meanings live in Supabase `classifier.account_semantics`, loaded by `classifier_current_account_semantics()`. The gitignored JSON under `reports/` is only the local draft. It is not deployed.
+
+On a fifth April–June slice, full-catalogue JEV without those sentences was 77.5%. The same rows with all 32 sentences were 75.0% (2 losses, 0 wins). The sentences did not raise accuracy. The movement slice went from 66.7% to 60.0%.
+
 Across the three slices JEV-alone accuracy is about 75–84%, not 90%. Of 58 development rows whose true category is missing from the candidate set, 37 are an unseen merchant and 19 are a seen merchant that has never carried that category. A pure account-pair rule (support ≥ 5, purity 1) was 25/25 on Jan–Mar and 10/11 on the third slice, and combining it with JEV did not raise third-slice accuracy. Amount-only pairs disagree with the other side's label 42 of 153 times, so a pair stays evidence, not a shared label. Work Eats versus Eating Out, and Transfers versus Savings or Investments, are the remaining structural misses. Those need accumulated correction events, not another prompt.
 
 ## FinWise

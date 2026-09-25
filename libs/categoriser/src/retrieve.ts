@@ -1,4 +1,5 @@
 import { criterionFor } from "./criteria.js";
+import { householdState, type AccountSemantic, type RelationshipSemantic } from "./household.js";
 import { slugOf } from "./jev/build.js";
 import { matchFirstRule } from "./rules.js";
 import type { ResolvedRelation } from "./relations.js";
@@ -28,6 +29,19 @@ export interface CandidateSet {
 
 const MAX_CANDIDATES = 8;
 const MOVEMENT_FAMILY = ["Transfers", "Mortgage", "Investments", "Savings", "Card Repayments"];
+
+export const NATURE_FAMILIES: Record<string, readonly string[]> = {
+  purchase: [
+    "Groceries", "Clothing", "Coffee", "Eating Out & Takeaways", "Work Eats",
+    "General Purchases", "Home & Garden", "Entertainment", "Personal Care", "Medical",
+    "Transport & Fuel", "Transport Parking", "Transport Other", "Vehicle Expenses",
+    "Vacation & Travel",
+  ],
+  income: ["Salaries & Wages", "Dividends", "Interest", "Rewards", "Refunds"],
+  movement: ["Transfers", "Savings", "Investments", "Mortgage", "Card Repayments", "Loans"],
+  fee: ["Bank Charges & Fees", "Tax", "Insurance"],
+  other: ["Other", "Cash", "Friends & Family", "Gifts", "Donations"],
+};
 
 export function buildRetrieval(
   history: readonly TxFeatures[],
@@ -102,6 +116,55 @@ export function selectCandidates(input: {
   return { names, reasons };
 }
 
+export function buildNatureRequest(input: {
+  tx: TxFeatures;
+  relation: ResolvedRelation;
+}): { state: Record<string, unknown>; questions: Record<string, unknown> } {
+  return {
+    state: {
+      merchant_name: input.tx.merchantKey,
+      description: input.tx.descriptionNorm.slice(0, 80),
+      memo: input.tx.notesNorm.slice(0, 80) || null,
+      direction: input.tx.direction,
+      exact_amount: Number(input.tx.signedAmount.toFixed(2)),
+      account_name: input.relation.accountName,
+      account_type: input.relation.accountType,
+      other_account: input.relation.pair?.otherAccountName ?? input.relation.ownAccount?.name ?? null,
+      transfer: input.tx.isTransfer,
+    },
+    questions: {
+      category: {
+        type: "choice",
+        instructions: "What kind of economic event is this? Ignore the merchant's usual shop category.",
+        criteria: {
+          purchase: "A purchase of goods or services, including food, transport, and shopping.",
+          income: "Salary, interest, dividends, rewards, or a refund coming in.",
+          movement: "Money moving between the user's own accounts, including savings, investments, mortgage, or card repayment.",
+          fee: "A bank fee, tax, or insurance premium.",
+          other: "Does not fit purchase, income, movement, or fee.",
+        },
+      },
+    },
+  };
+}
+
+export function candidatesForNature(
+  nature: string,
+  base: CandidateSet,
+  categories: readonly CategoryOption[],
+): CandidateSet {
+  const known = new Set(categories.map((category) => category.name));
+  const family = NATURE_FAMILIES[nature] ?? NATURE_FAMILIES.other;
+  const names = [...base.names];
+  const reasons = { ...base.reasons };
+  for (const name of family) {
+    if (!known.has(name) || names.includes(name) || names.length >= MAX_CANDIDATES) continue;
+    names.push(name);
+    reasons[name] = "nature_family";
+  }
+  return { names, reasons };
+}
+
 export function buildContrastiveJevRequest(input: {
   tx: TxFeatures;
   relation: ResolvedRelation;
@@ -109,6 +172,8 @@ export function buildContrastiveJevRequest(input: {
   categories: readonly CategoryOption[];
   candidates: CandidateSet;
   businessHint?: string | null;
+  householdAccounts?: readonly AccountSemantic[];
+  householdRelationships?: readonly RelationshipSemantic[];
 }): { state: Record<string, unknown>; questions: Record<string, unknown> } {
   const chosen = input.categories.filter((category) => input.candidates.names.includes(category.name));
   const merchant = input.retrieval.merchant.get(input.tx.merchantId || input.tx.merchantKey);
@@ -133,6 +198,14 @@ export function buildContrastiveJevRequest(input: {
   };
   if (input.tx.notesNorm) state.memo = input.tx.notesNorm.slice(0, 80);
   if (input.businessHint) state.business_hint = input.businessHint.slice(0, 80);
+  const owned = householdState({
+    accountId: input.tx.accountId,
+    counterpartyKey: input.tx.merchantKey,
+    destinationAccountId: input.relation.pair?.otherAccountId ?? input.relation.ownAccount?.id ?? null,
+    accounts: input.householdAccounts ?? [],
+    relationships: input.householdRelationships ?? [],
+  });
+  if (owned) state.household = owned;
   if (input.tx.finwiseCategoryName || input.tx.needsReview) {
     state.finwise = {
       proposed_category: input.tx.finwiseCategoryName,
