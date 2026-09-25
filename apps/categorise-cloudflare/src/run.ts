@@ -1,10 +1,13 @@
 import {
   buildCategoryOptions,
-  buildJevRequest,
+  buildContrastiveJevRequest,
+  buildRetrieval,
   classifyTransaction,
   CONSERVATIVE_POLICY,
   correctionFingerprint,
   createBindingJevModel,
+  resolveRelations,
+  selectCandidates,
   notionalUsd,
   mayAutoApply,
   observeCategoryChange,
@@ -45,40 +48,6 @@ function isoDaysAgo(days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-async function merchantCounts(
-  db: D1Database,
-  merchantKey: string,
-): Promise<{ total: number; counts: Record<string, number>; majority: string | null; majorityCount: number; purity: number; lastDate: string }> {
-  const rows = await db
-    .prepare(
-      "SELECT category_name, support, last_date FROM merchant_stats WHERE merchant_key = ?",
-    )
-    .bind(merchantKey)
-    .all<{ category_name: string; support: number; last_date: string }>();
-  const counts: Record<string, number> = {};
-  let total = 0;
-  let majority: string | null = null;
-  let majorityCount = 0;
-  let lastDate = "";
-  for (const row of rows.results ?? []) {
-    counts[row.category_name] = row.support;
-    total += row.support;
-    if (row.support > majorityCount) {
-      majority = row.category_name;
-      majorityCount = row.support;
-    }
-    if (row.last_date > lastDate) lastDate = row.last_date;
-  }
-  return {
-    total,
-    counts,
-    majority,
-    majorityCount,
-    purity: total === 0 ? 0 : majorityCount / total,
-    lastDate,
-  };
-}
-
 export async function runClassifier(env: ClassifierEnv): Promise<RunSummary> {
   const mode = env.CLASSIFIER_MODE === "auto" || env.CLASSIFIER_MODE === "suggest"
     ? env.CLASSIFIER_MODE
@@ -97,19 +66,17 @@ export async function runClassifier(env: ClassifierEnv): Promise<RunSummary> {
     mode,
   };
 
-  const [categories, txns, merchants] = await Promise.all([
+  const [categories, txns, merchants, accounts] = await Promise.all([
     finwise.listCategories(),
     finwise.listRecent(isoDaysAgo(lookback), 50),
     finwise.listMerchants(),
+    finwise.listAccounts(),
   ]);
   const options = buildCategoryOptions(categories);
-  const byName = new Map(options.map((category) => [category.name, category.id]));
-  const model = createBindingJevModel({ ai: env.AI, gatewayId: env.AI_GATEWAY_ID });
-
-  for (const txn of txns) {
-    if (summary.classified >= max) break;
-    summary.seen += 1;
-    const features = toFeatures({
+  const nameById = new Map(options.map((category) => [category.id, category.name]));
+  const accountNameById = new Map(accounts.map((account) => [account.id, account.name]));
+  const windowFeatures = txns.map((txn) =>
+    toFeatures({
       id: txn.id,
       date: txn.date,
       description: txn.description,
@@ -118,13 +85,28 @@ export async function runClassifier(env: ClassifierEnv): Promise<RunSummary> {
       merchantName: merchantNameOf(txn, merchants),
       notes: txn.notes,
       categoryId: txn.transactionCategoryId,
-      categoryName: options.find((c) => c.id === txn.transactionCategoryId)?.name ?? null,
+      categoryName: txn.transactionCategoryId ? nameById.get(txn.transactionCategoryId) ?? null : null,
       originalCategoryId: txn.originalTransactionCategoryId,
+      finwiseCategoryName: txn.originalTransactionCategoryId
+        ? nameById.get(txn.originalTransactionCategoryId) ?? null
+        : null,
       accountId: txn.accountId,
+      accountName: accountNameById.get(txn.accountId) ?? txn.accountId,
       isTransfer: txn.isTransfer,
       needsReview: txn.needsReview,
       updatedAt: txn.updatedAt,
-    });
+    }),
+  );
+  const featuresById = new Map(windowFeatures.map((row) => [row.id, row]));
+  const relations = resolveRelations(windowFeatures, accounts);
+  const byName = new Map(options.map((category) => [category.name, category.id]));
+  const model = createBindingJevModel({ ai: env.AI, gatewayId: env.AI_GATEWAY_ID });
+
+  for (const txn of txns) {
+    if (summary.classified >= max) break;
+    summary.seen += 1;
+    const features = featuresById.get(txn.id);
+    if (!features) continue;
     const hash = txFeatureHash(features);
     const existing = await env.DB.prepare(
       "SELECT observed_category_id, predicted_category_name, applied FROM audits WHERE transaction_id = ? AND classifier_version = ? AND feature_hash = ?",
@@ -167,18 +149,17 @@ export async function runClassifier(env: ClassifierEnv): Promise<RunSummary> {
       });
       summary.corrections += 1;
     }
-    if (kind === "human_correction" && existing && !categoryChanged) {
-      const name = options.find((c) => c.id === txn.transactionCategoryId)?.name;
-      if (name) {
-        await env.DB.prepare(
-          "INSERT INTO corrections (fingerprint, category_name, transaction_id, detected_at) VALUES (?, ?, ?, ?) ON CONFLICT(fingerprint) DO UPDATE SET category_name = excluded.category_name, transaction_id = excluded.transaction_id, detected_at = excluded.detected_at",
-        )
-          .bind(correctionFingerprint(features), name, txn.id, new Date().toISOString())
-          .run();
-        summary.corrections += 1;
-      }
-      summary.skipped += 1;
-      continue;
+    if (!existing && txn.transactionCategoryId) {
+      await recordCategoryEvent(env, {
+        transactionId: txn.id,
+        categoryId: txn.transactionCategoryId,
+        categoryName: nameById.get(txn.transactionCategoryId) ?? null,
+        previousCategoryId: null,
+        merchantId: txn.merchantId,
+        accountId: txn.accountId,
+        descriptionFingerprint: correctionFingerprint(features),
+        observedAt: txn.updatedAt,
+      });
     }
     if (existing && !categoryChanged) {
       summary.skipped += 1;
@@ -189,35 +170,35 @@ export async function runClassifier(env: ClassifierEnv): Promise<RunSummary> {
       continue;
     }
 
-    const stat = await merchantCounts(env.DB, features.merchantKey);
-    const evidence = {
-      byMerchant: new Map([[features.merchantKey, { merchantKey: features.merchantKey, ...stat }]]),
-      exemplarsByCategory: new Map<string, string[]>(),
+    const history = windowFeatures.filter(
+      (row) => row.id !== features.id && row.categoryName && row.date.slice(0, 10) < features.date.slice(0, 10),
+    );
+    const relation = relations.get(features.id) ?? {
+      accountName: features.accountName,
+      accountType: null,
+      counterpartyKey: features.merchantKey,
+      ownAccount: null,
+      pair: null,
+      nature: features.direction === "debit" ? "purchase" as const : "other" as const,
+      pairKey: `${features.accountName} -> ${features.merchantKey}`,
     };
-    const correctionRows = await env.DB.prepare(
-      "SELECT fingerprint, category_name FROM corrections WHERE fingerprint = ?",
-    )
-      .bind(correctionFingerprint(features))
-      .first<{ fingerprint: string; category_name: string }>();
-    const corrections = new Map<string, string>();
-    if (correctionRows) corrections.set(correctionRows.fingerprint, correctionRows.category_name);
-
-    const jevRequest = buildJevRequest({
-      tx: features,
-      categories: options,
-      variant: "history_hint",
-      evidence,
-      includeAmount: true,
-    });
+    const retrieval = buildRetrieval(history, relations);
+    const candidates = selectCandidates({ tx: features, relation, retrieval, categories: options });
     const decision = await classifyTransaction({
       tx: features,
-      categories: options,
-      evidence,
-      corrections,
+      categories: options.filter((category) => candidates.names.includes(category.name)),
+      evidence: { byMerchant: new Map(), exemplarsByCategory: new Map() },
+      corrections: new Map(),
       policy: CONSERVATIVE_POLICY,
-      mode: "hybrid",
+      mode: "jev",
       model,
-      jevRequest,
+      jevRequest: buildContrastiveJevRequest({
+        tx: features,
+        relation,
+        retrieval,
+        categories: options,
+        candidates,
+      }),
     });
     summary.classified += 1;
     summary.inputTokens += decision.inputTokens;

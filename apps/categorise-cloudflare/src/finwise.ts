@@ -68,6 +68,21 @@ export class FinwiseHttp {
     return names;
   }
 
+  listAccounts(): Promise<{ id: string; name: string; type: string | null }[]> {
+    const query = new URLSearchParams({
+      pagination: JSON.stringify({ pageNumber: 1, pageSize: 100 }),
+    });
+    return this.request<{ id: string; name: string; displayName?: string | null; type?: string | null }[]>(
+      `/accounts?${query.toString()}`,
+    ).then((accounts) =>
+      accounts.map((account) => ({
+        id: account.id,
+        name: account.displayName || account.name,
+        type: account.type ?? null,
+      })),
+    );
+  }
+
   listCategories(): Promise<FinwiseCategory[]> {
     const query = new URLSearchParams({
       pagination: JSON.stringify({ pageNumber: 1, pageSize: 100 }),
