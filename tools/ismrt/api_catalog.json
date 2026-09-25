@@ -1,0 +1,128 @@
+{
+  "service": "ismrt! smrt!Wallet dashboard",
+  "login_url": "https://dashboard.ismrt.net/login",
+  "auth": {
+    "provider": "Keycloak",
+    "issuer": "https://account.rmsconnect.net/auth/realms/rms",
+    "token_url": "https://account.rmsconnect.net/auth/realms/rms/protocol/openid-connect/token",
+    "client_id": "ismrt-dashboard",
+    "grant_type": "password",
+    "graphql_auth_header": "x-access-token"
+  },
+  "graphql": {
+    "production": "https://api-gateway.rmsconnect.net/graphql",
+    "development": "http://dev-api-gateway.rmsconnect.net/graphql"
+  },
+  "daily_kwh_entry_points": [
+    {
+      "operation": "walletUtilityTransactions",
+      "fields": [
+        "date",
+        "consumption",
+        "rate",
+        "charge",
+        "debit",
+        "meterSerial"
+      ],
+      "variables": [
+        "id",
+        "utilityType",
+        "startDate",
+        "endDate"
+      ],
+      "utility_type_example": "Electricity",
+      "notes": "Primary per-utility daily ledger used by the dashboard consumption view."
+    },
+    {
+      "operation": "walletExpenseTransactions",
+      "fields": [
+        "date",
+        "utilityType",
+        "consumption",
+        "rate",
+        "charge",
+        "debit",
+        "meterSerial",
+        "reference"
+      ],
+      "variables": [
+        "id",
+        "startDate",
+        "endDate"
+      ],
+      "notes": "All utilities in one query; filter client-side on utilityType."
+    },
+    {
+      "operation": "meterProfile",
+      "fields": [
+        "serial",
+        "interval",
+        "time-series payload"
+      ],
+      "variables": [
+        "serial",
+        "startDate",
+        "endDate",
+        "interval"
+      ],
+      "notes": "Meter-level profile; dashboard passes interval as minutes: 1440=daily, 60=hourly."
+    }
+  ],
+  "other_operations_found_in_bundle": [
+    "activateWalletPrepaidContact",
+    "addPrepaidContactDeviceToken",
+    "addPrepaidContactWallet",
+    "changePrepaidContactPassword",
+    "checkEmailIsRegisteredAsPrepaidContact",
+    "checkPrepaidContactActivation",
+    "deactivatePrepaidContactWallet",
+    "forcePrepaidContactUpdate",
+    "forgotPrepaidContactPassword",
+    "getPrepaidContactByUserName",
+    "getPrepaidContactWallet",
+    "getPrepaidContactsLinkedToWallet",
+    "getPrepaidDebtor",
+    "getPropertyBankingDetails",
+    "getPropertyContactUsDetails",
+    "getPushNotificationsSent",
+    "getUnregisteredWallets",
+    "linkPrepaidContactToWallet",
+    "matchWallet",
+    "meterProfile",
+    "objectNotificationSubscriptions",
+    "objectNotificationsSentToUser",
+    "registerDeviceToken",
+    "registerWalletDebtorPrepaidContact",
+    "resendPrepaidContactActivationEmail",
+    "resetPrepaidContactPassword",
+    "sendEmailOTP",
+    "sendMobileOTP",
+    "sendWalletRegistrationOTP",
+    "subscribeToEmailNotifications",
+    "subscribeToPushNotifications",
+    "subscribeToSMSNotifications",
+    "unsubscribeToEmailNotifications",
+    "unsubscribeToPushNotifications",
+    "unsubscribeToSMSNotifications",
+    "updatePrepaidContact",
+    "updatePrepaidContactWallet",
+    "updatePrepaidContactWalletDetails",
+    "updateWalletBudget",
+    "updateWalletMinimumBalance",
+    "validateEmailOTP",
+    "validateMobileOTP",
+    "validateWalletOwner",
+    "validateWalletRegistrationOTP",
+    "wallet",
+    "walletBudget",
+    "walletConsolidatedStatement",
+    "walletConsolidatedTransactions",
+    "walletDocument",
+    "walletExpenseTransactions",
+    "walletInvoices",
+    "walletPayments",
+    "walletProofOfPayments",
+    "walletUtilityStatement",
+    "walletUtilityTransactions"
+  ]
+}
