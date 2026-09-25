@@ -8,6 +8,7 @@ export { correctionFingerprint, toFeatures, txFeatureHash, type RawTransaction }
 export { buildCategoryOptions, buildJevRequest, CATEGORY_QUESTION, slugOf } from "./jev/build.js";
 export { createBindingJevModel, createCloudflareJevModel, type AiBinding, type CloudflareJevConfig } from "./jev/cloudflare.js";
 export { parseJevChoice, unwrapJevPayload } from "./jev/parse.js";
+export { applyAdjudication, type AdjudicatedLeg, type LegRole, type LedgerRow, type StrictRow } from "./adjudication.js";
 export { adjudicateDisagreement, ambiguousPair, pastDestination, runMemoryOracle, PURE_MEMORY, RELIABLE_MEMORY, type AdjudicationBucket, type ApprovedRelationship, type MemoryOracleReport, type MemoryOracleRow, type MemorySignature, type SignatureObservation } from "./memoryOracle.js";
 export { accuracy, bestThreshold, classScores, confusionPairs, coverageCurve, labelledAccuracy, macroF1, pairedLift, selective, weightedF1, type PairedLift, type ScoredRow, type ThresholdPoint } from "./metrics.js";
 export { amountBucket, categorySlug, directionOf, featureHash, fnv1a, memoTokens, merchantKey, normalizeText } from "./normalize.js";
