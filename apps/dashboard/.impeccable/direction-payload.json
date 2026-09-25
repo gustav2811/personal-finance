@@ -1,0 +1,300 @@
+{
+  "title": "Choose the visual world",
+  "question": "Pick the visual language for your household observatory. Every option keeps the data real; the difference is how the home becomes legible.",
+  "options": [
+    {
+      "id": "assigned",
+      "label": "House Cutaway",
+      "kicker": "THE ROLL",
+      "lineage": "architectural sections and electrical drafting plates",
+      "thesis": "The home becomes a readable instrument: circuits, devices, and money routes drawn as one cutaway.",
+      "palette": [
+        "#11161a",
+        "#e8e1d2",
+        "#7de2b1",
+        "#f3b562"
+      ],
+      "materials": [
+        "graphite drafting board",
+        "blueprint grid",
+        "precision ink"
+      ],
+      "viewport": "A wide cutaway of the household's energy plane anchors the first viewport; a narrow cost rail reads like a stamped instrument schedule.",
+      "risk": "Reads like an engineering diagram if the human household story is not named beside the measurements.",
+      "raised": [
+        {
+          "from": "precisionist-industrial-plate",
+          "raise": "Every chart now uses hard-edged planes and a disciplined depth order so signal never dissolves into decoration."
+        },
+        {
+          "from": "night-instrument-six-pack",
+          "raise": "The opening read follows a practiced cross-check: household total, device share, rate, then financial consequence."
+        },
+        {
+          "from": "one-bit-desktop",
+          "raise": "Source state and data freshness stay explicit in the interface instead of hiding behind polished summaries."
+        }
+      ],
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          {
+            "label": "household cutaway",
+            "x": 0,
+            "y": 0,
+            "w": 8,
+            "h": 7,
+            "accent": true
+          },
+          {
+            "label": "cost schedule",
+            "x": 8,
+            "y": 0,
+            "w": 4,
+            "h": 7
+          },
+          {
+            "label": "source timeline",
+            "x": 0,
+            "y": 7,
+            "w": 12,
+            "h": 3
+          }
+        ]
+      }
+    },
+    {
+      "id": "model-pick",
+      "label": "Household Observatory",
+      "kicker": "IMPECCABLE’S PICK",
+      "lineage": "astronomical almanacs and star-chart desks",
+      "thesis": "Every source is a body in one private sky, with long-range patterns made visible instead of flattened.",
+      "palette": [
+        "#0e1720",
+        "#d8e4e8",
+        "#a6e3a1",
+        "#f0c674"
+      ],
+      "materials": [
+        "star chart",
+        "vellum annotations",
+        "instrument ticks"
+      ],
+      "viewport": "A constellation-like yearly energy trace sits beside bright current facts; device and wallet signals orbit the same date spine.",
+      "risk": "The metaphor is familiar in data products; it must stay grounded in real household labels and precise units.",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          {
+            "label": "annual constellation",
+            "x": 0,
+            "y": 0,
+            "w": 8,
+            "h": 7,
+            "accent": true
+          },
+          {
+            "label": "now panel",
+            "x": 8,
+            "y": 0,
+            "w": 4,
+            "h": 7
+          },
+          {
+            "label": "orbital source strip",
+            "x": 0,
+            "y": 7,
+            "w": 12,
+            "h": 3
+          }
+        ]
+      }
+    },
+    {
+      "id": "challenger-sneaker-archive",
+      "label": "Source Archive Wall",
+      "verdict": "declined",
+      "lineage": "sneaker archive walls and stacked cardboard boxes",
+      "thesis": "Each source becomes a physical archive box that can be pulled forward for detail.",
+      "palette": [
+        "#c35a35",
+        "#f2eadf",
+        "#20262c"
+      ],
+      "materials": [
+        "box board",
+        "tissue paper",
+        "silhouette ink"
+      ],
+      "viewport": "A wall of source boxes indexes ISMRT, Bneta, and financial streams before a selected box opens into its trend detail.",
+      "risk": "The fashion-archive carrier makes the household story less identifiable.",
+      "case": "Fuses cleanly as a provenance-first archive, but loses on audience identification and clarity: household data should feel lived-in, not merchandised.",
+      "kept": "Source labels become physical-looking index tabs with exact units and dates."
+    },
+    {
+      "id": "challenger-gravity-garden",
+      "label": "Gravity Garden",
+      "verdict": "declined",
+      "lineage": "impossible-world gardens and vector fields",
+      "thesis": "Usage flows toward the things that pull on the household: devices, weather, and bills.",
+      "palette": [
+        "#182b2a",
+        "#83c5be",
+        "#f2877b",
+        "#e8d59e"
+      ],
+      "materials": [
+        "vector field",
+        "floating droplets",
+        "dark garden ground"
+      ],
+      "viewport": "A living flow field bends daily usage toward the device or charge responsible, with anomalies changing the trajectory.",
+      "risk": "Motion becomes the story and exact readings become secondary.",
+      "case": "Strong at showing relationships, weak at read-only trust: the visitor should inspect measured facts before exploring a metaphor.",
+      "kept": "Directional flow is donated to comparison charts: cost lines can visibly pull away from usage lines when tariffs change."
+    },
+    {
+      "id": "challenger-telop",
+      "label": "Signal Captions",
+      "verdict": "declined",
+      "lineage": "broadcast telop fields and live comic captions",
+      "thesis": "The dashboard speaks in timed annotations, making unusual household moments impossible to miss.",
+      "palette": [
+        "#f4d35e",
+        "#ee6352",
+        "#1f3a5f",
+        "#f7f7f2"
+      ],
+      "materials": [
+        "outlined captions",
+        "hard drop shadows",
+        "broadcast color blocks"
+      ],
+      "viewport": "Outlier days enter as large caption cards over the trend field: automation left on, guests arrived, or the geyser went cold.",
+      "risk": "Entertainment energy can make financial and utility facts feel unserious.",
+      "case": "Good for annotations but loses both audience identification and product clarity as the primary world.",
+      "kept": "Human context events get a restrained caption treatment rather than disappearing into a tooltip."
+    },
+    {
+      "id": "challenger-precisionist",
+      "label": "Industrial Plate",
+      "verdict": "competitive",
+      "lineage": "precisionist industrial paintings and hard-edged plant diagrams",
+      "thesis": "A few decisive planes turn a messy household into a calm, inspectable machine.",
+      "palette": [
+        "#f0eee7",
+        "#33404a",
+        "#b35a3c",
+        "#1b242b"
+      ],
+      "materials": [
+        "flat painted planes",
+        "hard raking shadow",
+        "stencilled numerals"
+      ],
+      "viewport": "Large geometric planes carry the household total, device share, and monthly charge; each selected plane opens its underlying series.",
+      "risk": "It can look like an industrial operations room instead of a couple's home.",
+      "case": "Competitive: strong clarity and visual discipline, but its audience identity is colder than the household brief.",
+      "kept": "Hard-edged geometric chart regions and a single-plane focus state raise the assigned direction."
+    },
+    {
+      "id": "challenger-instruments",
+      "label": "Night Instrument Six-Pack",
+      "verdict": "competitive",
+      "lineage": "small-aircraft cockpit gauges and night flight panels",
+      "thesis": "Six calm instruments hold trust through noise; the eye sweeps them in a practiced order.",
+      "palette": [
+        "#0b0d0e",
+        "#d8e2dc",
+        "#84d78f",
+        "#e4a653"
+      ],
+      "materials": [
+        "matte instrument panel",
+        "luminous tick marks",
+        "damped needles"
+      ],
+      "viewport": "Household kWh, espresso share, current rate, monthly cost, water invoice, and data freshness form a single cross-check row.",
+      "risk": "A cockpit metaphor can overstate the operational seriousness of domestic data.",
+      "case": "Competitive: best immediate scan order, but less expressive for source provenance and future financial surfaces.",
+      "kept": "Calibrated ticks, quiet warning states, and cross-check reading order become the dashboard's control grammar."
+    },
+    {
+      "id": "challenger-one-bit",
+      "label": "One-Bit Desktop",
+      "verdict": "declined",
+      "lineage": "early one-bit desktops and dithered utility software",
+      "thesis": "Owned data deserves visible mechanics: windows, selections, raw records, and no opaque surface.",
+      "palette": [
+        "#ffffff",
+        "#111111"
+      ],
+      "materials": [
+        "ordered dither",
+        "one-pixel chrome",
+        "marching-ants selection"
+      ],
+      "viewport": "A source desktop opens windows for energy, money, and raw events, with a selected row always traceable to its origin.",
+      "risk": "The novelty of the rendering language competes with the data.",
+      "case": "Fuses well with ownership and auditability, but loses on first-glance clarity and household warmth.",
+      "kept": "Explicit source state, selected-row lineage, and no hidden data transformations."
+    }
+  ],
+  "reroll": {
+    "registers": [
+      "safer",
+      "bolder"
+    ]
+  },
+  "buildPath": {
+    "value": "code",
+    "toggle": true
+  },
+  "canon": true,
+  "canonCard": {
+    "label": "The category standard",
+    "thesis": "A conventional SaaS dashboard: sidebar, KPI cards, line charts, and a neutral data table.",
+    "palette": [
+      "#ffffff",
+      "#111827",
+      "#2563eb"
+    ],
+    "materials": [
+      "clean grid",
+      "standard cards",
+      "default chart chrome"
+    ],
+    "viewport": "A familiar overview page makes the latest KPIs and a single trend chart immediately scannable.",
+    "risk": "It would be legible but forgettable, and would not make the household's connected story feel owned.",
+    "wireframe": {
+      "cols": 12,
+      "rows": 10,
+      "regions": [
+        {
+          "label": "sidebar",
+          "x": 0,
+          "y": 0,
+          "w": 2,
+          "h": 10
+        },
+        {
+          "label": "kpis",
+          "x": 2,
+          "y": 0,
+          "w": 10,
+          "h": 3
+        },
+        {
+          "label": "charts",
+          "x": 2,
+          "y": 3,
+          "w": 10,
+          "h": 7
+        }
+      ]
+    }
+  },
+  "steer": true
+}

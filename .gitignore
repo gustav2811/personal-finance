@@ -51,6 +51,9 @@ data/
 /reports/
 /tools/categorise-eval/out/
 /tools/ismrt/evidence/
+__pycache__/
+*.pyc
+*.tsbuildinfo
 
 # Dashboard build and review artifacts
 /apps/dashboard/.next/

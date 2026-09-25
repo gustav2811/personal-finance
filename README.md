@@ -10,6 +10,12 @@ Yarn monorepo for **bank statement email ingest** (SendGrid webhooks → parse a
 | [`libs/ingest-core`](libs/ingest-core) | `@investments/ingest-core` | Shared logic: mailparser, XLSX parsing, Finwise upload, Supabase DLQ / idempotency. |
 | [`libs/finwise`](libs/finwise) | `@investments/finwise` | Small Finwise API client used by ingest code. |
 | [`apps/src/functions`](apps/src/functions) | *(scripts, not a workspace)* | Node scripts invoked by GitHub Actions (e.g. daily 22seven → Supabase sync). |
+| [`tools/ismrt`](tools/ismrt) | *(Python tools)* | ISMRT wallet API client, probes, exports, and API notes. |
+| [`tools/electricity`](tools/electricity) | *(Python tools)* | Household electricity analysis and dark HTML report builder. |
+| [`apps/dashboard`](apps/dashboard) | `@investments/dashboard` | Common Orbit — private, read-only household usage dashboard. |
+| [`supabase/migrations`](supabase/migrations) | *(SQL migrations)* | Finance-data schema migrations, including household consumption. |
+| [`data/consumption`](data/consumption) | *(ignored private data)* | Raw household inputs and generated ISMRT/electricity extracts. |
+| [`reports/electricity`](reports/electricity) | *(ignored private reports)* | Generated HTML/PDF electricity reports. |
 
 The repo root is an [Nx](https://nx.dev) workspace scaffold (`nx.json`, `nx` in devDependencies); **routine work uses Yarn workspaces**, not Nx targets.
 
@@ -54,9 +60,44 @@ yarn tsx apps/src/functions/syncBalances.ts
 yarn tsx apps/src/functions/syncTransactions.ts
 ```
 
+**Household consumption tools**
+
+Add `ISMRT_USERNAME` and `ISMRT_PASSWORD` to the local, ignored `.env`, then load
+it into the shell without printing it:
+
+```bash
+set -a; source .env; set +a
+python3 tools/ismrt/probe_ismrt_api.py --days 120
+python3 tools/ismrt/export_ismrt_daily.py --days 120
+python3 tools/ismrt/load_to_supabase.py
+python3 tools/electricity/load_espresso_to_supabase.py
+python3 tools/electricity/build_report.py
+```
+
+**Household dashboard**
+
+```bash
+yarn workspace @investments/dashboard dev
+```
+
+The dashboard uses the Supabase publishable key in the browser and relies on
+RLS for the household allowlist. It never uses `SUPABASE_SERVICE_KEY`. Setup
+details live in [`apps/dashboard/README.md`](apps/dashboard/README.md).
+
+The ISMRT probe writes private extracts under
+`data/consumption/ismrt/`. The electricity report reads the raw household CSV
+from `data/consumption/electricity/raw/` and writes HTML under
+`reports/electricity/`.
+
+The ISMRT loader writes the extracts into the private `consumption` schema in
+the `finance-data` Supabase project through a service-role-only RPC. Bneta plug
+data currently uses the same RPC through a manual CSV backfill loader; automated
+Bneta retrieval is not wired yet.
+
 ## Documentation
 
 - [docs/ingest-cloudflare.md](docs/ingest-cloudflare.md) — Cloudflare Workers, R2, Queues, Wrangler, local dev, deploy.
+- [docs/consumption-model.md](docs/consumption-model.md) — normalized household consumption model and ingestion notes.
 
 ## CI and deployment
 
