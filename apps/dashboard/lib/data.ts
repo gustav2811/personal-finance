@@ -1,4 +1,7 @@
-import { getConsumptionClient, getPublicClient } from "./supabase-browser";
+import {
+  getPublicClient,
+  type BrowserClient,
+} from "./supabase-browser";
 
 export type ConsumptionDevice = {
   id: string;
@@ -74,12 +77,15 @@ export type FinancialSnapshot = {
   currency_code: string;
 };
 
+export type DashboardScope = "overview" | "energy" | "money" | "sources";
+
 export type DashboardData = {
   devices: ConsumptionDevice[];
   readings: ConsumptionReading[];
   ledgerEntries: ConsumptionLedgerEntry[];
   ingestionRuns: IngestionRun[];
   financialTransactions: FinancialTransaction[];
+  financialTransactionCount: number;
   financialSnapshots: FinancialSnapshot[];
   financialError: string | null;
   fetchedAt: string;
@@ -98,94 +104,129 @@ function assertSuccessful(
   }
 }
 
-export async function fetchDashboardData(): Promise<DashboardData> {
-  const consumption = getConsumptionClient();
-  const publicClient = getPublicClient();
-  const fromDate = new Date(
-    Date.now() - 366 * 24 * 60 * 60 * 1000,
-  ).toISOString();
+const DEVICE_COLUMNS =
+  "id,source,external_id,kind,name,utility_type,location,timezone,active_from,active_to,metadata";
+const READING_COLUMNS =
+  "id,device_id,source,source_record_id,period_start,period_end,metric,measurement_target,value,unit,quality,metadata";
+const LEDGER_COLUMNS =
+  "id,source,source_record_id,device_id,utility_type,entry_type,direction,amount,currency,quantity,quantity_unit,rate,occurred_at,posted_at,description,reference,metadata";
+const RUN_COLUMNS =
+  "id,source,runner,status,started_at,finished_at,rows_fetched,rows_written";
 
-  const [
-    devicesResponse,
-    readingsResponse,
-    ledgerResponse,
-    runsResponse,
-    financialResponse,
-  ] = await Promise.all([
-    consumption
-      .from("devices")
-      .select(
-        "id,source,external_id,kind,name,utility_type,location,timezone,active_from,active_to,metadata",
-      )
-      .order("name"),
-    consumption
-      .from("readings")
-      .select(
-        "id,device_id,source,source_record_id,period_start,period_end,metric,measurement_target,value,unit,quality,metadata",
-      )
-      .gte("period_start", fromDate)
-      .order("period_start"),
-    consumption
-      .from("ledger_entries")
-      .select(
-        "id,source,source_record_id,device_id,utility_type,entry_type,direction,amount,currency,quantity,quantity_unit,rate,occurred_at,posted_at,description,reference,metadata",
-      )
-      .gte("occurred_at", fromDate)
-      .order("occurred_at"),
-    consumption
-      .from("ingestion_runs")
-      .select(
-        "id,source,runner,status,started_at,finished_at,rows_fetched,rows_written",
-      )
-      .order("started_at", { ascending: false })
-      .limit(100),
-    Promise.all([
-      publicClient
-        .from("transactions")
-        .select("id,account_id,date,details")
-        .gte("date", fromDate)
-        .order("date", { ascending: false })
-        .limit(5000),
-      publicClient
-        .from("snapshots")
-        .select("account_id,date,amount_cents,currency_code")
-        .gte("date", fromDate)
-        .order("date", { ascending: false })
-        .limit(5000),
-    ]),
-  ]);
-
-  assertSuccessful(devicesResponse.error, "device");
-  assertSuccessful(readingsResponse.error, "reading");
-  assertSuccessful(ledgerResponse.error, "ledger");
-  assertSuccessful(runsResponse.error, "ingestion");
-
-  const [transactionsResponse, snapshotsResponse] = financialResponse;
-  const financialError =
-    transactionsResponse.error || snapshotsResponse.error
-      ? "Financial transaction data is not available to the authenticated role yet."
-      : null;
-
+function emptyDashboard(): DashboardData {
   return {
-    devices: asRows<ConsumptionDevice>(devicesResponse.data),
-    readings: asRows<ConsumptionReading>(readingsResponse.data),
-    ledgerEntries: asRows<ConsumptionLedgerEntry>(ledgerResponse.data),
-    ingestionRuns: asRows<IngestionRun>(runsResponse.data),
-    financialTransactions: asRows<FinancialTransaction>(
-      transactionsResponse.data,
-    ),
-    financialSnapshots: asRows<FinancialSnapshot>(snapshotsResponse.data),
-    financialError,
+    devices: [],
+    readings: [],
+    ledgerEntries: [],
+    ingestionRuns: [],
+    financialTransactions: [],
+    financialTransactionCount: 0,
+    financialSnapshots: [],
+    financialError: null,
     fetchedAt: new Date().toISOString(),
   };
 }
 
-export async function fetchDashboardDataFromLocalBridge(): Promise<DashboardData> {
-  const response = await fetch("/api/dashboard", {
+export async function loadDashboardData(
+  client: BrowserClient,
+  scope: DashboardScope,
+): Promise<DashboardData> {
+  const consumption = client.schema("consumption");
+  const publicClient = client;
+  const fromDate = new Date(Date.now() - 366 * 24 * 60 * 60 * 1000).toISOString();
+  const needsReadings = scope === "overview" || scope === "energy" || scope === "sources";
+  const needsLedger = scope === "overview" || scope === "money";
+  const needsRuns = scope === "sources";
+  const needsFinance = scope === "money" || scope === "overview";
+
+  const [devicesResponse, readingsResponse, ledgerResponse, runsResponse, finance] =
+    await Promise.all([
+      consumption.from("devices").select(DEVICE_COLUMNS).order("name"),
+      needsReadings
+        ? consumption
+            .from("readings")
+            .select(READING_COLUMNS)
+            .gte("period_start", fromDate)
+            .order("period_start")
+        : Promise.resolve(null),
+      needsLedger
+        ? consumption
+            .from("ledger_entries")
+            .select(LEDGER_COLUMNS)
+            .gte("occurred_at", fromDate)
+            .order("occurred_at")
+        : Promise.resolve(null),
+      needsRuns
+        ? consumption
+            .from("ingestion_runs")
+            .select(RUN_COLUMNS)
+            .order("started_at", { ascending: false })
+            .limit(100)
+        : Promise.resolve(null),
+      needsFinance
+        ? Promise.all([
+            scope === "money"
+              ? publicClient
+                  .from("transactions")
+                  .select("id", { count: "exact", head: true })
+                  .gte("date", fromDate)
+              : Promise.resolve(null),
+            publicClient
+              .from("snapshots")
+              .select("account_id,date,amount_cents,currency_code")
+              .gte("date", fromDate)
+              .order("date", { ascending: false })
+              .limit(1),
+          ])
+        : Promise.resolve(null),
+    ]);
+
+  assertSuccessful(devicesResponse.error, "device");
+  if (readingsResponse) assertSuccessful(readingsResponse.error, "reading");
+  if (ledgerResponse) assertSuccessful(ledgerResponse.error, "ledger");
+  if (runsResponse) assertSuccessful(runsResponse.error, "ingestion");
+
+  const result = emptyDashboard();
+  result.devices = asRows<ConsumptionDevice>(devicesResponse.data);
+  result.readings = asRows<ConsumptionReading>(readingsResponse?.data);
+  result.ledgerEntries = asRows<ConsumptionLedgerEntry>(ledgerResponse?.data);
+  result.ingestionRuns = asRows<IngestionRun>(runsResponse?.data);
+
+  if (finance) {
+    const [transactionsResponse, snapshotsResponse] = finance;
+    const financeFailed = Boolean(
+      (transactionsResponse && transactionsResponse.error) || snapshotsResponse.error,
+    );
+    result.financialError = financeFailed
+      ? "Financial transaction data is not available to the authenticated role yet."
+      : null;
+    result.financialTransactionCount = transactionsResponse?.count ?? 0;
+    result.financialSnapshots = asRows<FinancialSnapshot>(snapshotsResponse.data);
+  }
+
+  return result;
+}
+
+export async function fetchDashboardData(
+  scope: DashboardScope,
+): Promise<DashboardData> {
+  return loadDashboardData(getPublicClient(), scope);
+}
+
+export async function fetchDashboardDataFromLocalBridge(
+  scope: DashboardScope,
+): Promise<DashboardData> {
+  const response = await fetch(`/api/dashboard?scope=${scope}`, {
     cache: "no-store",
   });
   if (!response.ok) {
     throw new Error("Local dashboard data bridge is unavailable.");
   }
-  return (await response.json()) as DashboardData;
+  const body = (await response.json()) as Partial<DashboardData>;
+  return {
+    ...emptyDashboard(),
+    ...body,
+    financialTransactionCount:
+      body.financialTransactionCount ?? body.financialTransactions?.length ?? 0,
+  };
 }
