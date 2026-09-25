@@ -10,6 +10,7 @@ export const ADVANCED_REVIEWS: Array<{
   label: string
 }> = [
   { value: "jev_disagrees", label: "Differs" },
+  { value: "jev_proposed", label: "Proposal" },
   { value: "unclassified", label: "Uncategorised" },
   { value: "classifier_abstained", label: "Abstained" },
   { value: "classifier_failed", label: "Failed" },
@@ -119,7 +120,11 @@ export function decisionNote(item: TransactionFeedItem): DecisionNote {
     return { accept: false, text: null, tone: "quiet" }
   }
   if (item.category.state === "proposed" && item.category.id) {
-    return { accept: true, text: "JEV proposal", tone: "proposal" }
+    return {
+      accept: true,
+      text: item.reviewState === "jev_disagrees" ? "Differs from FinWise" : "JEV proposal",
+      tone: "proposal",
+    }
   }
   if (item.reviewState === "classifier_failed" || item.classifier.state === "failed") {
     return { accept: false, text: "Classifier failed", tone: "failed" }

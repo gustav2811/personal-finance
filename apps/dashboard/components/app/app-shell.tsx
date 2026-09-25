@@ -8,14 +8,9 @@ import { ThemeToggle } from "@/components/app/theme-toggle"
 import { Separator } from "@/components/ui/separator"
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { Skeleton } from "@/components/ui/skeleton"
-import {
-  fetchDashboardData,
-  fetchDashboardDataFromLocalBridge,
-  type DashboardData,
-} from "@/lib/data"
+import { callerIsHouseholdMember } from "@/lib/membership"
 import { getPublicClient } from "@/lib/supabase-browser"
 
-const ALLOWED_EMAILS = new Set(["gustav@klingbiel.org", "cara@klingbiel.org"])
 const IS_LOCAL_PREVIEW = process.env.NODE_ENV !== "production"
 
 type AuthState = "loading" | "signed_out" | "denied" | "ready" | "error"
@@ -24,8 +19,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [authState, setAuthState] = useState<AuthState>("loading")
   const [authError, setAuthError] = useState<string | null>(null)
   const [userEmail, setUserEmail] = useState("")
-  const [data, setData] = useState<DashboardData | null>(null)
-  const [dataError, setDataError] = useState<string | null>(null)
   const [signingIn, setSigningIn] = useState(false)
 
   useEffect(() => {
@@ -37,16 +30,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         if (mounted) {
           setUserEmail("local preview")
           setAuthState("ready")
-        }
-        try {
-          const dashboardData = await fetchDashboardDataFromLocalBridge()
-          if (mounted) setData(dashboardData)
-        } catch {
-          if (mounted) {
-            setDataError(
-              "Local data bridge is unavailable. Start the dashboard with the repository .env loaded.",
-            )
-          }
         }
         return
       }
@@ -67,41 +50,26 @@ export function AppShell({ children }: { children: ReactNode }) {
           error,
         } = await supabase.auth.getUser()
         if (error || !user?.email) {
-          throw new Error("Your Google session could not be verified.")
+          throw new Error("Your session could not be verified.")
         }
 
-        const email = user.email.toLowerCase()
-        const isGoogleIdentity =
-          user.identities?.some((identity) => identity.provider === "google") ?? false
-        if (!ALLOWED_EMAILS.has(email) || !isGoogleIdentity) {
-          await supabase.auth.signOut()
+        const member = await callerIsHouseholdMember()
+        if (!member) {
           if (mounted) {
             setAuthState("denied")
-            setUserEmail("")
+            setUserEmail(user.email)
           }
           return
         }
 
         if (mounted) {
-          setUserEmail(email)
+          setUserEmail(user.email)
           setAuthState("ready")
-        }
-
-        try {
-          const dashboardData = await fetchDashboardData()
-          if (mounted) setData(dashboardData)
-        } catch {
-          if (mounted) {
-            setDataError(
-              "Household data could not be read. Check the Supabase schema exposure and read policies.",
-            )
-          }
         }
 
         const subscription = supabase.auth.onAuthStateChange((event) => {
           if (event === "SIGNED_OUT" && mounted) {
             setAuthState("signed_out")
-            setData(null)
           }
         })
         unsubscribe = () => subscription.data.subscription.unsubscribe()
@@ -144,7 +112,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   async function signOut() {
     await getPublicClient().auth.signOut()
     setAuthState("signed_out")
-    setData(null)
   }
 
   if (authState === "loading") {
@@ -174,8 +141,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <HouseholdProvider
       value={{
-        data,
-        dataError,
         email: userEmail,
         isLocalPreview: IS_LOCAL_PREVIEW,
         signIn: () => void signIn(),

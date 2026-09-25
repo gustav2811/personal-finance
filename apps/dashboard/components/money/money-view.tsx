@@ -97,8 +97,8 @@ function MoneyBody({ data, days }: { data: DashboardData; days: RangeDays }) {
       </Section>
       <Section
         description={
-          data.financialTransactions.length > 0
-            ? `${data.financialTransactions.length} imported transaction records are available to connect to this view.`
+          data.financialTransactionCount > 0
+            ? `${data.financialTransactionCount} imported transaction records are available to connect to this view.`
             : "No transactional records are visible to this role yet."
         }
         title="Transactional finance"
@@ -129,7 +129,7 @@ export function MoneyView() {
         description="Wallet movement, utility charges, and the financial record behind the usage."
         title="Money"
       />
-      <DataGate>{(data) => <MoneyBody data={data} days={days} />}</DataGate>
+      <DataGate scope="money">{(data) => <MoneyBody data={data} days={days} />}</DataGate>
     </div>
   )
 }

@@ -202,7 +202,7 @@ export function OverviewView() {
         description="Energy, money, and the signals that explain how the household moved."
         title="Overview"
       />
-      <DataGate>{(data) => <OverviewBody data={data} days={days} />}</DataGate>
+      <DataGate scope="overview">{(data) => <OverviewBody data={data} days={days} />}</DataGate>
     </div>
   )
 }

@@ -60,7 +60,7 @@ Default controls are the registry sizes (`h-8` default, `h-7` sm). Transaction r
 
 ## Shell
 
-`AppShell` owns auth, the sidebar, and household data. Pages own their header and filters. The sidebar does not host range controls.
+`AppShell` owns auth, the sidebar, and theme. It does not load page data. Overview, Energy, Money, and Sources fetch their own scope when mounted. Transactions never reads the consumption dashboard dataset. Pages own their header and filters. The sidebar does not host range controls. Membership is `finance.household_members`, checked for presentation through `finance_caller_membership_v1`. Row-level policies and review RPCs remain the authorization boundary.
 
 ```text
 Household

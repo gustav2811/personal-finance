@@ -94,7 +94,7 @@ export function EnergyView() {
         description="Whole-home demand alongside the devices that make the pattern personal."
         title="Energy"
       />
-      <DataGate>{(data) => <EnergyBody data={data} days={days} />}</DataGate>
+      <DataGate scope="energy">{(data) => <EnergyBody data={data} days={days} />}</DataGate>
     </div>
   )
 }

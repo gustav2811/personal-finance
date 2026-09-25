@@ -46,9 +46,7 @@ export function AuthScreen({
               {error}
             </p>
           ) : (
-            <p className="type-caption">
-              Access is limited to gustav@klingbiel.org and cara@klingbiel.org.
-            </p>
+            <p className="type-caption">Access is limited to household members.</p>
           )}
         </CardContent>
       </Card>

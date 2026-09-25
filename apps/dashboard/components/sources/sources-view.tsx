@@ -70,7 +70,7 @@ export function SourcesView() {
         description="Meters, plugs, and ingestion runs that feed the household record."
         title="Sources"
       />
-      <DataGate>{(data) => <SourcesBody data={data} />}</DataGate>
+      <DataGate scope="sources">{(data) => <SourcesBody data={data} />}</DataGate>
     </div>
   )
 }

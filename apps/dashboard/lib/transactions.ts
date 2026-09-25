@@ -26,6 +26,7 @@ export type ReviewState =
   | "confirmed"
   | "jev_agrees"
   | "jev_disagrees"
+  | "jev_proposed"
   | "unclassified"
   | "awaiting_classifier"
   | "classifier_abstained"

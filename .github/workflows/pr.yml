@@ -25,6 +25,29 @@ jobs:
       - name: Test (ingest-core)
         run: yarn workspace @investments/ingest-core test
 
+  dashboard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: yarn
+          cache-dependency-path: apps/dashboard/yarn.lock
+
+      - name: Install dashboard dependencies
+        working-directory: apps/dashboard
+        run: yarn install --frozen-lockfile
+
+      - name: Typecheck dashboard
+        working-directory: apps/dashboard
+        run: yarn types
+
+      - name: Build dashboard
+        working-directory: apps/dashboard
+        run: yarn build
+
   ingest-cloudflare-types:
     runs-on: ubuntu-latest
     steps:

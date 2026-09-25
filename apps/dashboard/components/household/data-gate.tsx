@@ -1,18 +1,49 @@
 "use client"
 
-import type { ReactNode } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { useHousehold } from "@/components/app/household-context"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
-import type { DashboardData } from "@/lib/data"
+import {
+  fetchDashboardData,
+  fetchDashboardDataFromLocalBridge,
+  type DashboardData,
+  type DashboardScope,
+} from "@/lib/data"
 
 export function DataGate({
   children,
+  scope,
 }: {
   children: (data: DashboardData) => ReactNode
+  scope: DashboardScope
 }) {
-  const { data, dataError } = useHousehold()
+  const { isLocalPreview } = useHousehold()
+  const [data, setData] = useState<DashboardData | null>(null)
+  const [dataError, setDataError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setData(null)
+    setDataError(null)
+    const load = isLocalPreview
+      ? fetchDashboardDataFromLocalBridge(scope)
+      : fetchDashboardData(scope)
+    void load
+      .then((next) => {
+        if (!cancelled) setData(next)
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDataError(
+            "Household data could not be read. Check the Supabase schema exposure and read policies.",
+          )
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [isLocalPreview, scope])
 
   if (dataError) {
     return (
@@ -30,23 +61,6 @@ export function DataGate({
         <Skeleton className="h-64 w-full" />
         <span className="sr-only">Loading household data</span>
       </div>
-    )
-  }
-
-  if (
-    data.devices.length === 0 &&
-    data.readings.length === 0 &&
-    data.ledgerEntries.length === 0
-  ) {
-    return (
-      <Empty className="border">
-        <EmptyHeader>
-          <EmptyTitle>Nothing connected yet</EmptyTitle>
-          <EmptyDescription>
-            Readings and ledger rows will appear here once a source has written them.
-          </EmptyDescription>
-        </EmptyHeader>
-      </Empty>
     )
   }
 

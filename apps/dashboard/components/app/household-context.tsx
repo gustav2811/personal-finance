@@ -1,11 +1,8 @@
 "use client"
 
 import { createContext, useContext, type ReactNode } from "react"
-import type { DashboardData } from "@/lib/data"
 
 type HouseholdContextValue = {
-  data: DashboardData | null
-  dataError: string | null
   email: string
   isLocalPreview: boolean
   signIn: () => void
