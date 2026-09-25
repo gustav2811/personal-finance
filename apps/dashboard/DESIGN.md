@@ -37,6 +37,20 @@ state-confirmed / state-proposed / state-source / state-pending / state-failed
 
 A component knows `state-proposed`. It does not know a hex. Both `:root` and `.dark` define the same names. Theme toggle is system / light / dark via `next-themes`.
 
+Base surfaces stay the shadcn neutral tokens. Do not retint `background`, `primary`, `muted`, or `sidebar`.
+
+Accent and chart colour comes from one palette, Electric Neon Dreams. Use the scale, not a one-off hex:
+
+```text
+shocking-pink   chart-1
+violet-ray      chart-2
+blue            chart-3
+deep-sky-blue   chart-4
+cyan            chart-5
+```
+
+Steps are `50` through `950`. `500` is the swatch. Charts already point at those `500`s.
+
 ## Type
 
 Use the utilities, not one-off sizes:
