@@ -19,7 +19,7 @@ import {
   type AiBinding,
 } from "@investments/categoriser";
 import { FinwiseHttp, merchantNameOf, signedAmount, tagIdsOf, type FinwiseTxn } from "./finwise.js";
-import { HOUSEHOLD_ID, ownedCategoryIdForName, proposedTreatment } from "./ledger.js";
+import { HOUSEHOLD_ID, isClassificationCandidate, ownedCategoryIdForName, proposedTreatment } from "./ledger.js";
 import { FinanceRpc } from "./supabase.js";
 import { syncOverlapWindow } from "./sync.js";
 
@@ -78,7 +78,7 @@ export async function runClassifier(env: ClassifierEnv): Promise<RunSummary> {
 
   const [categories, txns, merchants, accounts, plannedRows] = await Promise.all([
     finwise.listCategories(),
-    finwise.listRecent(isoDaysAgo(lookback), 100, 8),
+    finwise.listRecent(isoDaysAgo(lookback), 100, 8, { excludeArchived: false }),
     finwise.listMerchants(),
     finwise.listAccounts(),
     finwise.listPlanned(),
@@ -139,7 +139,7 @@ export async function runClassifier(env: ClassifierEnv): Promise<RunSummary> {
   for (const txn of txns) {
     if (summary.classified >= max) break;
     summary.seen += 1;
-    if (!synced.syncedIds.has(txn.id)) {
+    if (!synced.syncedIds.has(txn.id) || !isClassificationCandidate(txn)) {
       summary.skipped += 1;
       continue;
     }

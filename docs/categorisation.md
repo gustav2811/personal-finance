@@ -32,7 +32,7 @@ A fourth slice compared one JEV call with a sequential nature-then-category call
 
 Account kind is `type:subType` from FinWise (`loan:mortgage`, `investment:brokerage`, `depository:savings`). `accountType` is the sparse legacy field and is not the classifier input. `isTransfer` is a weak flag, not a movement gate. A paired opposite leg can have a different category. Planned transactions are a candidate feature, not an automatic label.
 
-The deployed worker polls the current 14-day window, upserts that overlap into Supabase through narrow finance RPCs, then asks JEV. Proposals stay `proposed`. Category PATCH stays off in shadow, so the FinWise `JEV` tag is not applied.
+The deployed worker polls the current 14-day window, including rows FinWise has archived, and upserts that overlap into Supabase through narrow finance RPCs. Archived rows update `source_is_archived`. They are not classification candidates. JEV proposals stay `proposed`. Category PATCH stays off in shadow, so the FinWise `JEV` tag is not applied.
 
 On a fifth April–June slice, full-catalogue JEV without those sentences was 77.5%. The same rows with all 32 sentences were 75.0% (2 losses, 0 wins). The sentences did not raise accuracy. The movement slice went from 66.7% to 60.0%.
 
@@ -56,7 +56,7 @@ Merchant stats are support, purity, and last date. They are built from older tra
 
 D1 database `investments-categoriser` (free tier: 5 GB, 5M reads/day, 100k writes/day). Tables: `audits`, `corrections`, `writes`, `merchant_stats`, `cursors`. Migration: `apps/categorise-cloudflare/migrations/0001_init.sql`.
 
-Supabase stays the ingest DLQ. It is the wrong place for this state: the classifier should keep working if Supabase is paused, and D1 is already inside the free Worker account.
+D1 remains the operational skip record: audits, corrections, and writes. Supabase is the owned ledger. The worker writes source rows and proposed classifications there. It does not confirm treatments, and it does not project categories back to FinWise while mode is shadow. If Supabase credentials are missing, the cron fails closed and does not classify.
 
 ## Worker limits
 
