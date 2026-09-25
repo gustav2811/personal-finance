@@ -1,95 +1,130 @@
----
-name: Common Orbit
-description: A private household observatory for usage and money, read at home on a dark desk.
-colors:
-  ink: "#0b1013"
-  panel: "#11191e"
-  panel-raised: "#152128"
-  panel-soft: "#1a2a31"
-  text: "#d8e4e8"
-  muted: "#83959e"
-  quiet: "#5e7079"
-  mint: "#a6e3a1"
-  mint-strong: "#6bd794"
-  amber: "#f0c674"
-  coral: "#e68b78"
-  blue: "#8fb9d4"
-  line: "rgba(216, 228, 232, 0.13)"
-  line-strong: "rgba(216, 228, 232, 0.26)"
-typography:
-  body:
-    fontFamily: "Inter, Avenir Next, Helvetica Neue, ui-sans-serif, system-ui, sans-serif"
-    fontSize: "15px"
-    fontWeight: 400
-    lineHeight: 1.5
-    letterSpacing: "normal"
-  display:
-    fontFamily: "Inter, Avenir Next, Helvetica Neue, ui-sans-serif, system-ui, sans-serif"
-    fontSize: "clamp(32px, 4vw, 57px)"
-    fontWeight: 700
-    lineHeight: 1.02
-    letterSpacing: "-0.055em"
-  data:
-    fontFamily: "IBM Plex Mono, SFMono-Regular, Roboto Mono, ui-monospace, monospace"
-    fontSize: "14px"
-    fontWeight: 400
-    lineHeight: 1.4
-    letterSpacing: "-0.03em"
-rounded:
-  sm: "5px"
-  md: "8px"
-  lg: "12px"
-  pill: "999px"
-spacing:
-  sm: "8px"
-  md: "16px"
-  lg: "28px"
-components:
-  button-quiet:
-    backgroundColor: "transparent"
-    textColor: "{colors.muted}"
-    rounded: "{rounded.md}"
-    padding: "7px 10px"
-  button-quiet-pressed:
-    backgroundColor: "{colors.panel}"
-    textColor: "{colors.mint}"
-    rounded: "{rounded.md}"
-    padding: "7px 10px"
-  nav-current:
-    backgroundColor: "rgba(166, 227, 161, 0.08)"
-    textColor: "{colors.mint}"
-    rounded: "{rounded.md}"
-    padding: "10px"
----
+# Household design system
 
-## Overview
+The dashboard UI is shadcn/ui, installed from the official registry (`radix-nova`, neutral, Lucide, CSS variables). Do not invent a second component library or restyle primitives with a private palette.
 
-Common Orbit is a dark household instrument, not an admin console. Graphite panels, vellum type, and mint, amber, and blue signals. The ledger inherits that world: a reading log of movements, each with a visible decision. Provenance is a word under the category, not a badge.
+The companion Figma file is the [shadcn/ui design system](https://www.figma.com/community/file/1203061493325953101). Components in `components/ui` are the code implementation of that system. Extend them; do not redraw them.
 
-## Colors
+## Where things live
 
-Ink is the page. Panels step up through raised and soft. Mint means a decision you made or money in. Amber is a gentle mark that JEV differs from FinWise, not an alert. Coral is money out, and the only strong warning, used when the classifier failed. Blue is a FinWise observation. Muted type carries secondary facts; quiet is for rules, not body copy.
+```text
+components/ui/          registry primitives. Do not put domain components here.
+components/app/         shell, page header, date field, range control
+components/overview/    overview
+components/energy/      energy
+components/money/       money
+components/sources/     sources
+components/transactions/ transactions
+lib/utils.ts            cn()
+app/globals.css         Tailwind, semantic tokens, type utilities
+```
 
-## Typography
+Add a missing primitive with the CLI, from `apps/dashboard`:
 
-One sans for the interface, mono for dates, amounts, and instrument labels. Display titles are tight and large. Amounts use tabular figures.
+```bash
+npx shadcn@latest add <name>
+```
 
-## Layout
+## Tokens
 
-A sticky side nav on desktop, a compact icon bar on small screens. Observatory views use a left field and a right rail. The transaction log owns the width until a row is chosen; then an inspection plate takes the right third. Below 920px that plate is a sheet over the log, not a second column squeezed underneath.
+Components use semantic tokens only: `background`, `foreground`, `card`, `popover`, `primary`, `secondary`, `muted`, `accent`, `destructive`, `border`, `input`, `ring`, `sidebar-*`, `chart-1` … `chart-5`.
 
-## Elevation & Depth
+Domain colour is a small extra layer, also tokens:
 
-Depth is a panel step and a 1px rule, not a shadow. The category picker is the exception: a raised panel with a soft offset shadow so it can float over the log.
+```text
+success / warning / info
+state-confirmed / state-proposed / state-source / state-pending / state-failed
+```
 
-## Shapes
+A component knows `state-proposed`. It does not know a hex. Both `:root` and `.dark` define the same names. Theme toggle is system / light / dark via `next-themes`.
 
-Controls are 8px. Larger frames are 12px. Status marks are pills. Provenance is words under the category name, not a dot or a lozenge.
+## Type
 
-## Components
+Use the utilities, not one-off sizes:
 
-Navigation and range controls share the same quiet button. The ledger bar is Search, Account, Category, All or Review, and Date. Category choice is the inline control. Accept is a mint tick, and only when JEV differs. The inspection plate is a column with a hairline once a row is open, otherwise absent.
+```text
+type-display
+type-page-title
+type-section-title
+type-body
+type-body-small
+type-label
+type-caption
+type-numeric
+```
 
-## Do's and Don'ts
+Sans (Geist) is the UI face. `font-mono` is for identifiers and technical metadata only. Dates and amounts use `type-numeric` (tabular figures), not monospace. Do not default to uppercase tracked microcopy.
 
-Do keep source facts and owned decisions visually separate. Do show the newest movement before any summary number. Do leave the next movement one gesture away. Don't ask to accept a category merely because JEV agrees with FinWise. Don't turn disagreement into an alert, trap review inside the plate, introduce a second palette, open a modal for classification, or build a table of status pills.
+## Density, radius, elevation
+
+Default controls are the registry sizes (`h-8` default, `h-7` sm). Transaction rows stay at least 48px. Radius comes from `--radius`. Shadows are for popover, dropdown, dialog, sheet, and combobox — not for ordinary cards. Prefer a border and a surface step.
+
+## Shell
+
+`AppShell` owns auth, the sidebar, and household data. Pages own their header and filters. The sidebar does not host range controls.
+
+```text
+Household
+  Overview        /
+  Transactions    /transactions
+  Money           /money
+Home
+  Energy          /energy
+Record
+  Sources         /sources
+```
+
+Accounts and Settings are not built. Add them as sidebar items when the destination exists. Do not ship disabled placeholders.
+
+Desktop: persistent sidebar. Collapse to icons with the trigger. Mobile: the sidebar primitive opens a sheet.
+
+## Page shape
+
+```text
+PageHeader
+optional toolbar
+content
+```
+
+`PageHeader` takes `title`, `description`, optional `breadcrumbs`, optional `actions`. Operational titles, not editorial headlines.
+
+## States
+
+A state is not a badge by default.
+
+```text
+row provenance     secondary text, coloured with a state token
+sync failure       Alert
+small filter chip  Badge or ToggleGroup, when the control is a filter
+```
+
+Money in and money out are signed and named for screen readers. Colour is not the only cue.
+
+## Lists vs tables
+
+Tables (`components/ui/table`) when columns are compared: readings, ledger entries, sources, ingestion.
+
+Operational lists when the object is the row and the action is inline: transactions. Selection opens an inspector. Wide: feed plus panel. Narrow (`<1024px`): sheet. Category changes in place through `Combobox`. Dialogs are for interruption, not for a single field.
+
+## Feedback
+
+Optimistic overlay, inline pending (`Spinner`, `aria-busy` on the row), inline error, Undo on the row. No success modal. Do not disable the page while one row saves.
+
+## Motion and access
+
+Keep the behaviour that comes with the primitive: keyboard, focus ring, labels, ARIA. Reduced motion is global in `globals.css`. Do not add looping decoration.
+
+## Charts
+
+Recharts through `ChartContainer`. Colours are `var(--chart-1)` … `var(--chart-5)`, set on the chart config. Do not hardcode series colours in a feature.
+
+## Do not
+
+```text
+fork a primitive that already exists
+add hex colours in a feature component
+build a one-off button or input
+turn every state into a badge
+turn every section into a card
+put page filters in the sidebar
+couple a domain fact to a literal colour
+```
