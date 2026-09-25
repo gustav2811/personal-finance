@@ -1,7 +1,7 @@
 "use client"
 
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { RANGE_ITEMS, type RangeDays } from "@/lib/consumption"
+import { RANGE_ITEMS, type RangeDays } from "@/lib/range"
 
 export function RangeControl({
   onChange,

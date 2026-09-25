@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/patterns/page-header"
 import { RangeControl } from "@/components/patterns/range-control"
 import { DataGate } from "@/components/patterns/data-gate"
 import { Section } from "@/components/patterns/section"
-import { EnergyChart } from "@/components/patterns/charts"
+import { EnergyChart } from "@/domain/consumption/energy-chart"
 import {
   Table,
   TableBody,
@@ -22,7 +22,7 @@ import {
   isWithinRange,
   toKwh,
   type RangeDays,
-} from "@/lib/consumption"
+} from "@/domain/consumption/model"
 
 function EnergyBody({ data, days }: { data: EnergyData; days: RangeDays }) {
   const series = useMemo(

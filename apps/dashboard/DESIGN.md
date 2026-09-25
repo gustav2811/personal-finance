@@ -9,12 +9,13 @@ The companion Figma file is the [shadcn/ui design system](https://www.figma.com/
 ```text
 components/ui/          shadcn registry source only
 components/shell/       app shell, sidebar, auth, providers, theme
-components/patterns/    PageHeader, Section, DateField, RangeControl, DataGate
+components/patterns/    domain-neutral: PageHeader, Section, DateField, RangeControl, DataGate
+domain/consumption/     energy and money charts, source list, series helpers
 features/overview/      page, queries.ts
 features/energy/
 features/money/
 features/sources/
-lib/supabase/           browser client and committed database types
+lib/supabase/           browser client and generated database types
 lib/format/             date and money
 app/dev/ui              dev-only proving ground. 404 in production.
 ```
@@ -32,7 +33,8 @@ routes
 
 shell may use ui and patterns
 ui must never import shell or features
-patterns must never import features
+patterns must never import features or domain
+domain may use ui, not features
 features must not import another feature's internals
 ```
 
@@ -55,14 +57,16 @@ Base surfaces stay the shadcn neutral tokens. Do not retint `background`, `prima
 Accent and chart colour comes from one palette, Electric Neon Dreams. Use the scale, not a one-off hex:
 
 ```text
-shocking-pink   chart-1
-violet-ray      chart-2
-blue            chart-3
-deep-sky-blue   chart-4
-cyan            chart-5
+shocking-pink    chart-1
+violet-ray       chart-2
+electric-blue    chart-3
+deep-sky-blue    chart-4
+electric-cyan    chart-5
 ```
 
-Steps are `50` through `950`. `500` is the swatch. Charts already point at those `500`s.
+Steps are `50` through `950`. `500` is the swatch. Charts point at those `500`s.
+
+`blue` and `cyan` are namespaced as `electric-blue` and `electric-cyan`. Do not declare `--color-blue-*` or `--color-cyan-*`. Those names override Tailwind's default scales.
 
 ## Type
 
@@ -87,9 +91,9 @@ Default controls are the registry sizes (`h-8` default, `h-7` sm). Transaction r
 
 ## Shell
 
-`AppShell` owns auth, the sidebar, and theme. It does not load page data. Each feature exports `getXData()` / `loadXData()` and a feature-specific type. `DataGate` takes that loader. Do not add fields to a shared dashboard bag. Pages own their header and filters. The sidebar does not host range controls. Membership is `finance.household_members`, checked for presentation through `finance_caller_membership_v1`. Row-level policies remain the authorization boundary.
+`AppShell` owns auth, the sidebar, and theme. It does not load page data. Each feature exports `getXData()` / `loadXData()` and a feature-specific type. `DataGate` takes that loader. `load` must be stable: a module function or `useCallback`. An inline function refetches on every render. Do not add fields to a shared dashboard bag. Pages own their header and filters. The sidebar does not host range controls. Membership is `finance.household_members`, checked for presentation through `finance_caller_membership_v1`. Row-level policies remain the authorization boundary.
 
-Database types live in `lib/supabase/database.types.ts`. `public` was generated from the finance-data project. `consumption` was taken from that same live schema, because the generator only emitted `public`. `finance_caller_membership_v1` is declared for the migration in this PR and is not on the remote database yet. Regenerate when the schema changes. Do not go back to `Record<string, unknown>`.
+`lib/supabase/database.types.ts` is generated. Do not edit it by hand. Regenerate from the finance-data project for `public`, `consumption`, and `finance`. Row aliases live in `lib/supabase/rows.ts`. `finance_caller_membership_v1` is in this PR's migration and is not on the remote database yet, so the generated file does not include it. The call site asserts that name until the migration is applied and types are regenerated.
 
 ```text
 Household

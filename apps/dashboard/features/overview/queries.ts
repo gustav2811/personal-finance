@@ -1,4 +1,4 @@
-import type { DeviceRow, LedgerRow, ReadingRow, SnapshotRow } from "@/lib/supabase/database.types"
+import type { DeviceRow, LedgerRow, ReadingRow, SnapshotRow } from "@/lib/supabase/rows"
 import { getBrowserClient, type BrowserClient } from "@/lib/supabase/browser"
 import { isLocalPreview, readLocal } from "@/lib/supabase/local"
 import { readDevices, readLatestSnapshot, readLedger, readReadings } from "@/lib/supabase/read"

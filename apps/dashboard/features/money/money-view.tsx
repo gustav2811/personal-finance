@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/patterns/page-header"
 import { RangeControl } from "@/components/patterns/range-control"
 import { DataGate } from "@/components/patterns/data-gate"
 import { Section } from "@/components/patterns/section"
-import { MoneyChart } from "@/components/patterns/charts"
+import { MoneyChart } from "@/domain/consumption/money-chart"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
   Table,
@@ -19,7 +19,7 @@ import {
 import { getMoneyData, type MoneyData } from "@/features/money/queries"
 import { shortDate } from "@/lib/format/date"
 import { formatMoney, sum } from "@/lib/format/money"
-import { buildMoneySeries, isWithinRange, type RangeDays } from "@/lib/consumption"
+import { buildMoneySeries, isWithinRange, type RangeDays } from "@/domain/consumption/model"
 
 function MoneyBody({ data, days }: { data: MoneyData; days: RangeDays }) {
   const moneySeries = useMemo(

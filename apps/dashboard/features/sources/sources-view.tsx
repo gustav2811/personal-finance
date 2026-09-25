@@ -3,7 +3,7 @@
 import { DataGate } from "@/components/patterns/data-gate"
 import { PageHeader } from "@/components/patterns/page-header"
 import { Section } from "@/components/patterns/section"
-import { SourceList } from "@/components/patterns/source-list"
+import { SourceList } from "@/domain/consumption/source-list"
 import {
   Table,
   TableBody,

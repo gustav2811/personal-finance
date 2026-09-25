@@ -5,7 +5,7 @@ import type {
   LedgerRow,
   ReadingRow,
   SnapshotRow,
-} from "./database.types"
+} from "./rows"
 
 const FROM_DATE = () => new Date(Date.now() - 366 * 24 * 60 * 60 * 1000).toISOString()
 

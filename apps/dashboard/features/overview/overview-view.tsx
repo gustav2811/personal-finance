@@ -4,9 +4,10 @@ import { useMemo, useState } from "react"
 import { PageHeader } from "@/components/patterns/page-header"
 import { RangeControl } from "@/components/patterns/range-control"
 import { DataGate } from "@/components/patterns/data-gate"
-import { EnergyChart, MoneyChart } from "@/components/patterns/charts"
+import { EnergyChart } from "@/domain/consumption/energy-chart"
+import { MoneyChart } from "@/domain/consumption/money-chart"
 import { Section } from "@/components/patterns/section"
-import { SourceList } from "@/components/patterns/source-list"
+import { SourceList } from "@/domain/consumption/source-list"
 import { getOverviewData, type OverviewData } from "@/features/overview/queries"
 import { shortDate } from "@/lib/format/date"
 import { formatMoney, formatNumber, sum } from "@/lib/format/money"
@@ -15,8 +16,8 @@ import {
   buildMoneySeries,
   isWithinRange,
   type RangeDays,
-} from "@/lib/consumption"
-import type { LedgerRow } from "@/lib/supabase/database.types"
+} from "@/domain/consumption/model"
+import type { LedgerRow } from "@/lib/supabase/rows"
 
 function rangeLabel(days: RangeDays): string {
   if (days === 365) return "Last year"

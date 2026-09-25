@@ -4,6 +4,8 @@ import { useEffect, useState, type ReactNode } from "react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Skeleton } from "@/components/ui/skeleton"
 
+// `load` is a dependency. Pass a stable function (module-level or useCallback).
+// An inline `load` refetches on every render.
 export function DataGate<T>({
   children,
   load,

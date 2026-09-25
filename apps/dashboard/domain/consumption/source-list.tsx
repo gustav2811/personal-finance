@@ -6,8 +6,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { latestTimestampForDevice, sourceKind } from "@/lib/consumption"
-import type { DeviceRow, ReadingRow } from "@/lib/supabase/database.types"
+import { latestTimestampForDevice, sourceKind } from "@/domain/consumption/model"
+import type { DeviceRow, ReadingRow } from "@/lib/supabase/rows"
 
 export function SourceList({
   devices,

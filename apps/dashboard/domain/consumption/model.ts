@@ -1,13 +1,8 @@
-import { localDateKey } from "./format/date"
-import type { DeviceRow, LedgerRow, ReadingRow } from "./supabase/database.types"
+import { localDateKey } from "@/lib/format/date"
+import { type RangeDays } from "@/lib/range"
+import type { DeviceRow, LedgerRow, ReadingRow } from "@/lib/supabase/rows"
 
-export type RangeDays = 30 | 90 | 365
-
-export const RANGE_ITEMS: Array<{ days: RangeDays; label: string }> = [
-  { days: 30, label: "30 days" },
-  { days: 90, label: "90 days" },
-  { days: 365, label: "1 year" },
-]
+export type { RangeDays }
 
 export type ChartPoint = {
   date: string

@@ -51,9 +51,9 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 const SWATCHES = [
   ["shocking-pink", "bg-shocking-pink-500"],
   ["violet-ray", "bg-violet-ray-500"],
-  ["blue", "bg-blue-500"],
+  ["electric-blue", "bg-electric-blue-500"],
   ["deep-sky-blue", "bg-deep-sky-blue-500"],
-  ["cyan", "bg-cyan-500"],
+  ["electric-cyan", "bg-electric-cyan-500"],
 ] as const
 
 const chartConfig = {
