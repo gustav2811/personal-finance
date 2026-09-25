@@ -7,6 +7,7 @@ import {
   Home,
   LockKeyhole,
   Radio,
+  ScrollText,
   Wallet,
   Zap,
   type LucideIcon,
@@ -31,6 +32,7 @@ import {
   type ConsumptionReading,
   type DashboardData,
 } from "../lib/data";
+import { TransactionsView } from "./transactions-view";
 import { getPublicClient } from "../lib/supabase-browser";
 
 const ALLOWED_EMAILS = new Set([
@@ -40,7 +42,7 @@ const ALLOWED_EMAILS = new Set([
 const HOUSEHOLD_TIMEZONE = "Africa/Johannesburg";
 const IS_LOCAL_PREVIEW = process.env.NODE_ENV !== "production";
 
-type ViewKey = "overview" | "energy" | "money" | "sources";
+type ViewKey = "overview" | "energy" | "money" | "transactions" | "sources";
 type RangeDays = 30 | 90 | 365;
 
 type ChartPoint = {
@@ -75,6 +77,7 @@ const NAV_ITEMS: Array<{
   { key: "overview", label: "Overview", Icon: Home },
   { key: "energy", label: "Energy", Icon: Zap },
   { key: "money", label: "Money", Icon: Wallet },
+  { key: "transactions", label: "Transactions", Icon: ScrollText },
   { key: "sources", label: "Sources", Icon: Radio },
 ];
 
@@ -105,6 +108,12 @@ const VIEW_COPY: Record<
     accent: "the bill.",
     subtitle:
       "Wallet movement, utility charges, and the financial record behind the usage.",
+  },
+  transactions: {
+    title: "Read the",
+    accent: "ledger.",
+    subtitle:
+      "The newest movements, with the category you can trust and where it came from.",
   },
   sources: {
     title: "Know what is",
@@ -1268,15 +1277,8 @@ export function DashboardShell() {
     );
   }
 
-  if (dataError || !data) {
-    return (
-      <div className="loading-state">
-        {dataError ?? "Loading the household constellation…"}
-      </div>
-    );
-  }
-
   const viewCopy = VIEW_COPY[activeView];
+  const observatoryReady = Boolean(data) && !dataError;
 
   return (
     <div className="app-shell">
@@ -1300,31 +1302,41 @@ export function DashboardShell() {
               <i className="status-dot" />
               {IS_LOCAL_PREVIEW ? "Local data bridge" : "Supabase live"}
             </span>
-            <div aria-label="Time range" className="range-control" role="group">
-              {RANGE_ITEMS.map(({ days, label }) => (
-                <button
-                  aria-pressed={rangeDays === days}
-                  className="range-button"
-                  key={days}
-                  onClick={() => setRangeDays(days)}
-                  type="button"
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            {activeView === "transactions" ? null : (
+              <div aria-label="Time range" className="range-control" role="group">
+                {RANGE_ITEMS.map(({ days, label }) => (
+                  <button
+                    aria-pressed={rangeDays === days}
+                    className="range-button"
+                    key={days}
+                    onClick={() => setRangeDays(days)}
+                    type="button"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </header>
-        {activeView === "overview" ? (
+        {activeView === "transactions" ? (
+          <TransactionsView onSignIn={() => void signIn()} />
+        ) : null}
+        {activeView !== "transactions" && !observatoryReady ? (
+          <div className="loading-state">
+            {dataError ?? "Loading the household constellation…"}
+          </div>
+        ) : null}
+        {activeView === "overview" && data ? (
           <Overview data={data} days={rangeDays} />
         ) : null}
-        {activeView === "energy" ? (
+        {activeView === "energy" && data ? (
           <EnergyView data={data} days={rangeDays} />
         ) : null}
-        {activeView === "money" ? (
+        {activeView === "money" && data ? (
           <MoneyView data={data} days={rangeDays} />
         ) : null}
-        {activeView === "sources" ? <SourcesView data={data} /> : null}
+        {activeView === "sources" && data ? <SourcesView data={data} /> : null}
       </main>
     </div>
   );
