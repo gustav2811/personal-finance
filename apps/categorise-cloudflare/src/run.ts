@@ -18,7 +18,10 @@ import {
   txFeatureHash,
   type AiBinding,
 } from "@investments/categoriser";
-import { FinwiseHttp, merchantNameOf, signedAmount, type FinwiseTxn } from "./finwise.js";
+import { FinwiseHttp, merchantNameOf, signedAmount, tagIdsOf, type FinwiseTxn } from "./finwise.js";
+import { HOUSEHOLD_ID, ownedCategoryIdForName, proposedTreatment } from "./ledger.js";
+import { FinanceRpc } from "./supabase.js";
+import { syncOverlapWindow } from "./sync.js";
 
 export interface ClassifierEnv {
   AI: AiBinding;
@@ -40,6 +43,8 @@ export interface RunSummary {
   skipped: number;
   applied: number;
   corrections: number;
+  synced: number;
+  syncFailed: number;
   inputTokens: number;
   notionalUsd: number;
   mode: string;
@@ -64,6 +69,8 @@ export async function runClassifier(env: ClassifierEnv): Promise<RunSummary> {
     skipped: 0,
     applied: 0,
     corrections: 0,
+    synced: 0,
+    syncFailed: 0,
     inputTokens: 0,
     notionalUsd: 0,
     mode,
@@ -71,7 +78,7 @@ export async function runClassifier(env: ClassifierEnv): Promise<RunSummary> {
 
   const [categories, txns, merchants, accounts, plannedRows] = await Promise.all([
     finwise.listCategories(),
-    finwise.listRecent(isoDaysAgo(lookback), 50),
+    finwise.listRecent(isoDaysAgo(lookback), 100, 8),
     finwise.listMerchants(),
     finwise.listAccounts(),
     finwise.listPlanned(),
@@ -114,6 +121,16 @@ export async function runClassifier(env: ClassifierEnv): Promise<RunSummary> {
     startDate: plan.startDate,
     endDate: plan.endDate,
   }));
+  const ledger = openLedger(env);
+  const synced = await syncOverlapWindow(ledger, HOUSEHOLD_ID, {
+    accounts,
+    categories,
+    transactions: txns,
+    merchants,
+    categoryNames: nameById,
+  });
+  summary.synced = synced.upserted;
+  summary.syncFailed = synced.failed;
   const featuresById = new Map(windowFeatures.map((row) => [row.id, row]));
   const relations = resolveRelations(windowFeatures, accounts);
   const byName = new Map(options.map((category) => [category.name, category.id]));
@@ -122,6 +139,10 @@ export async function runClassifier(env: ClassifierEnv): Promise<RunSummary> {
   for (const txn of txns) {
     if (summary.classified >= max) break;
     summary.seen += 1;
+    if (!synced.syncedIds.has(txn.id)) {
+      summary.skipped += 1;
+      continue;
+    }
     const features = featuresById.get(txn.id);
     if (!features) continue;
     const hash = txFeatureHash(features);
@@ -227,7 +248,7 @@ export async function runClassifier(env: ClassifierEnv): Promise<RunSummary> {
         currentCategoryId: txn.transactionCategoryId,
       })
     ) {
-      await finwise.updateCategory(txn.id, predictedId);
+      await finwise.updateCategory(txn.id, predictedId, tagIdsOf(txn));
       await env.DB.prepare(
         "INSERT INTO writes (id, transaction_id, category_id, written_at) VALUES (?, ?, ?, ?)",
       )
@@ -235,6 +256,39 @@ export async function runClassifier(env: ClassifierEnv): Promise<RunSummary> {
         .run();
       applied = 1;
       summary.applied += 1;
+    }
+
+    const ownedCategoryId = ownedCategoryIdForName(synced.ownedByName, decision.categoryName);
+    const treatment = proposedTreatment(relation.nature, txn.isTransfer);
+    const confidence = decision.confidence >= 0 && decision.confidence <= 1 ? decision.confidence : null;
+    try {
+      await ledger.recordClassificationRun({
+        householdId: HOUSEHOLD_ID,
+        transactionId: txn.id,
+        classifierVersion: env.CLASSIFIER_VERSION,
+        modelId: decision.model,
+        inputTokenCount: decision.inputTokens,
+        result: {
+          categoryName: decision.categoryName,
+          accept: decision.accept,
+          source: decision.source,
+          confidence,
+          margin: decision.margin,
+          abstained: ownedCategoryId == null,
+        },
+        ownedCategoryId,
+        confidence,
+        isTransfer: ownedCategoryId ? treatment.isTransfer : null,
+        excludeFromSpend: ownedCategoryId ? treatment.excludeFromSpend : null,
+        nature: ownedCategoryId ? treatment.nature : null,
+      });
+    } catch (err: unknown) {
+      console.log(JSON.stringify({
+        msg: "classification_persist_failed",
+        transaction_id: txn.id,
+        error: err instanceof Error ? err.message : "unknown",
+      }));
+      continue;
     }
 
     await env.DB.prepare(
@@ -279,10 +333,19 @@ export function logSummary(summary: RunSummary): void {
       skipped: summary.skipped,
       applied: summary.applied,
       corrections: summary.corrections,
+      synced: summary.synced,
+      sync_failed: summary.syncFailed,
       input_tokens: summary.inputTokens,
       notional_usd: Number(summary.notionalUsd.toFixed(6)),
     }),
   );
+}
+
+function openLedger(env: ClassifierEnv): FinanceRpc {
+  const url = env.SUPABASE_URL?.trim();
+  const key = env.SUPABASE_SERVICE_KEY?.trim();
+  if (!url || !key) throw new Error("missing supabase credentials");
+  return new FinanceRpc(url, key);
 }
 
 export type { FinwiseTxn };

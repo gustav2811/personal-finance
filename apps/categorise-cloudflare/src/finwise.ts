@@ -1,17 +1,27 @@
+import { projectionBody, tagIdsOf } from "./ledger.js";
+
 export interface FinwiseTxn {
   id: string;
   date: string;
   updatedAt: string | null;
   description: string;
+  originalDescription?: string | null;
+  effectiveDate?: string | null;
   amount: { amount: string; currencyCode: string } | null;
   transactionCategoryId: string | null;
   originalTransactionCategoryId: string | null;
   merchantId: string | null;
+  parentTransactionId?: string | null;
   notes: string | null;
   accountId: string;
   isTransfer: boolean | null;
+  isPending?: boolean | null;
+  archivedAt?: string | null;
   needsReview: boolean | null;
   merchant?: { name?: string | null } | null;
+  tagIds?: unknown;
+  transactionTags?: unknown;
+  tags?: unknown;
 }
 
 export interface FinwiseCategory {
@@ -68,7 +78,7 @@ export class FinwiseHttp {
     return names;
   }
 
-  listAccounts(): Promise<{ id: string; name: string; type: string | null; subType: string | null }[]> {
+  listAccounts(): Promise<{ id: string; name: string; type: string | null; subType: string | null; currencyCode: string | null }[]> {
     const query = new URLSearchParams({
       pagination: JSON.stringify({ pageNumber: 1, pageSize: 100 }),
     });
@@ -81,6 +91,7 @@ export class FinwiseHttp {
       accountType?: string | null;
       providerType?: string | null;
       providerSubtype?: string | null;
+      currencyCode?: string | null;
     }[]>(
       `/accounts?${query.toString()}`,
     ).then((accounts) =>
@@ -89,6 +100,7 @@ export class FinwiseHttp {
         name: account.displayName || account.name,
         type: account.providerType || account.type || account.accountType || null,
         subType: account.providerSubtype || account.subType || null,
+        currencyCode: account.currencyCode ?? null,
       })),
     );
   }
@@ -149,16 +161,15 @@ export class FinwiseHttp {
     return this.request<FinwiseCategory[]>(`/transaction-categories?${query.toString()}`);
   }
 
-  updateCategory(id: string, categoryId: string): Promise<FinwiseTxn> {
+  updateCategory(id: string, categoryId: string, existingTagIds: readonly string[]): Promise<FinwiseTxn> {
     return this.request<FinwiseTxn>(`/transactions/${encodeURIComponent(id)}`, {
       method: "PATCH",
-      body: JSON.stringify({
-        transactionCategoryId: categoryId,
-        needsReview: false,
-      }),
+      body: JSON.stringify(projectionBody(categoryId, existingTagIds)),
     });
   }
 }
+
+export { tagIdsOf };
 
 export function merchantNameOf(tx: FinwiseTxn, merchants?: ReadonlyMap<string, string>): string | null {
   const named = tx as FinwiseTxn & { merchantName?: string | null };
