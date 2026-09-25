@@ -7,18 +7,36 @@ The companion Figma file is the [shadcn/ui design system](https://www.figma.com/
 ## Where things live
 
 ```text
-components/ui/          registry primitives. Do not put domain components here.
-components/app/         shell, page header, date field, range control
-components/overview/    overview
-components/energy/      energy
-components/money/       money
-components/sources/     sources
-components/transactions/ future ledger. Not in this PR.
-lib/utils.ts            cn()
-app/globals.css         Tailwind, semantic tokens, type utilities
+components/ui/          shadcn registry source only
+components/shell/       app shell, sidebar, auth, providers, theme
+components/patterns/    PageHeader, Section, DateField, RangeControl, DataGate
+features/overview/      page, queries.ts
+features/energy/
+features/money/
+features/sources/
+lib/supabase/           browser client and committed database types
+lib/format/             date and money
+app/dev/ui              dev-only proving ground. 404 in production.
 ```
 
-Add a missing primitive with the CLI, from `apps/dashboard`:
+Dependency direction:
+
+```text
+ui
+   ↑
+patterns
+   ↑
+features
+   ↑
+routes
+
+shell may use ui and patterns
+ui must never import shell or features
+patterns must never import features
+features must not import another feature's internals
+```
+
+`components/ui` is owned source. Modify a primitive if the registry behaviour is wrong. Never put feature behaviour there. Add a missing primitive with the CLI, from `apps/dashboard`, when a feature needs it. Do not install the catalogue ahead of use.
 
 ```bash
 npx shadcn@latest add <name>
@@ -28,14 +46,9 @@ npx shadcn@latest add <name>
 
 Components use semantic tokens only: `background`, `foreground`, `card`, `popover`, `primary`, `secondary`, `muted`, `accent`, `destructive`, `border`, `input`, `ring`, `sidebar-*`, `chart-1` … `chart-5`.
 
-Domain colour is a small extra layer, also tokens:
+Generic status colour is `success`, `warning`, `info`, and `destructive`. A feature maps its own vocabulary onto those tokens. Do not add finance states such as `state-confirmed` to the global theme until more than one feature shares them.
 
-```text
-success / warning / info
-state-confirmed / state-proposed / state-source / state-pending / state-failed
-```
-
-A component knows `state-proposed`. It does not know a hex. Both `:root` and `.dark` define the same names. Theme toggle is system / light / dark via `next-themes`.
+A component knows `warning`. It does not know a hex. Both `:root` and `.dark` define the same names. Theme toggle is system / light / dark via `next-themes`.
 
 Base surfaces stay the shadcn neutral tokens. Do not retint `background`, `primary`, `muted`, or `sidebar`.
 
@@ -74,7 +87,9 @@ Default controls are the registry sizes (`h-8` default, `h-7` sm). Transaction r
 
 ## Shell
 
-`AppShell` owns auth, the sidebar, and theme. It does not load page data. Overview, Energy, Money, and Sources fetch their own scope when mounted. Transactions never reads the consumption dashboard dataset. Pages own their header and filters. The sidebar does not host range controls. Membership is `finance.household_members`, checked for presentation through `finance_caller_membership_v1`. Row-level policies and review RPCs remain the authorization boundary.
+`AppShell` owns auth, the sidebar, and theme. It does not load page data. Each feature exports `getXData()` / `loadXData()` and a feature-specific type. `DataGate` takes that loader. Do not add fields to a shared dashboard bag. Pages own their header and filters. The sidebar does not host range controls. Membership is `finance.household_members`, checked for presentation through `finance_caller_membership_v1`. Row-level policies remain the authorization boundary.
+
+Database types live in `lib/supabase/database.types.ts`. They cover the tables this app reads. Regenerate them with a logged-in Supabase CLI when the schema changes; do not go back to `Record<string, unknown>`.
 
 ```text
 Household

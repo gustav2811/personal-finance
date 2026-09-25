@@ -3,7 +3,7 @@ import type { ReactNode } from "react"
 import { Geist } from "next/font/google"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
-import { ThemeProvider } from "@/components/theme-provider"
+import { ThemeProvider } from "@/components/shell/theme-provider"
 import { cn } from "@/lib/utils"
 import "./globals.css"
 

@@ -1,4 +1,4 @@
-import { OverviewView } from "@/components/overview/overview-view"
+import { OverviewView } from "@/features/overview/overview-view"
 
 export default function OverviewPage() {
   return <OverviewView />
