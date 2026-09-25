@@ -17,9 +17,6 @@
     "isolatedModules": true,
     "jsx": "react-jsx",
     "incremental": true,
-    "paths": {
-      "@/*": ["./*"]
-    },
     "plugins": [
       {
         "name": "next"
