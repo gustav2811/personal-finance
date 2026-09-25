@@ -30,7 +30,11 @@ Bank Zero statement ───────────────┐
                                    ├─> owned accounts + transactions
 FinWise connected-account sync ────┘
 
-owned transaction + final category ──> FinWise POST projection (Bank Zero)
+owned category + treatment + event role
+        │
+        └─> optional FinWise projection
+            POST for Bank Zero creates
+            PATCH for connected category writeback
 ```
 
 Source systems provide observations. Supabase owns the normalized copy used by
@@ -263,7 +267,8 @@ Recommended uniqueness key:
 
 ### `transaction_classifications`
 
-Append-only history of owned category decisions.
+Append-only history of owned category decisions. Category is independent of
+spend treatment. Do not store `is_transfer` or event role here.
 
 Required fields:
 
@@ -271,7 +276,7 @@ Required fields:
 - `household_id`
 - `transaction_id`
 - `category_id`
-- `decision_source` — `imported`, `rule`, `agent`, `user`, or `policy`
+- `decision_source` — `imported`, `rule`, `jev`, `agent`, `user`, or `policy`
 - `status` — `proposed`, `confirmed`, `rejected`, or `superseded`
 - `confidence` — nullable exact numeric value from `0` to `1`
 - `actor_id` — nullable authenticated user
@@ -472,7 +477,63 @@ transaction_classifications
 
 For the first implementation, the owned taxonomy may mirror FinWise’s current
 44-category catalogue. Keep the IDs separate so the taxonomy can improve
-without coupling the database to FinWise’s inability to update transactions.
+without coupling the database to FinWise IDs. Connected categories can be
+projected back with `PATCH /transactions/:id`. The source category stays in
+`originalTransactionCategoryId`.
+
+### `financial_events`
+
+One economic event spanning one or more canonical transactions.
+
+Required fields:
+
+- `id`
+- `household_id`
+- `event_type` — `internal_movement`, `reserve_funding`, `internal_conversion`,
+  `settlement`, `purchase`, or `income`
+- `status` — `proposed`, `confirmed`, or `superseded`
+- `created_at`
+
+### `financial_event_legs`
+
+Links a canonical transaction to an event.
+
+Required fields:
+
+- `id`
+- `household_id`
+- `event_id`
+- `transaction_id`
+- `leg_role` — `economic_recognition`, `mirror`, `staging`, `reserve_funding`,
+  `internal_conversion`, or `settlement`
+- `created_at`
+
+A transaction belongs to at most one active event.
+
+### `transaction_treatments`
+
+Append-only owned spend treatment. Independent of category.
+
+Required fields:
+
+- `id`
+- `household_id`
+- `transaction_id`
+- `is_transfer`
+- `exclude_from_spend`
+- `nature`
+- `event_id` — nullable until reconciliation
+- `leg_role` — nullable until reconciliation
+- `decision_source` — `imported`, `rule`, `jev`, `agent`, `user`, or `policy`
+- `status` — `proposed`, `confirmed`, `rejected`, or `superseded`
+- `created_at`
+
+Reporting uses `exclude_from_spend` and `leg_role`, not
+`category <> 'Transfers'`.
+
+Account and relationship semantics, when added, reference canonical
+`accounts.id`. They must not be keyed by FinWise account IDs, and they must
+not live in a parallel `classifier` schema.
 
 ## Lifecycle
 
@@ -542,8 +603,15 @@ rebuildable.
 
 ## Migration direction
 
-1. Inspect deployed `accounts`, `transactions`, `snapshots`, and
-   `processed_transactions` schemas, constraints, indexes, and RLS.
+1. Inspected 2026-09-25. `public.accounts` has `account_id`, `name`,
+   `source_account_id`, `source_platform`, and `type`. `public.transactions`
+   has `id`, `account_id`, `date`, and `details`. `details` is a 22seven-shaped
+   payload, not a FinWise transaction. Transaction ids are not UUIDs. About
+   5,000 rows are already loaded. Do not treat this table as the FinWise ledger
+   and do not create a second permanent transaction store. Evolve these rows
+   as quarantined legacy history, and sync FinWise into the same canonical
+   tables only after source identity columns exist. DDL cannot be applied from
+   this repo until a database URL is available. The service role can read.
 2. Export or sync all accounts visible in the user’s FinWise account, together
    with their transactions and categories.
 3. Reconcile overlapping existing rows against FinWise source identities.

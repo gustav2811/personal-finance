@@ -7,10 +7,10 @@ Vercel AI SDK, Vercel AI Gateway
 
 ## Purpose
 
-Define a durable classification workflow around a real Vercel AI SDK
-`ToolLoopAgent`. The agent is one decision-making component inside a
-transaction workflow. It is not the financial database, the FinWise source of
-truth, or an unbounded autonomous writer.
+Define the classification workflow. JEV is the normal classifier. An agent is
+the escalation path for novel or ambiguous rows, and a separate optimizer may
+propose improvements from corrections. Neither agent is the financial database,
+the FinWise source of truth, or an unbounded writer.
 
 ## Architecture
 
@@ -24,10 +24,16 @@ Bank Zero webhook ──────>│                     │
                                    │
                               Queue/Workflow
                                    │
-                         ┌─────────▼───────────┐
-                         │  ToolLoopAgent       │
-                         │  via AI Gateway      │
-                         └─────────┬───────────┘
+                          ┌─────────▼───────────┐
+                          │  JEV classifier      │
+                          │  via AI Gateway      │
+                          └─────────┬───────────┘
+                                    │
+                          ambiguous or novel tail
+                                    │
+                          ┌─────────▼───────────┐
+                          │  research agent     │
+                          └─────────┬───────────┘
                                    │
                          authenticated finance MCP
                                    │
@@ -35,7 +41,7 @@ Bank Zero webhook ──────>│                     │
              │                     │                     │
        prior transactions    categories/rules       semantic search
 
-Bank Zero final decision ─────> FinWise create-only projection
+owned decision ──> optional FinWise projection (POST create or PATCH category)
 ```
 
 ## Component responsibilities
@@ -79,21 +85,23 @@ Bank Zero final decision ─────> FinWise create-only projection
 - Display source facts, owned decisions, proposals, and evidence.
 - Allow authenticated approval, rejection, and correction.
 - Record actor and timestamp for each review action.
-- Never call FinWise to update a transaction category.
+- May project an owned category back to FinWise. The source category remains
+  the original observation.
 
 ### FinWise adapter/MCP
 
-The adapter may support source reads, category reads, account reads, and the
-create-only publication operation needed by the import workflow. It must not
-pretend an update operation exists.
+The adapter supports source reads and the tested `PATCH /transactions/:id`
+category update, plus create for unpublished Bank Zero rows. Publication and
+writeback are server-controlled. The classifier does not receive a general
+FinWise write tool.
 
 The classification agent should not receive a general FinWise write tool.
 Publication is a server-controlled workflow step after validation and final
 decision.
 
-Do not expose a fake `classify_transaction` operation that implies FinWise will
-be updated. Classification is performed by the `ToolLoopAgent` using
-household-scoped tools; the resulting owned decision is persisted in Supabase.
+Do not expose a fake `classify_transaction` operation. JEV classifies the
+normal path. The research agent may use household-scoped tools only for the
+unresolved tail. The owned decision is persisted in Supabase.
 If a FinWise MCP is retained for integration, its read surface may include
 accounts, transactions, and categories, while its create surface is restricted
 to the publication workflow.
@@ -152,7 +160,8 @@ may be skipped. The decision still receives an audit record.
 
 ### Step 5 — Agent run
 
-Invoke the `ToolLoopAgent` with one transaction or a small homogeneous batch.
+Call JEV for the normal row. Escalate to the research agent only when the
+decision is novel, ambiguous, or below the accept policy.
 The agent may call finance MCP tools to gather context. It returns structured
 output, not free-form text consumed by a parser.
 

@@ -468,12 +468,17 @@ retry must not create two effective decisions.
 
 ## Transfers, splits, and aggregation
 
-### INV-AGG-001 — Transfers are not income or spend
+### INV-AGG-001 — Non-recognition movement is not income or spend
 
-A transfer between owned accounts SHALL not be counted as household income or
-spend in net-flow reports. The two legs must be linked when both are known.
+An internal movement leg that is not the event's economic-recognition leg
+SHALL not be counted as household income or spend. Exclusion comes from the
+owned treatment and event role, not from `category = 'Transfers'`.
+`Housekeeping` funding is recognised once on the outflow. `Investments` may
+carry a transfer flag when the leg is an internal conversion. The legs of one
+event must be linked when both are known.
 
-- **Enforcement:** transfer relation and reporting query tests.
+- **Enforcement:** `transaction_treatments` and `financial_event_legs`, plus
+  reporting queries that filter on `exclude_from_spend` and `leg_role`.
 - **Class:** Service.
 
 ### INV-AGG-002 — Split allocations reconcile

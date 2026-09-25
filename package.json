@@ -9,8 +9,7 @@
     "libs/ingest-core",
     "apps/ingest-cloudflare",
     "apps/categorise-cloudflare",
-    "libs/categoriser",
-    "apps/dashboard"
+    "libs/categoriser"
   ],
   "dependencies": {
     "@supabase/supabase-js": "^2.79.0",

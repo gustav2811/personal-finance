@@ -154,8 +154,8 @@ categorisation and before a FinWise create request.
 
 ### PR-007 — Agentic classification
 
-The classifier SHALL be a reusable Vercel AI SDK `ToolLoopAgent`, not a
-single model call with an ad hoc prompt.
+The normal classifier SHALL be the measured JEV worker. An agent SHALL be used
+only for the novel or ambiguous tail, not for every row.
 
 The agent SHALL:
 
@@ -278,8 +278,8 @@ SendGrid
   → parser and validator
   → Supabase staged transaction
   → classification Workflow
-  → ToolLoopAgent
-  → owned category decision
+  → JEV classifier
+  → owned category and treatment
   → FinWise POST with category
   → publication mapping
 ```
@@ -292,10 +292,9 @@ approved, rejected, or corrected.
 ```text
 Supabase transaction
   → classification Workflow
-  → ToolLoopAgent
-  → proposal
-  → dashboard review
-  → owned category
+  → JEV classifier
+  → owned category and treatment
+  → optional FinWise category projection
 ```
 
 The original FinWise category remains visible as source metadata.
