@@ -50,11 +50,17 @@ export class FinwiseHttp {
     return response.json() as Promise<T>;
   }
 
-  async listRecent(fromDate: string, pageSize: number, maxPages = 5): Promise<FinwiseTxn[]> {
+  async listRecent(
+    fromDate: string,
+    pageSize: number,
+    maxPages = 5,
+    options?: { excludeArchived?: boolean },
+  ): Promise<FinwiseTxn[]> {
     const out: FinwiseTxn[] = [];
+    const excludeArchived = options?.excludeArchived ?? true;
     for (let page = 1; page <= maxPages; page++) {
       const query = new URLSearchParams({
-        filters: JSON.stringify({ fromDate, excludeArchived: true }),
+        filters: JSON.stringify({ fromDate, excludeArchived }),
         pagination: JSON.stringify({ pageNumber: page, pageSize }),
       });
       const batch = await this.request<FinwiseTxn[]>(`/transactions?${query.toString()}`);

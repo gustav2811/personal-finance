@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  isClassificationCandidate,
   JEV_TAG_ID,
   categorySlug,
   mergeJevTag,
@@ -12,6 +13,12 @@ import {
 } from "./ledger.js";
 
 describe("ledger mapping", () => {
+  it("syncs archived rows but does not classify them", () => {
+    expect(isClassificationCandidate({ archivedAt: null })).toBe(true);
+    expect(isClassificationCandidate({})).toBe(true);
+    expect(isClassificationCandidate({ archivedAt: "2026-09-20T00:00:00.000Z" })).toBe(false);
+  });
+
   it("keeps a Johannesburg calendar day for a UTC evening timestamp", () => {
     expect(occurredOn("2026-09-24T22:00:00.000Z")).toBe("2026-09-25");
     expect(occurredOn("2026-09-25")).toBe("2026-09-25");

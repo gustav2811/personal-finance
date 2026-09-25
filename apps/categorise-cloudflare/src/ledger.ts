@@ -3,6 +3,10 @@ import { isMovement, slugOf, type TransactionNature } from "@investments/categor
 export const HOUSEHOLD_ID = "00000000-0000-4000-8000-000000000001";
 export const JEV_TAG_ID = "b14d2704-3865-48d0-a5fd-92b936de6933";
 
+export function isClassificationCandidate(txn: { archivedAt?: string | null }): boolean {
+  return !txn.archivedAt;
+}
+
 export function categorySlug(name: string, sourceId: string): string {
   const slug = slugOf(name);
   if (slug) return slug;
