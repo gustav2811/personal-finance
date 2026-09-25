@@ -1,6 +1,6 @@
 import { localDateKey } from "@/lib/format/date"
 import { type RangeDays } from "@/lib/range"
-import type { DeviceRow, LedgerRow, ReadingRow } from "@/lib/supabase/rows"
+import type { DeviceRead, LedgerRead, ReadingRead } from "@/lib/supabase/rows"
 
 export type { RangeDays }
 
@@ -23,14 +23,14 @@ export function isWithinRange(timestamp: string | null, days: RangeDays): boolea
   return new Date(timestamp).getTime() >= Date.now() - days * 24 * 60 * 60 * 1000
 }
 
-export function toKwh(reading: Pick<ReadingRow, "metric" | "unit" | "value">): number | null {
+export function toKwh(reading: Pick<ReadingRead, "metric" | "unit" | "value">): number | null {
   if (reading.metric !== "energy") return null
   if (reading.unit.toLowerCase() === "wh") return reading.value / 1000
   if (reading.unit.toLowerCase() === "kwh") return reading.value
   return null
 }
 
-export function buildEnergySeries(readings: ReadingRow[], days: RangeDays): ChartPoint[] {
+export function buildEnergySeries(readings: ReadingRead[], days: RangeDays): ChartPoint[] {
   const byDate = new Map<string, { homeKwh: number; espressoKwh: number }>()
 
   for (const reading of readings) {
@@ -56,7 +56,7 @@ export function buildEnergySeries(readings: ReadingRow[], days: RangeDays): Char
     }))
 }
 
-export function buildMoneySeries(entries: LedgerRow[], days: RangeDays): MoneyPoint[] {
+export function buildMoneySeries(entries: LedgerRead[], days: RangeDays): MoneyPoint[] {
   const byMonth = new Map<string, { debits: number; credits: number }>()
 
   for (const entry of entries) {
@@ -83,8 +83,8 @@ export function buildMoneySeries(entries: LedgerRow[], days: RangeDays): MoneyPo
 }
 
 export function latestTimestampForDevice(
-  device: DeviceRow,
-  readings: ReadingRow[],
+  device: DeviceRead,
+  readings: ReadingRead[],
 ): string | null {
   return (
     readings
@@ -94,7 +94,7 @@ export function latestTimestampForDevice(
   )
 }
 
-export function sourceKind(device: DeviceRow): string {
+export function sourceKind(device: DeviceRead): string {
   if (device.utility_type === "wallet") return "Wallet"
   if (device.utility_type === "water") return "Invoice"
   if (device.kind === "smart_plug") return "Smart plug"

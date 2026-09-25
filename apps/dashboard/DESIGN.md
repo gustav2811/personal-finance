@@ -93,7 +93,9 @@ Default controls are the registry sizes (`h-8` default, `h-7` sm). Transaction r
 
 `AppShell` owns auth, the sidebar, and theme. It does not load page data. Each feature exports `getXData()` / `loadXData()` and a feature-specific type. `DataGate` takes that loader. `load` must be stable: a module function or `useCallback`. An inline function refetches on every render. Do not add fields to a shared dashboard bag. Pages own their header and filters. The sidebar does not host range controls. Membership is `finance.household_members`, checked for presentation through `finance_caller_membership_v1`. Row-level policies remain the authorization boundary.
 
-`lib/supabase/database.types.ts` is generated. Do not edit it by hand. Regenerate from the finance-data project for `public`, `consumption`, and `finance`. Row aliases live in `lib/supabase/rows.ts`. `finance_caller_membership_v1` is in this PR's migration and is not on the remote database yet, so the generated file does not include it. The call site asserts that name until the migration is applied and types are regenerated.
+`lib/supabase/database.types.ts` is generated. Do not edit it by hand. Regenerate from the finance-data project for `public`, `consumption`, and `finance`. Full row aliases and the dashboard projections live in `lib/supabase/rows.ts`. `finance_caller_membership_v1` is in this PR's migration and is not on the remote database yet, so the generated file does not include it. The call site asserts that name until the migration is applied and types are regenerated.
+
+Operational reads name their columns. Do not use `select("*")` on feeds the dashboard renders. A new column, especially metadata or a source blob, must be opted into. `count` queries select `id` with `head: true`.
 
 ```text
 Household
@@ -159,4 +161,5 @@ turn every state into a badge
 turn every section into a card
 put page filters in the sidebar
 couple a domain fact to a literal colour
+select * on an operational feed
 ```

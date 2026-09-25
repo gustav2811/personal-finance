@@ -7,14 +7,14 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { latestTimestampForDevice, sourceKind } from "@/domain/consumption/model"
-import type { DeviceRow, ReadingRow } from "@/lib/supabase/rows"
+import type { DeviceRead, ReadingRead } from "@/lib/supabase/rows"
 
 export function SourceList({
   devices,
   readings,
 }: {
-  devices: DeviceRow[]
-  readings: ReadingRow[]
+  devices: DeviceRead[]
+  readings: ReadingRead[]
 }) {
   if (devices.length === 0) {
     return <p className="type-body text-muted-foreground">No devices connected yet.</p>

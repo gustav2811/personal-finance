@@ -1,12 +1,12 @@
-import type { DeviceRow, IngestionRunRow, ReadingRow } from "@/lib/supabase/rows"
+import type { DeviceRead, IngestionRunRead, ReadingRead } from "@/lib/supabase/rows"
 import { getBrowserClient, type BrowserClient } from "@/lib/supabase/browser"
 import { isLocalPreview, readLocal } from "@/lib/supabase/local"
 import { readDevices, readIngestionRuns, readReadings } from "@/lib/supabase/read"
 
 export type SourcesData = {
-  devices: DeviceRow[]
-  readings: ReadingRow[]
-  ingestionRuns: IngestionRunRow[]
+  devices: DeviceRead[]
+  readings: ReadingRead[]
+  ingestionRuns: IngestionRunRead[]
   fetchedAt: string
 }
 

@@ -17,7 +17,7 @@ import {
   isWithinRange,
   type RangeDays,
 } from "@/domain/consumption/model"
-import type { LedgerRow } from "@/lib/supabase/rows"
+import type { LedgerRead } from "@/lib/supabase/rows"
 
 function rangeLabel(days: RangeDays): string {
   if (days === 365) return "Last year"
@@ -144,7 +144,7 @@ function OverviewBody({ data, days }: { data: OverviewData; days: RangeDays }) {
   )
 }
 
-function latestWater(entries: LedgerRow[], days: RangeDays) {
+function latestWater(entries: LedgerRead[], days: RangeDays) {
   return entries
     .filter(
       (entry) =>

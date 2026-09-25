@@ -1,11 +1,11 @@
-import type { DeviceRow, ReadingRow } from "@/lib/supabase/rows"
+import type { DeviceRead, ReadingRead } from "@/lib/supabase/rows"
 import { getBrowserClient, type BrowserClient } from "@/lib/supabase/browser"
 import { isLocalPreview, readLocal } from "@/lib/supabase/local"
 import { readDevices, readReadings } from "@/lib/supabase/read"
 
 export type EnergyData = {
-  devices: DeviceRow[]
-  readings: ReadingRow[]
+  devices: DeviceRead[]
+  readings: ReadingRead[]
   fetchedAt: string
 }
 

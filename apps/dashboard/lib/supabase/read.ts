@@ -1,13 +1,23 @@
 import type { BrowserClient } from "./browser"
 import type {
-  DeviceRow,
-  IngestionRunRow,
-  LedgerRow,
-  ReadingRow,
-  SnapshotRow,
+  DeviceRead,
+  IngestionRunRead,
+  LedgerRead,
+  ReadingRead,
+  SnapshotRead,
 } from "./rows"
 
 const FROM_DATE = () => new Date(Date.now() - 366 * 24 * 60 * 60 * 1000).toISOString()
+
+const DEVICE_SELECT =
+  "id,source,external_id,kind,name,utility_type,location,timezone,active_from,active_to"
+const READING_SELECT =
+  "id,device_id,source,source_record_id,period_start,period_end,metric,measurement_target,value,unit,quality"
+const LEDGER_SELECT =
+  "id,device_id,source,utility_type,entry_type,direction,amount,currency,quantity,occurred_at,posted_at,description"
+const INGESTION_SELECT =
+  "id,source,runner,status,error,started_at,finished_at,rows_fetched,rows_written"
+const SNAPSHOT_SELECT = "account_id,date,amount_cents,currency_code"
 
 function assertOk(error: { message?: string } | null, source: string): void {
   if (error) {
@@ -19,43 +29,43 @@ export function windowStart(): string {
   return FROM_DATE()
 }
 
-export async function readDevices(client: BrowserClient): Promise<DeviceRow[]> {
+export async function readDevices(client: BrowserClient): Promise<DeviceRead[]> {
   const { data, error } = await client
     .schema("consumption")
     .from("devices")
-    .select("*")
+    .select(DEVICE_SELECT)
     .order("name")
   assertOk(error, "device")
   return data ?? []
 }
 
-export async function readReadings(client: BrowserClient): Promise<ReadingRow[]> {
+export async function readReadings(client: BrowserClient): Promise<ReadingRead[]> {
   const { data, error } = await client
     .schema("consumption")
     .from("readings")
-    .select("*")
+    .select(READING_SELECT)
     .gte("period_start", windowStart())
     .order("period_start")
   assertOk(error, "reading")
   return data ?? []
 }
 
-export async function readLedger(client: BrowserClient): Promise<LedgerRow[]> {
+export async function readLedger(client: BrowserClient): Promise<LedgerRead[]> {
   const { data, error } = await client
     .schema("consumption")
     .from("ledger_entries")
-    .select("*")
+    .select(LEDGER_SELECT)
     .gte("occurred_at", windowStart())
     .order("occurred_at")
   assertOk(error, "ledger")
   return data ?? []
 }
 
-export async function readIngestionRuns(client: BrowserClient): Promise<IngestionRunRow[]> {
+export async function readIngestionRuns(client: BrowserClient): Promise<IngestionRunRead[]> {
   const { data, error } = await client
     .schema("consumption")
     .from("ingestion_runs")
-    .select("*")
+    .select(INGESTION_SELECT)
     .order("started_at", { ascending: false })
     .limit(100)
   assertOk(error, "ingestion")
@@ -64,10 +74,10 @@ export async function readIngestionRuns(client: BrowserClient): Promise<Ingestio
 
 export async function readLatestSnapshot(
   client: BrowserClient,
-): Promise<{ snapshot: SnapshotRow | null; error: string | null }> {
+): Promise<{ snapshot: SnapshotRead | null; error: string | null }> {
   const { data, error } = await client
     .from("snapshots")
-    .select("*")
+    .select(SNAPSHOT_SELECT)
     .gte("date", windowStart())
     .order("date", { ascending: false })
     .limit(1)

@@ -1,13 +1,13 @@
-import type { DeviceRow, LedgerRow, ReadingRow, SnapshotRow } from "@/lib/supabase/rows"
+import type { DeviceRead, LedgerRead, ReadingRead, SnapshotRead } from "@/lib/supabase/rows"
 import { getBrowserClient, type BrowserClient } from "@/lib/supabase/browser"
 import { isLocalPreview, readLocal } from "@/lib/supabase/local"
 import { readDevices, readLatestSnapshot, readLedger, readReadings } from "@/lib/supabase/read"
 
 export type OverviewData = {
-  devices: DeviceRow[]
-  readings: ReadingRow[]
-  ledgerEntries: LedgerRow[]
-  financialSnapshots: SnapshotRow[]
+  devices: DeviceRead[]
+  readings: ReadingRead[]
+  ledgerEntries: LedgerRead[]
+  financialSnapshots: SnapshotRead[]
   fetchedAt: string
 }
 
