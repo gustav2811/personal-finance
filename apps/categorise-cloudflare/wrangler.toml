@@ -18,7 +18,7 @@ crons = ["*/15 * * * *"]
 
 [vars]
 CLASSIFIER_MODE = "shadow"
-CLASSIFIER_VERSION = "3"
+CLASSIFIER_VERSION = "4"
 AI_GATEWAY_ID = "finance-ai-gateway"
 FINWISE_BASE_URL = "https://api.finwiseapp.io"
 POLL_LOOKBACK_DAYS = "14"

@@ -93,14 +93,55 @@ describe("corrections", () => {
       }),
     ).toBe(true);
     expect(
-      mayAutoApply({ mode: "shadow", accept: true, uncategorised: true, kind: "external_label" }),
+      mayAutoApply({
+        mode: "shadow",
+        accept: true,
+        kind: "external_label",
+        movementLike: false,
+        predictedCategoryId: "b",
+        currentCategoryId: "a",
+      }),
     ).toBe(false);
     expect(
-      mayAutoApply({ mode: "auto", accept: true, uncategorised: true, kind: "human_correction" }),
+      mayAutoApply({
+        mode: "auto",
+        accept: true,
+        kind: "human_correction",
+        movementLike: false,
+        predictedCategoryId: "b",
+        currentCategoryId: "a",
+      }),
     ).toBe(false);
     expect(
-      mayAutoApply({ mode: "auto", accept: true, uncategorised: true, kind: "external_label" }),
+      mayAutoApply({
+        mode: "auto",
+        accept: true,
+        kind: "external_label",
+        movementLike: true,
+        predictedCategoryId: "b",
+        currentCategoryId: "a",
+      }),
     ).toBe(false);
+    expect(
+      mayAutoApply({
+        mode: "auto",
+        accept: true,
+        kind: "external_label",
+        movementLike: false,
+        predictedCategoryId: "a",
+        currentCategoryId: "a",
+      }),
+    ).toBe(false);
+    expect(
+      mayAutoApply({
+        mode: "auto",
+        accept: true,
+        kind: "external_label",
+        movementLike: false,
+        predictedCategoryId: "b",
+        currentCategoryId: "a",
+      }),
+    ).toBe(true);
   });
 });
 

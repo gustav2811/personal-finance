@@ -16,7 +16,7 @@ Cloudflare's `ai-gateway-provider` (docs, 20 Apr 2026) only adapts language mode
 
 ## Flow
 
-V1 short-circuited on history and rules. That contaminated the threshold curve, because those sources are only about 60% and 53% precise. Hybrid and JEV modes now always call JEV. History, rules, FinWise's original category, account-pair context, and nearest examples are evidence, not a final decision. `mayAutoApply` returns false. The deployed worker is still shadow and has not been redeployed with this change.
+V1 short-circuited on history and rules. That contaminated the threshold curve, because those sources are only about 60% and 53% precise. Hybrid and JEV modes now always call JEV. History, rules, FinWise's original category, account-pair context, and nearest examples are evidence, not a final decision. `mayAutoApply` writes only in `auto` mode, and only for an accepted non-movement prediction that differs from the current category. Human corrections, our own writes, and movement-like rows are never auto-written. `CLASSIFIER_MODE=shadow` remains the kill switch.
 
 ## V2 measurement
 
@@ -113,4 +113,4 @@ Rollback: mode is already shadow, so there are no category writes to undo. To st
 
 ## Recommendation
 
-Do not enable `auto`. FinWise's original category is a slightly stronger match to the cleaned label than this hybrid, and the best selective precision observed was about 88% at under half coverage. Next evidence that would change that: a merchant key that does not collapse unrelated counterparties, a correction log from a few weeks of shadow mode, and a retune that actually clears 98% precision on a fresh later window.
+Do not enable `auto` yet. On the frozen April–June gold overlay, accepted non-movement predictions are 93.9% precise, but every accepted prediction that differs from the current category is wrong (17/17). Those are the only rows a write would touch. Movement stays audit-only until an event reconciler exists.

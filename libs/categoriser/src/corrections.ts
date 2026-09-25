@@ -36,11 +36,17 @@ export function observeCategoryChange(input: {
 export function mayAutoApply(input: {
   mode: string;
   accept: boolean;
-  uncategorised: boolean;
   kind: ObservationKind;
+  movementLike: boolean;
+  predictedCategoryId: string | null;
+  currentCategoryId: string | null;
 }): boolean {
-  void input;
-  return false;
+  if (input.mode !== "auto") return false;
+  if (!input.accept) return false;
+  if (input.kind === "human_correction" || input.kind === "our_write") return false;
+  if (input.movementLike) return false;
+  if (!input.predictedCategoryId) return false;
+  return input.predictedCategoryId !== input.currentCategoryId;
 }
 
 export function shouldSkipRewrite(input: {

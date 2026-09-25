@@ -11,8 +11,10 @@ import {
   resolveRelations,
   selectCandidates,
   notionalUsd,
+  isMovement,
   mayAutoApply,
   observeCategoryChange,
+  shouldSkipRewrite,
   toFeatures,
   txFeatureHash,
   type AccountSemantic,
@@ -234,15 +236,23 @@ export async function runClassifier(env: ClassifierEnv): Promise<RunSummary> {
 
     let applied = 0;
     const predictedId = decision.categoryName ? byName.get(decision.categoryName) ?? null : null;
-    const uncategorised = !txn.transactionCategoryId;
+    const movementLike = isMovement(relation.nature);
+    const skipRewrite = shouldSkipRewrite({
+      kind,
+      predictedCategoryId: predictedId,
+      currentCategoryId: txn.transactionCategoryId,
+    });
     if (
+      predictedId &&
+      !skipRewrite &&
       mayAutoApply({
         mode,
         accept: decision.accept,
-        uncategorised,
         kind,
-      }) &&
-      predictedId
+        movementLike,
+        predictedCategoryId: predictedId,
+        currentCategoryId: txn.transactionCategoryId,
+      })
     ) {
       await finwise.updateCategory(txn.id, predictedId);
       await env.DB.prepare(
