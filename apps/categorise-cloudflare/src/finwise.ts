@@ -40,12 +40,32 @@ export class FinwiseHttp {
     return response.json() as Promise<T>;
   }
 
-  listRecent(fromDate: string, pageSize: number): Promise<FinwiseTxn[]> {
-    const query = new URLSearchParams({
-      filters: JSON.stringify({ fromDate, excludeArchived: true }),
-      pagination: JSON.stringify({ pageNumber: 1, pageSize }),
-    });
-    return this.request<FinwiseTxn[]>(`/transactions?${query.toString()}`);
+  async listRecent(fromDate: string, pageSize: number, maxPages = 5): Promise<FinwiseTxn[]> {
+    const out: FinwiseTxn[] = [];
+    for (let page = 1; page <= maxPages; page++) {
+      const query = new URLSearchParams({
+        filters: JSON.stringify({ fromDate, excludeArchived: true }),
+        pagination: JSON.stringify({ pageNumber: page, pageSize }),
+      });
+      const batch = await this.request<FinwiseTxn[]>(`/transactions?${query.toString()}`);
+      out.push(...batch);
+      if (batch.length < pageSize) break;
+    }
+    return out;
+  }
+
+  async listMerchants(): Promise<Map<string, string>> {
+    const names = new Map<string, string>();
+    for (let page = 1; page <= 4; page++) {
+      const query = new URLSearchParams({
+        pagination: JSON.stringify({ pageNumber: page, pageSize: 100 }),
+      });
+      const batch = await this.request<{ id: string; name: string }[]>(`/merchants?${query.toString()}`);
+      if (!Array.isArray(batch) || batch.length === 0) break;
+      for (const merchant of batch) names.set(merchant.id, merchant.name);
+      if (batch.length < 100) break;
+    }
+    return names;
   }
 
   listCategories(): Promise<FinwiseCategory[]> {
@@ -66,9 +86,9 @@ export class FinwiseHttp {
   }
 }
 
-export function merchantNameOf(tx: FinwiseTxn): string | null {
+export function merchantNameOf(tx: FinwiseTxn, merchants?: ReadonlyMap<string, string>): string | null {
   const named = tx as FinwiseTxn & { merchantName?: string | null };
-  return named.merchantName ?? tx.merchant?.name ?? null;
+  return named.merchantName ?? tx.merchant?.name ?? (tx.merchantId ? merchants?.get(tx.merchantId) ?? null : null);
 }
 
 export function signedAmount(tx: FinwiseTxn): number {

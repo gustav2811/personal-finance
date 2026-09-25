@@ -104,6 +104,100 @@ export function bestThreshold(
   return ok[0] ?? null;
 }
 
+export function labelledAccuracy(
+  rows: readonly { actual: string; predicted: string | null }[],
+): number {
+  if (rows.length === 0) return 0;
+  return rows.filter((row) => row.predicted === row.actual).length / rows.length;
+}
+
+export interface PairedLift {
+  n: number;
+  accuracyA: number;
+  accuracyB: number;
+  accuracyDelta: number;
+  bothCorrect: number;
+  bothWrong: number;
+  aOnly: number;
+  bOnly: number;
+  mcnemar: number | null;
+  deltaCi95: [number, number];
+}
+
+export function pairedLift(
+  rows: readonly { actual: string; a: string | null; b: string | null }[],
+  seed = "paired",
+  draws = 1000,
+): PairedLift {
+  const n = rows.length;
+  const score = (pick: "a" | "b") =>
+    n === 0 ? 0 : rows.filter((row) => (pick === "a" ? row.a : row.b) === row.actual).length / n;
+  const accuracyA = score("a");
+  const accuracyB = score("b");
+  let bothCorrect = 0;
+  let bothWrong = 0;
+  let aOnly = 0;
+  let bOnly = 0;
+  for (const row of rows) {
+    const aHit = row.a === row.actual;
+    const bHit = row.b === row.actual;
+    if (aHit && bHit) bothCorrect += 1;
+    else if (!aHit && !bHit) bothWrong += 1;
+    else if (aHit) aOnly += 1;
+    else bOnly += 1;
+  }
+  const discordant = aOnly + bOnly;
+  const mcnemar = discordant === 0 ? null : ((aOnly - bOnly) ** 2) / discordant;
+  const rng = mulberry32(hashSeed(seed));
+  const deltas: number[] = [];
+  for (let draw = 0; draw < draws; draw++) {
+    let aHits = 0;
+    let bHits = 0;
+    for (let i = 0; i < n; i++) {
+      const row = rows[Math.floor(rng() * n)];
+      if (!row) continue;
+      if (row.a === row.actual) aHits += 1;
+      if (row.b === row.actual) bHits += 1;
+    }
+    deltas.push(n === 0 ? 0 : (bHits - aHits) / n);
+  }
+  deltas.sort((a, b) => a - b);
+  const low = deltas[Math.floor(draws * 0.025)] ?? 0;
+  const high = deltas[Math.floor(draws * 0.975)] ?? 0;
+  return {
+    n,
+    accuracyA,
+    accuracyB,
+    accuracyDelta: accuracyB - accuracyA,
+    bothCorrect,
+    bothWrong,
+    aOnly,
+    bOnly,
+    mcnemar,
+    deltaCi95: [low, high],
+  };
+}
+
+function hashSeed(seed: string): number {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < seed.length; i++) {
+    hash ^= seed.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return hash >>> 0;
+}
+
+function mulberry32(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 export function confusionPairs(
   rows: readonly ScoredRow[],
   limit = 15,

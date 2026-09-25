@@ -9,7 +9,6 @@
     "libs/ingest-core",
     "apps/ingest-cloudflare",
     "apps/categorise-cloudflare",
-    "apps/dashboard",
     "libs/categoriser"
   ],
   "dependencies": {

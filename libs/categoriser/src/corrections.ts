@@ -39,13 +39,8 @@ export function mayAutoApply(input: {
   uncategorised: boolean;
   kind: ObservationKind;
 }): boolean {
-  return (
-    input.mode === "auto" &&
-    input.accept &&
-    input.uncategorised &&
-    input.kind !== "human_correction" &&
-    input.kind !== "our_write"
-  );
+  void input;
+  return false;
 }
 
 export function shouldSkipRewrite(input: {

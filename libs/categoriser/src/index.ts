@@ -7,11 +7,13 @@ export { correctionFingerprint, toFeatures, txFeatureHash, type RawTransaction }
 export { buildCategoryOptions, buildJevRequest, CATEGORY_QUESTION, slugOf } from "./jev/build.js";
 export { createBindingJevModel, createCloudflareJevModel, type AiBinding, type CloudflareJevConfig } from "./jev/cloudflare.js";
 export { parseJevChoice, unwrapJevPayload } from "./jev/parse.js";
-export { accuracy, bestThreshold, classScores, confusionPairs, coverageCurve, macroF1, selective, weightedF1, type ScoredRow, type ThresholdPoint } from "./metrics.js";
+export { accuracy, bestThreshold, classScores, confusionPairs, coverageCurve, labelledAccuracy, macroF1, pairedLift, selective, weightedF1, type PairedLift, type ScoredRow, type ThresholdPoint } from "./metrics.js";
 export { amountBucket, categorySlug, directionOf, featureHash, fnv1a, memoTokens, merchantKey, normalizeText } from "./normalize.js";
 export { CONSERVATIVE_POLICY, historyAccepts, jevAccepts, probabilityMargin } from "./policy.js";
 export { DEFAULT_CATEGORY_RULES, matchFirstRule, signedAmount, type CategoryRule } from "./rules.js";
-export { merchantHoldout, temporalSplit } from "./splits.js";
+export { isMovement, resolveRelations, type AccountLookup, type ResolvedRelation, type TransactionNature } from "./relations.js";
+export { buildContrastiveJevRequest, buildRetrieval, selectCandidates, type CandidateSet, type RetrievalIndex, type SignatureStat } from "./retrieve.js";
+export { DEV_END, DEV_START, SACRED_START, merchantHoldout, sampleStratifiedSeeded, temporalSplit } from "./splits.js";
 export type {
   AcceptancePolicy,
   CategoryOption,

@@ -62,25 +62,20 @@ export async function classifyTransaction(input: {
   model?: DecisionModel | null;
   jevRequest?: { state: unknown; questions: Record<string, unknown> };
 }): Promise<ClassificationDecision> {
-  const corrected = input.corrections.get(correctionFingerprint(input.tx));
-  if (corrected && (input.mode === "hybrid" || input.mode === "history")) {
-    return named(corrected, input.categories, "correction", 1, true);
-  }
-
-  if (input.mode === "history" || input.mode === "hybrid") {
+  if (input.mode === "history") {
+    const corrected = input.corrections.get(correctionFingerprint(input.tx));
+    if (corrected) return named(corrected, input.categories, "correction", 1, true);
     const stat = input.evidence.byMerchant.get(input.tx.merchantKey);
     if (stat?.majority && historyAccepts(stat, input.policy)) {
       return named(stat.majority, input.categories, "history", stat.purity, true);
     }
-    if (input.mode === "history") return emptyDecision("abstain", false);
+    return emptyDecision("abstain", false);
   }
 
-  if (input.mode === "rules" || input.mode === "hybrid") {
+  if (input.mode === "rules") {
     const rule = matchFirstRule(input.tx);
-    if (rule) {
-      return named(rule.categoryName, input.categories, "rule", 1, true);
-    }
-    if (input.mode === "rules") return emptyDecision("abstain", false);
+    if (rule) return named(rule.categoryName, input.categories, "rule", 1, true);
+    return emptyDecision("abstain", false);
   }
 
   if (!input.model || !input.jevRequest) return emptyDecision("abstain", false);

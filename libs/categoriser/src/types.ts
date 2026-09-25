@@ -10,17 +10,21 @@ export type PredictionSource =
 export interface TxFeatures {
   id: string;
   date: string;
+  merchantId: string | null;
   merchantKey: string;
   descriptionNorm: string;
   notesNorm: string;
   direction: Direction;
   amountBucket: string;
   amountAbs: number;
+  signedAmount: number;
   isTransfer: boolean;
   categoryId: string | null;
   categoryName: string | null;
   originalCategoryId: string | null;
+  finwiseCategoryName: string | null;
   accountId: string;
+  accountName: string;
   needsReview: boolean;
   updatedAt: string | null;
 }

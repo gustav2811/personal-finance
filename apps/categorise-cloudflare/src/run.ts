@@ -24,6 +24,8 @@ export interface ClassifierEnv {
   AI_GATEWAY_ID: string;
   POLL_LOOKBACK_DAYS: string;
   MAX_PER_RUN: string;
+  SUPABASE_URL?: string;
+  SUPABASE_SERVICE_KEY?: string;
 }
 
 export interface RunSummary {
@@ -95,9 +97,10 @@ export async function runClassifier(env: ClassifierEnv): Promise<RunSummary> {
     mode,
   };
 
-  const [categories, txns] = await Promise.all([
+  const [categories, txns, merchants] = await Promise.all([
     finwise.listCategories(),
-    finwise.listRecent(isoDaysAgo(lookback), 20),
+    finwise.listRecent(isoDaysAgo(lookback), 50),
+    finwise.listMerchants(),
   ]);
   const options = buildCategoryOptions(categories);
   const byName = new Map(options.map((category) => [category.name, category.id]));
@@ -111,7 +114,8 @@ export async function runClassifier(env: ClassifierEnv): Promise<RunSummary> {
       date: txn.date,
       description: txn.description,
       amount: signedAmount(txn),
-      merchantName: merchantNameOf(txn),
+      merchantId: txn.merchantId,
+      merchantName: merchantNameOf(txn, merchants),
       notes: txn.notes,
       categoryId: txn.transactionCategoryId,
       categoryName: options.find((c) => c.id === txn.transactionCategoryId)?.name ?? null,
@@ -146,7 +150,24 @@ export async function runClassifier(env: ClassifierEnv): Promise<RunSummary> {
         : null,
       writes: writeRows,
     });
-    if (kind === "human_correction" && existing) {
+    const categoryChanged = Boolean(
+      existing && existing.observed_category_id !== txn.transactionCategoryId,
+    );
+    if (categoryChanged && txn.transactionCategoryId) {
+      const name = options.find((c) => c.id === txn.transactionCategoryId)?.name ?? null;
+      await recordCategoryEvent(env, {
+        transactionId: txn.id,
+        categoryId: txn.transactionCategoryId,
+        categoryName: name,
+        previousCategoryId: existing?.observed_category_id ?? null,
+        merchantId: txn.merchantId,
+        accountId: txn.accountId,
+        descriptionFingerprint: correctionFingerprint(features),
+        observedAt: txn.updatedAt,
+      });
+      summary.corrections += 1;
+    }
+    if (kind === "human_correction" && existing && !categoryChanged) {
       const name = options.find((c) => c.id === txn.transactionCategoryId)?.name;
       if (name) {
         await env.DB.prepare(
@@ -159,7 +180,7 @@ export async function runClassifier(env: ClassifierEnv): Promise<RunSummary> {
       summary.skipped += 1;
       continue;
     }
-    if (existing) {
+    if (existing && !categoryChanged) {
       summary.skipped += 1;
       continue;
     }
@@ -254,6 +275,44 @@ export async function runClassifier(env: ClassifierEnv): Promise<RunSummary> {
   }
 
   return summary;
+}
+
+async function recordCategoryEvent(
+  env: ClassifierEnv,
+  event: {
+    transactionId: string;
+    categoryId: string;
+    categoryName: string | null;
+    previousCategoryId: string | null;
+    merchantId: string | null;
+    accountId: string;
+    descriptionFingerprint: string;
+    observedAt: string | null;
+  },
+): Promise<void> {
+  const url = env.SUPABASE_URL?.trim();
+  const key = env.SUPABASE_SERVICE_KEY?.trim();
+  if (!url || !key) return;
+  await fetch(`${url}/rest/v1/classifier_category_events`, {
+    method: "POST",
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal",
+    },
+    body: JSON.stringify({
+      transaction_id: event.transactionId,
+      observed_at: event.observedAt ?? new Date().toISOString(),
+      category_id: event.categoryId,
+      category_name: event.categoryName,
+      previous_category_id: event.previousCategoryId,
+      merchant_id: event.merchantId,
+      account_id: event.accountId,
+      description_fingerprint: event.descriptionFingerprint,
+      source: "poll",
+    }),
+  });
 }
 
 export function logSummary(summary: RunSummary): void {

@@ -16,17 +16,25 @@ Cloudflare's `ai-gateway-provider` (docs, 20 Apr 2026) only adapts language mode
 
 ## Flow
 
-`correction fingerprint -> high-purity merchant history -> hand rules -> JEV choice -> accept or abstain`
+V1 short-circuited on history and rules. That contaminated the threshold curve, because those sources are only about 60% and 53% precise. Hybrid and JEV modes now always call JEV. History, rules, FinWise's original category, account-pair context, and nearest examples are evidence, not a final decision. `mayAutoApply` returns false. The deployed worker is still shadow and has not been redeployed with this change.
 
-That order was measured, not assumed. History and rules are not precise enough to auto-apply. JEV is the generaliser. It still does not clear the auto-apply bar.
+## V2 measurement
 
-Shadow mode records the decision and does not PATCH FinWise. `suggest` and `auto` exist in code. `auto` PATCHes only when the mode is `auto`, the decision is accepted, the transaction has no category, and the change is not a human correction or our own write. The deployed var is `CLASSIFIER_MODE=shadow`.
+Development window only: 2026-04-01 to 2026-07-01. The post-2026-07-01 set was not reused, and transactions on or after 2026-09-11 were not sent to JEV (86 rows left untouched).
+
+On a seeded natural sample of 80, candidate-restricted JEV with relational state was 75.0% accurate (macro F1 0.71) against 56.3% for 45-way descriptions. The paired lift was +18.8 points, 95% bootstrap interval 10 to 29 points, McNemar 13.2. FinWise's original category on the 62 comparable rows was 74.2%. The same rows were 80.6% for v2, but that interval includes zero.
+
+A second April–June slice, not used to design that prompt, tied: relational state with every category was 76.3%, and the same state restricted to retrieved candidates was also 76.3% (2 disagreements each way). Candidate restriction is not the accuracy bottleneck.
+
+A third slice was 83.8% for JEV alone. Adding a Llama business-type hint on low-support merchants lowered that to 80.0% (3 losses, 0 wins). Do not adopt the hint.
+
+Across the three slices JEV-alone accuracy is about 75–84%, not 90%. Of 58 development rows whose true category is missing from the candidate set, 37 are an unseen merchant and 19 are a seen merchant that has never carried that category. A pure account-pair rule (support ≥ 5, purity 1) was 25/25 on Jan–Mar and 10/11 on the third slice, and combining it with JEV did not raise third-slice accuracy. Amount-only pairs disagree with the other side's label 42 of 153 times, so a pair stays evidence, not a shared label. Work Eats versus Eating Out, and Transfers versus Savings or Investments, are the remaining structural misses. Those need accumulated correction events, not another prompt.
 
 ## FinWise
 
 `PATCH /transactions/:id` is real. A notes update and a category update were applied and restored. `originalTransactionCategoryId` did not change on either write. It is FinWise's original category, not "the value before our PATCH" and not "the value before a human edit". Where it is present, agreement with the cleaned `transactionCategoryId` is the FinWise baseline.
 
-There is no transaction webhook in the API index, and the MCP connection is request/response only. The worker polls the last 14 days, 3 transactions per cron, every 15 minutes. Repeats are skipped with `(transaction_id, classifier_version, feature_hash)`.
+There is no transaction webhook in the API index, and the MCP connection is request/response only. The worker polls the last 14 days. It pages past the first 20 rows so an already-audited head cannot hide an older unprocessed transaction. A category change since the last audit is an observation, not a skip. New observations are appended to Supabase `classifier_category_events` when that secret is configured. They are not overwritten into one fingerprint row.
 
 There is no `GET /transactions/:id`. Use list filters.
 
