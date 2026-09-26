@@ -23,11 +23,11 @@ The shadcn design system is the visual authority. No charts, budgets, or status-
 
 THESIS: A quiet list of household movements, each with one working category. It refuses the status-pill admin table and the metric dashboard.
 
-OWN-WORLD: Neutral shadcn surfaces, Geist, tabular amounts, and semantic success, warning, info, and destructive used only as captions. The electric palette stays off this page.
+OWN-WORLD: Neutral shadcn surfaces. Electric cyan marks money in, shocking pink marks money out, electric blue marks review. Colour is never the only cue.
 
 STORY: The visitor sees the newest movement, changes the category in place, and moves on. Opening a row reads source and treatment. Review is one toggle, not a queue.
 
-FIRST VIEWPORT: Title Transactions. One toolbar: search, account, All or Review. The list owns the width and starts at the newest row. The inspector is absent until a row is chosen, then a right column above 1024px and a sheet below. Accept appears only when JEV differs.
+FIRST VIEWPORT: Title Transactions. Toolbar is All or Review, search, and a filter icon. The table owns the width. Opening a row opens one dialog. The row does not edit.
 
 FORM: Operational list inside the established design system, code-led, seed user-locked-brief.
 

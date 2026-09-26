@@ -79,63 +79,6 @@ export type TransactionFeedItem = {
   }
 }
 
-export type TransactionDetail = TransactionFeedItem & {
-  history: {
-    classifications: Array<{
-      id: string
-      categoryId: string
-      categoryName: string
-      decisionSource: string
-      status: string
-      confidence: number | null
-      reason: string | null
-      createdAt: string
-      confirmedAt: string | null
-      supersededAt: string | null
-      runId: string | null
-    }>
-    treatments: Array<{
-      id: string
-      isTransfer: boolean
-      excludeFromSpend: boolean
-      nature: string | null
-      decisionSource: string
-      status: string
-      legRole: string | null
-      createdAt: string
-      supersededAt: string | null
-    }>
-    runs: Array<{
-      id: string
-      classifier: string
-      classifierVersion: string
-      modelId: string | null
-      status: string
-      startedAt: string
-      completedAt: string | null
-      confidence: number | null
-      margin: number | null
-      accepted: boolean | null
-      abstained: boolean
-      categoryName: string | null
-    }>
-    observations: Array<{
-      id: string
-      observedAt: string
-      sourceUpdatedAt: string | null
-      payloadHash: string
-    }>
-    eventLegs: Array<{
-      transactionId: string
-      role: string
-      description: string | null
-      amount: string
-      currencyCode: string
-      accountName: string
-    }>
-  }
-}
-
 export type CategoryOption = {
   id: string
   name: string
@@ -229,25 +172,31 @@ async function rpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
   return data as T
 }
 
-async function readRpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
-  if (process.env.NODE_ENV !== "production") {
-    const supabase = getBrowserClient()
-    const { data: sessionData } = await supabase.auth.getSession()
-    if (!sessionData.session) {
-      const response = await fetch("/api/transactions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, args }),
-      })
-      const body = (await response.json()) as { error?: string; data?: T }
-      if (!response.ok || body.error) {
-        throw friendlyError(body.error ?? "The ledger could not be read.")
-      }
-      return body.data as T
-    }
+async function readLocal<T>(name: string, args: Record<string, unknown>): Promise<T> {
+  const response = await fetch("/api/transactions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, args }),
+  })
+  const body = (await response.json()) as { error?: string; data?: T }
+  if (!response.ok || body.error) {
+    throw friendlyError(body.error ?? "The ledger could not be read.")
   }
+  return body.data as T
+}
+
+async function readRpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
   if (!READ_RPCS.has(name)) {
     throw new Error("Unsupported ledger read.")
+  }
+  if (process.env.NODE_ENV !== "production") {
+    const hasBrowserConfig = Boolean(
+      process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+    )
+    if (!hasBrowserConfig) return readLocal<T>(name, args)
+    const supabase = getBrowserClient()
+    const { data: sessionData } = await supabase.auth.getSession()
+    if (!sessionData.session) return readLocal<T>(name, args)
   }
   return rpc<T>(name, args)
 }
@@ -279,12 +228,6 @@ export async function listTransactions(input: {
     items: Array.isArray(record.items) ? (record.items as TransactionFeedItem[]) : [],
     nextCursor: typeof record.nextCursor === "string" ? record.nextCursor : null,
   }
-}
-
-export async function getTransaction(transactionId: string): Promise<TransactionDetail> {
-  return readRpc<TransactionDetail>("finance_get_transaction_v1", {
-    p_transaction_id: transactionId,
-  })
 }
 
 export async function getTransactionFilters(): Promise<{

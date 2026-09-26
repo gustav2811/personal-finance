@@ -139,11 +139,11 @@ Money in and money out are signed and named for screen readers. Colour is not th
 
 Tables (`components/ui/table`) when columns are compared: readings, ledger entries, sources, ingestion.
 
-Operational lists when the object is the row and the action is inline: transactions. Selection opens an inspector. Wide: feed plus panel. Narrow (`<1024px`): sheet. Category changes in place through `Combobox`. Dialogs are for interruption, not for a single field.
+Transactions are a compact table: date, merchant, account, category, amount. The row does not edit. Opening a row opens one dialog for category and treatment. Icons carry account type, pending, and transfer. Do not put Accept or a category picker on every row.
 
 ## Feedback
 
-Optimistic overlay, inline pending (`Spinner`, `aria-busy` on the row), inline error, Undo on the row. No success modal. Do not disable the page while one row saves.
+Optimistic overlay, inline pending (`aria-busy` on the row), inline error, Undo in the dialog. No success modal. Do not disable the page while one row saves.
 
 ## Motion and access
 

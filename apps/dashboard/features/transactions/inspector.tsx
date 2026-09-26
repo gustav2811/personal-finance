@@ -1,37 +1,43 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, type ReactNode } from "react"
+import { ArrowLeftRight, Copy } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Skeleton } from "@/components/ui/skeleton"
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from "@/components/ui/combobox"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { shortDate } from "@/lib/format/date"
 import {
   setTransactionTreatment,
-  SignInRequiredError,
-  type LedgerActivity,
-  type TransactionDetail,
+  type CategoryOption,
   type TransactionFeedItem,
 } from "@/lib/transactions"
-import { commandId, formatAmount, moneyDirection, subject, words } from "./copy"
+import { commandId, formatAmount, moneyDirection, subject } from "./copy"
 
 export function Inspector({
-  activity,
-  detail,
-  detailError,
-  detailLoading,
+  categories,
+  categoryError,
   item,
-  onRetryDetail,
+  onClassify,
   onTreatmentSaved,
+  onUndo,
+  pending,
+  undo,
 }: {
-  activity: LedgerActivity | null
-  detail: TransactionDetail | undefined
-  detailError: string | null
-  detailLoading: boolean
+  categories: CategoryOption[]
+  categoryError: string | null
   item: TransactionFeedItem
-  onRetryDetail: () => void
+  onClassify: (category: CategoryOption) => void
   onTreatmentSaved: (item: TransactionFeedItem) => void
+  onUndo: () => void
+  pending: boolean
+  undo: boolean
 }) {
   const [isTransfer, setIsTransfer] = useState<boolean | null>(item.treatment.isTransfer)
   const [excludeFromSpend, setExcludeFromSpend] = useState<boolean | null>(
@@ -64,64 +70,71 @@ export function Inspector({
         transactionId: item.id,
       })
       onTreatmentSaved(result.item)
-      if (result.conflict) {
-        setTreatmentError("Treatment changed. Showing the current decision.")
-      }
+      setTreatmentError(result.conflict ? "Treatment changed. Showing the current decision." : null)
     } catch (error) {
-      setTreatmentError(
-        error instanceof Error ? error.message : "Treatment could not be saved.",
-      )
-      if (error instanceof SignInRequiredError) {
-        setTreatmentError(error.message)
-      }
+      setTreatmentError(error instanceof Error ? error.message : "Treatment could not be saved.")
     } finally {
       setSavingTreatment(false)
     }
   }
 
+  async function copyDescription() {
+    await navigator.clipboard.writeText(item.description)
+  }
+
   return (
-    <div className="space-y-6">
-      <header className="space-y-1 pr-8">
-        <h2 className="type-section-title">{subject(item)}</h2>
-        <p className="type-numeric text-base">
-          <span className="sr-only">{direction === "out" ? "Money out" : "Money in"}</span>
-          {formatAmount(item.amount, item.currencyCode)}
-        </p>
-        <p className="type-caption">
-          {shortDate(item.occurredOn)} · {item.account.name}
-        </p>
-      </header>
+    <div className="space-y-3">
+      <div className="flex items-start gap-2 pr-8">
+        <h2 className="min-w-0 flex-1 text-base font-medium text-balance">{subject(item)}</h2>
+        <Button aria-label="Copy description" onClick={() => void copyDescription()} size="icon-sm" variant="ghost">
+          <Copy />
+        </Button>
+      </div>
 
-      {detailLoading ? <Skeleton className="h-16 w-full" /> : null}
-      {detailError ? (
-        <p className="type-body-small text-destructive">
-          {detailError}{" "}
-          <Button onClick={onRetryDetail} size="sm" variant="ghost">
-            Retry
-          </Button>
-        </p>
-      ) : null}
-      {item.event ? (
-        <p className="type-body-small text-muted-foreground">
-          Part of {words(item.event.type)}, as {words(item.event.role)}. Treatment stays with the
-          event.
-        </p>
-      ) : null}
+      <div className="divide-y rounded-lg border">
+        <Fact label="Description" value={item.description} />
+        <Fact label="Merchant" value={item.merchant.name ?? "None"} />
+        <Fact label="Posted" value={shortDate(item.occurredOn)} />
+        <Fact label="Account" value={item.account.name} />
+        <Fact
+          label="Amount"
+          value={
+            <span className={direction === "in" ? "text-electric-cyan-700" : "text-shocking-pink-700"}>
+              <span className="sr-only">{direction === "out" ? "Money out" : "Money in"}</span>
+              {formatAmount(item.amount, item.currencyCode)}
+            </span>
+          }
+        />
+      </div>
 
-      <form
-        className="space-y-4"
-        onSubmit={(event) => {
-          event.preventDefault()
-          void saveTreatment()
-        }}
-      >
-        <div className="space-y-1">
-          <h3 className="type-label">Spend treatment</h3>
-          <p className="type-caption">This does not change the category.</p>
+      <div className="divide-y rounded-lg border">
+        <div className="grid grid-cols-[8rem_minmax(0,1fr)] items-center gap-3 px-3 py-2" data-category-for={item.id}>
+          <span className="text-muted-foreground">Category</span>
+          <Combobox
+            items={categories.map((category) => category.name)}
+            onValueChange={(value) => {
+              const category = categories.find((entry) => entry.name === value)
+              if (category) onClassify(category)
+            }}
+            value={item.category.name}
+          >
+            <ComboboxInput aria-label="Category" disabled={pending} placeholder="Uncategorised" showClear={false} />
+            <ComboboxContent>
+              <ComboboxEmpty>No category</ComboboxEmpty>
+              <ComboboxList>
+                {(name: string) => (
+                  <ComboboxItem key={name} value={name}>
+                    {name}
+                  </ComboboxItem>
+                )}
+              </ComboboxList>
+            </ComboboxContent>
+          </Combobox>
         </div>
-        <div className="space-y-1.5">
-          <Label>Transfer</Label>
+        <div className="grid grid-cols-[8rem_minmax(0,1fr)] items-center gap-3 px-3 py-2">
+          <span className="text-muted-foreground">Transfer</span>
           <ToggleGroup
+            aria-label="Transfer"
             onValueChange={(value) => {
               if (value === "yes" || value === "no") setIsTransfer(value === "yes")
             }}
@@ -131,87 +144,83 @@ export function Inspector({
             value={isTransfer == null ? "" : isTransfer ? "yes" : "no"}
             variant="outline"
           >
-            <ToggleGroupItem value="yes">Transfer</ToggleGroupItem>
-            <ToggleGroupItem value="no">Not a transfer</ToggleGroupItem>
+            <ToggleGroupItem value="no">No</ToggleGroupItem>
+            <ToggleGroupItem value="yes">
+              <ArrowLeftRight />
+              Yes
+            </ToggleGroupItem>
           </ToggleGroup>
         </div>
-        <div className="space-y-1.5">
-          <Label>Spend</Label>
+        <div className="grid grid-cols-[8rem_minmax(0,1fr)] items-center gap-3 px-3 py-2">
+          <span className="text-muted-foreground">Spend</span>
           <ToggleGroup
+            aria-label="Spend"
             onValueChange={(value) => {
-              if (value === "include" || value === "exclude") {
-                setExcludeFromSpend(value === "exclude")
-              }
+              if (value === "include" || value === "exclude") setExcludeFromSpend(value === "exclude")
             }}
             size="sm"
             spacing={0}
             type="single"
-            value={
-              excludeFromSpend == null ? "" : excludeFromSpend ? "exclude" : "include"
-            }
+            value={excludeFromSpend == null ? "" : excludeFromSpend ? "exclude" : "include"}
             variant="outline"
           >
             <ToggleGroupItem value="include">Include</ToggleGroupItem>
             <ToggleGroupItem value="exclude">Exclude</ToggleGroupItem>
           </ToggleGroup>
         </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor="treatment-nature">Nature</Label>
-          <Input
-            id="treatment-nature"
-            maxLength={80}
-            onChange={(event) => setNature(event.target.value)}
-            value={nature}
-          />
-        </div>
-        <Button
-          disabled={savingTreatment || isTransfer == null || excludeFromSpend == null}
-          size="sm"
-          type="submit"
-        >
-          {savingTreatment ? "Saving…" : "Save treatment"}
-        </Button>
+        {showNature(nature) ? (
+          <div className="grid grid-cols-[8rem_minmax(0,1fr)] items-center gap-3 px-3 py-2">
+            <span className="text-muted-foreground">Nature</span>
+            <span className="text-right">{nature}</span>
+          </div>
+        ) : null}
+      </div>
+      <div className="flex items-center justify-end gap-2">
+        {categoryError ? (
+          <p className="type-caption text-destructive" role="status">
+            {categoryError}
+          </p>
+        ) : null}
+        {undo ? (
+          <Button onClick={onUndo} size="sm" variant="ghost">
+            Undo
+          </Button>
+        ) : null}
+        {isTransfer == null || excludeFromSpend == null ? (
+          <p className="type-caption">Set transfer and spend before saving.</p>
+        ) : null}
         {treatmentError ? (
           <p className="type-caption text-destructive" role="status">
             {treatmentError}
           </p>
         ) : null}
-      </form>
-
-      <details className="space-y-2">
-        <summary className="type-label cursor-pointer">Source and classifier</summary>
-        <dl className="space-y-2 pt-2">
-          <Fact label="FinWise category" value={item.source.categoryName ?? "None recorded"} />
-          <Fact
-            label="Classifier"
-            value={
-              item.classifier.classifier
-                ? `${item.classifier.classifier} ${item.classifier.classifierVersion ?? ""} · ${item.classifier.state}`.trim()
-                : "Not run"
-            }
-          />
-          <Fact
-            label="FinWise sync"
-            value={activity?.lastFinwiseSyncAt ? shortDate(activity.lastFinwiseSyncAt) : "Not recorded"}
-          />
-          {detail?.history.eventLegs.map((leg) => (
-            <Fact
-              key={`${leg.transactionId}-${leg.role}`}
-              label={words(leg.role)}
-              value={`${leg.accountName}${leg.description ? ` · ${leg.description}` : ""}`}
-            />
-          ))}
-        </dl>
-      </details>
+        <Button
+          disabled={savingTreatment || isTransfer == null || excludeFromSpend == null}
+          onClick={() => void saveTreatment()}
+          size="sm"
+          title={
+            isTransfer == null || excludeFromSpend == null
+              ? "Set transfer and spend before saving."
+              : undefined
+          }
+        >
+          {savingTreatment ? "Saving…" : "Save"}
+        </Button>
+      </div>
     </div>
   )
 }
 
-function Fact({ label, value }: { label: string; value: string }) {
+function showNature(nature: string): boolean {
+  const value = nature.trim().toLowerCase()
+  return value !== "" && value !== "purchase" && value !== "other"
+}
+
+function Fact({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <div>
-      <dt className="type-caption">{label}</dt>
-      <dd className="type-body-small">{value}</dd>
+    <div className="grid grid-cols-[8rem_minmax(0,1fr)] items-baseline gap-3 px-3 py-2">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="text-right text-balance">{value}</span>
     </div>
   )
 }
