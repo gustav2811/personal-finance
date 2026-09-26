@@ -2,6 +2,7 @@
 
 import {
   Home,
+  List,
   Radio,
   Wallet,
   Zap,
@@ -34,6 +35,7 @@ type NavItem = {
 const HOUSEHOLD: NavItem[] = [
   { href: "/", icon: Home, label: "Overview" },
   { href: "/money", icon: Wallet, label: "Money" },
+  { href: "/transactions", icon: List, label: "Transactions" },
 ]
 
 const HOME: NavItem[] = [{ href: "/energy", icon: Zap, label: "Energy" }]

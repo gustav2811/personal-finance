@@ -15,6 +15,7 @@ features/overview/      page, queries.ts
 features/energy/
 features/money/
 features/sources/
+features/transactions/  ledger feed, inline category, inspector
 lib/supabase/           browser client and generated database types
 lib/format/             date and money
 app/dev/ui              dev-only proving ground. 404 in production.
@@ -101,6 +102,7 @@ Operational reads name their columns. Do not use `select("*")` on feeds the dash
 Household
   Overview        /
   Money           /money
+  Transactions    /transactions
 Home
   Energy          /energy
 Record
@@ -137,11 +139,11 @@ Money in and money out are signed and named for screen readers. Colour is not th
 
 Tables (`components/ui/table`) when columns are compared: readings, ledger entries, sources, ingestion.
 
-Operational lists when the object is the row and the action is inline: transactions. Selection opens an inspector. Wide: feed plus panel. Narrow (`<1024px`): sheet. Category changes in place through `Combobox`. Dialogs are for interruption, not for a single field.
+Transactions are a compact table: date, merchant, account, category, amount. The row does not edit. Opening a row opens one dialog for category and treatment, with previous and next. Review mode moves to the next row after a category is saved. Icons carry account type, pending, and transfer. Do not put Accept or a category picker on every row. Review is the database queue: disagreement, an unmatched proposal, no category, abstention, or failure. Agreement is quiet.
 
 ## Feedback
 
-Optimistic overlay, inline pending (`Spinner`, `aria-busy` on the row), inline error, Undo on the row. No success modal. Do not disable the page while one row saves.
+Optimistic overlay, inline pending (`aria-busy` on the row), inline error, Undo in the dialog. No success modal. Do not disable the page while one row saves.
 
 ## Motion and access
 

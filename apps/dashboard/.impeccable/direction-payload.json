@@ -81,7 +81,7 @@
         "vellum annotations",
         "instrument ticks"
       ],
-      "viewport": "A constellation-like yearly energy trace sits beside bright current facts; device and wallet signals orbit the same date spine.",
+      "viewport": "A constellation-like yearly energy trace sits beside bright current facts; device and wallet signals share the same date spine.",
       "risk": "The metaphor is familiar in data products; it must stay grounded in real household labels and precise units.",
       "wireframe": {
         "cols": 12,
@@ -103,7 +103,7 @@
             "h": 7
           },
           {
-            "label": "orbital source strip",
+            "label": "source strip",
             "x": 0,
             "y": 7,
             "w": 12,
