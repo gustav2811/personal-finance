@@ -14,38 +14,31 @@ set -a; source ../../.env; set +a
 yarn dev
 ```
 
-Local development intentionally skips the login screen and reads through a
-server-only data bridge. The bridge uses `SUPABASE_SERVICE_KEY` on the server;
-it is never sent to browser code. Production builds keep Google-only
-authentication and the RLS allowlist.
+Local and production use the same Supabase project. Both require a Google
+session. There is no service-role data bridge.
 
-Required local variables:
+Required variables:
 
 ```env
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
 ```
 
-## Supabase setup
+Do not put a Supabase secret or a FinWise key on the dashboard host.
 
-1. Apply the consumption migrations, including
-   `20260824170000_add_consumption_dashboard_read_policy.sql`.
-2. Add `consumption` to the project's exposed schemas in Supabase API settings.
-3. Enable Google as an Auth provider.
-4. Add the local and deployed dashboard URLs to Auth redirect URLs.
-5. Keep the service key server-side only for ingestion runners.
+## Sign-in
 
-The database policy is the real allowlist for dashboard data:
-`gustav@klingbiel.org` and `cara@klingbiel.org`. The client-side check only
-controls the experience after Google returns.
+Google is the only provider. `hd=klingbiel.org` is an account-chooser hint.
+Membership in `finance.household_members` is the allowlist. The server rejects
+unauthenticated requests before rendering, and Postgres RLS is the data boundary.
 
-For Google Cloud OAuth, add this exact authorized redirect URI to the Web
-client configured in Supabase:
+After the OAuth client exists, allow these redirect URLs:
 
 ```text
 https://irykogsfzzoexmnnthgc.supabase.co/auth/v1/callback
+http://localhost:3000/auth/callback
+https://household.klingbiel.org/auth/callback
 ```
 
-The app's `redirectTo` value is the local or Vercel site URL. It is the
-post-login destination, not the Google provider callback.
-
+The Google client redirect is the Supabase callback. The app callback is
+`/auth/callback` on localhost and production.

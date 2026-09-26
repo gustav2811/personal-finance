@@ -1,33 +1,21 @@
-import { createClient, type SupabaseClient } from "@supabase/supabase-js"
+import { createBrowserClient } from "@supabase/ssr"
+import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Database } from "./database.types"
+import { getSupabaseEnv, sessionCookieOptions } from "./env"
 
 export type BrowserClient = SupabaseClient<Database>
-
-function getBrowserConfig(): { supabaseUrl: string; publishableKey: string } {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-  if (!supabaseUrl) {
-    throw new Error(
-      "Missing required dashboard environment variable: NEXT_PUBLIC_SUPABASE_URL",
-    )
-  }
-  if (!publishableKey) {
-    throw new Error(
-      "Missing required dashboard environment variable: NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
-    )
-  }
-  return { publishableKey, supabaseUrl }
-}
 
 let browserClient: BrowserClient | undefined
 
 export function getBrowserClient(): BrowserClient {
   if (!browserClient) {
-    const { publishableKey, supabaseUrl } = getBrowserConfig()
-    browserClient = createClient<Database>(supabaseUrl, publishableKey, {
+    const { publishableKey, supabaseUrl } = getSupabaseEnv()
+    browserClient = createBrowserClient<Database>(supabaseUrl, publishableKey, {
+      cookieOptions: sessionCookieOptions,
       auth: {
         autoRefreshToken: true,
-        detectSessionInUrl: true,
+        detectSessionInUrl: false,
+        flowType: "pkce",
         persistSession: true,
       },
     })
