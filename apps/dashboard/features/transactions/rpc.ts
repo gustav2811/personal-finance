@@ -43,44 +43,15 @@ function friendlyError(message: string): Error {
   return new Error("The ledger could not complete that request.")
 }
 
-async function readLocal(name: string, args: Record<string, unknown>): Promise<Json> {
-  const response = await fetch("/api/transactions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, args }),
-  })
-  const body = (await response.json()) as { error?: string; data?: Json }
-  if (!response.ok || body.error) {
-    throw friendlyError(body.error ?? "The ledger could not be read.")
-  }
-  if (body.data === undefined) {
-    throw new Error("The ledger returned an unreadable response.")
-  }
-  return body.data
-}
-
-async function preferLocal(): Promise<boolean> {
-  if (process.env.NODE_ENV === "production") return false
-  const hasBrowserConfig = Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
-  )
-  if (!hasBrowserConfig) return true
-  const supabase = getBrowserClient()
-  const { data } = await supabase.auth.getSession()
-  return !data.session
-}
-
 export async function readTransactionList(
   args: Functions["finance_list_transactions_v1"]["Args"],
 ): Promise<Json> {
-  if (await preferLocal()) return readLocal("finance_list_transactions_v1", args)
   const { data, error } = await getBrowserClient().rpc("finance_list_transactions_v1", args)
   if (error) throw friendlyError(error.message)
   return data
 }
 
 export async function readTransactionFilters(): Promise<Json> {
-  if (await preferLocal()) return readLocal("finance_get_transaction_filters_v1", {})
   const { data, error } = await getBrowserClient().rpc("finance_get_transaction_filters_v1")
   if (error) throw friendlyError(error.message)
   return data
@@ -88,7 +59,6 @@ export async function readTransactionFilters(): Promise<Json> {
 
 export async function readTransactionDetail(transactionId: string): Promise<Json> {
   const args = { p_transaction_id: transactionId }
-  if (await preferLocal()) return readLocal("finance_get_transaction_v1", args)
   const { data, error } = await getBrowserClient().rpc("finance_get_transaction_v1", args)
   if (error) throw friendlyError(error.message)
   return data
@@ -110,8 +80,6 @@ export async function writeTransactionCategory(args: {
   [Key in keyof CategoryArgs]: CategoryArgs[Key] | null
 }): Promise<MutationResult> {
   const supabase = getBrowserClient()
-  const { data: sessionData } = await supabase.auth.getSession()
-  if (!sessionData.session) throw new SignInRequiredError()
   const { data, error } = await supabase.rpc(
     "finance_set_transaction_category_v1",
     args as CategoryArgs,
@@ -124,8 +92,6 @@ export async function writeTransactionUndo(args: {
   [Key in keyof UndoArgs]: UndoArgs[Key] | null
 }): Promise<MutationResult> {
   const supabase = getBrowserClient()
-  const { data: sessionData } = await supabase.auth.getSession()
-  if (!sessionData.session) throw new SignInRequiredError()
   const { data, error } = await supabase.rpc(
     "finance_undo_transaction_category_v1",
     args as UndoArgs,
@@ -138,8 +104,6 @@ export async function writeTransactionTreatment(args: {
   [Key in keyof TreatmentArgs]: TreatmentArgs[Key] | null
 }): Promise<MutationResult> {
   const supabase = getBrowserClient()
-  const { data: sessionData } = await supabase.auth.getSession()
-  if (!sessionData.session) throw new SignInRequiredError()
   const { data, error } = await supabase.rpc(
     "finance_set_transaction_treatment_v1",
     args as TreatmentArgs,

@@ -14,11 +14,13 @@ export function AuthScreen({
   denied = false,
   error,
   onSignIn,
+  onSignOut,
   signingIn,
 }: {
   denied?: boolean
   error: string | null
   onSignIn: () => void
+  onSignOut?: () => void
   signingIn: boolean
 }) {
   return (
@@ -34,7 +36,14 @@ export function AuthScreen({
           {denied ? (
             <Alert variant="destructive">
               <AlertTitle>This household is private.</AlertTitle>
-              <AlertDescription>Use an approved household Google account.</AlertDescription>
+              <AlertDescription>
+                Use an approved household Google account.
+                {onSignOut ? (
+                  <Button className="mt-3 w-full" onClick={onSignOut} variant="outline">
+                    Use a different account
+                  </Button>
+                ) : null}
+              </AlertDescription>
             </Alert>
           ) : (
             <Button className="w-full" disabled={signingIn} onClick={onSignIn}>

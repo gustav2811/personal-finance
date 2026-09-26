@@ -77,11 +77,9 @@ function NavGroup({ items, label }: { items: NavItem[]; label: string }) {
 
 export function AppSidebar({
   email,
-  isLocalPreview,
   onSignOut,
 }: {
   email: string
-  isLocalPreview: boolean
   onSignOut: () => void
 }) {
   return (
@@ -113,19 +111,15 @@ export function AppSidebar({
         <SidebarSeparator />
         <NavGroup items={RECORD} label="Record" />
         <div className="px-2 py-1 group-data-[collapsible=icon]:hidden">
-          <p className="type-caption truncate">
-            {isLocalPreview ? "Local preview" : email}
-          </p>
-          {isLocalPreview ? null : (
-            <Button
-              className="mt-2 w-full justify-start"
-              onClick={onSignOut}
-              size="sm"
-              variant="ghost"
-            >
-              Sign out
-            </Button>
-          )}
+          <p className="type-caption truncate">{email}</p>
+          <Button
+            className="mt-2 w-full justify-start"
+            onClick={onSignOut}
+            size="sm"
+            variant="ghost"
+          >
+            Sign out
+          </Button>
         </div>
       </SidebarFooter>
       <SidebarRail />

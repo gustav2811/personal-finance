@@ -1,6 +1,5 @@
 import type { DeviceRead, ReadingRead } from "@/lib/supabase/rows"
 import { getBrowserClient, type BrowserClient } from "@/lib/supabase/browser"
-import { isLocalPreview, readLocal } from "@/lib/supabase/local"
 import { readDevices, readReadings } from "@/lib/supabase/read"
 
 export type EnergyData = {
@@ -15,6 +14,5 @@ export async function loadEnergyData(client: BrowserClient): Promise<EnergyData>
 }
 
 export function getEnergyData(): Promise<EnergyData> {
-  if (isLocalPreview()) return readLocal<EnergyData>("energy")
   return loadEnergyData(getBrowserClient())
 }
