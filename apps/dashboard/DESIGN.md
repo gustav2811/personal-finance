@@ -15,6 +15,7 @@ features/overview/      page, queries.ts
 features/energy/
 features/money/
 features/sources/
+features/transactions/  ledger feed, inline category, inspector
 lib/supabase/           browser client and generated database types
 lib/format/             date and money
 app/dev/ui              dev-only proving ground. 404 in production.
@@ -101,6 +102,7 @@ Operational reads name their columns. Do not use `select("*")` on feeds the dash
 Household
   Overview        /
   Money           /money
+  Transactions    /transactions
 Home
   Energy          /energy
 Record
