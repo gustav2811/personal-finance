@@ -1,5 +1,5 @@
 import { localDateKey, shortDate } from "@/lib/format/date"
-import type { TransactionFeedItem } from "@/lib/transactions"
+import { REVIEW_QUEUE, type TransactionFeedItem } from "./model"
 
 export function relativeDay(occurredOn: string): string {
   const key = occurredOn.slice(0, 10)
@@ -28,11 +28,7 @@ export function moneyDirection(amount: string): "in" | "out" {
 }
 
 export function needsReview(item: TransactionFeedItem): boolean {
-  return (
-    (item.category.state === "proposed" && item.category.id != null) ||
-    item.reviewState === "classifier_failed" ||
-    item.classifier.state === "failed"
-  )
+  return (REVIEW_QUEUE as readonly string[]).includes(item.reviewState)
 }
 
 export function commandId(): string {

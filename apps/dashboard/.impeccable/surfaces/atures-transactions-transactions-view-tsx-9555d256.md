@@ -25,9 +25,9 @@ THESIS: A quiet list of household movements, each with one working category. It 
 
 OWN-WORLD: Neutral shadcn surfaces. Electric cyan marks money in, shocking pink marks money out, electric blue marks review. Colour is never the only cue.
 
-STORY: The visitor sees the newest movement, changes the category in place, and moves on. Opening a row reads source and treatment. Review is one toggle, not a queue.
+STORY: The visitor scans the newest movements, opens one dialog, sets the category, and moves to the next row. The row does not edit. Review is the same queue the database uses.
 
-FIRST VIEWPORT: Title Transactions. Toolbar is All or Review, search, and a filter icon. The table owns the width. Opening a row opens one dialog. The row does not edit.
+FIRST VIEWPORT: Title Transactions. Toolbar is All or Review, search, and a filter icon. The table owns the width. The row does not edit. Opening a row opens one dialog, with previous and next. Review mode moves to the next row after a category is saved.
 
 FORM: Operational list inside the established design system, code-led, seed user-locked-brief.
 

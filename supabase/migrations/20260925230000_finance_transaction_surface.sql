@@ -314,7 +314,9 @@ as $$
       when proposed.id is not null
         and mapped.owned_category_id is not null
         and proposed.category_id = mapped.owned_category_id then 'jev_agrees'
-      when proposed.id is not null then 'jev_disagrees'
+      when proposed.id is not null
+        and mapped.owned_category_id is not null then 'jev_disagrees'
+      when proposed.id is not null then 'jev_proposed'
       when latest_run.status = 'failed' then 'classifier_failed'
       when latest_run.status = 'succeeded' and proposed.id is null then 'classifier_abstained'
       when mapped.owned_category_id is null and tx.source_category_name_snapshot is null then 'unclassified'
@@ -421,7 +423,7 @@ begin
   end if;
   v_review := nullif(v_filters->>'reviewState', '');
   if v_review is not null and v_review not in (
-    'confirmed', 'jev_agrees', 'jev_disagrees', 'unclassified',
+    'confirmed', 'jev_agrees', 'jev_disagrees', 'jev_proposed', 'unclassified',
     'awaiting_classifier', 'classifier_abstained', 'classifier_failed'
   ) then
     raise exception 'unknown review state';
@@ -531,7 +533,9 @@ begin
             when proposed.id is not null
               and mapped.owned_category_id is not null
               and proposed.category_id = mapped.owned_category_id then 'jev_agrees'
-            when proposed.id is not null then 'jev_disagrees'
+            when proposed.id is not null
+              and mapped.owned_category_id is not null then 'jev_disagrees'
+            when proposed.id is not null then 'jev_proposed'
             when latest_run.status = 'failed' then 'classifier_failed'
             when latest_run.status = 'succeeded' and proposed.id is null then 'classifier_abstained'
             when mapped.owned_category_id is null and t.source_category_name_snapshot is null then 'unclassified'
@@ -975,7 +979,7 @@ begin
     'user',
     'confirmed',
     v_actor,
-    v_proposed_run,
+    null,
     'household review',
     now()
   )

@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import {
   ArrowLeftRight,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   CreditCard,
   Landmark,
@@ -41,20 +43,16 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import {
-  getTransactionActivity,
-  getTransactionFilters,
-  listTransactions,
-  setTransactionCategory,
-  SignInRequiredError,
-  undoTransactionCategory,
-  type AccountOption,
-  type CategoryOption,
-  type LedgerActivity,
-  type ReviewState,
-  type TransactionFeedItem,
-  type TransactionFilters,
-} from "@/lib/transactions"
+import { setTransactionCategory, undoTransactionCategory } from "./mutations"
+import { getTransactionFilters, listTransactions } from "./queries"
+import { SignInRequiredError } from "./rpc"
+import type {
+  AccountOption,
+  CategoryOption,
+  ReviewState,
+  TransactionFeedItem,
+  TransactionFilters,
+} from "./model"
 import { Inspector } from "./inspector"
 import {
   commandId,
@@ -132,7 +130,6 @@ export function TransactionsView() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [accounts, setAccounts] = useState<AccountOption[]>([])
   const [categories, setCategories] = useState<CategoryOption[]>([])
-  const [activity, setActivity] = useState<LedgerActivity | null>(null)
   const [review, setReview] = useState<ReviewFilter>("all")
   const [reviewCount, setReviewCount] = useState<string | null>(null)
   const [accountId, setAccountId] = useState("all")
@@ -190,13 +187,6 @@ export function TransactionsView() {
       })
       .catch(() => {
         if (!cancelled) setAccounts([])
-      })
-    void getTransactionActivity()
-      .then((next) => {
-        if (!cancelled) setActivity(next)
-      })
-      .catch(() => {
-        if (!cancelled) setActivity(null)
       })
     return () => {
       cancelled = true
@@ -285,6 +275,11 @@ export function TransactionsView() {
               : null,
         },
       }))
+      if (!result.conflict && review === "needs_review") {
+        const index = visibleItems.findIndex((entry) => entry.id === item.id)
+        const following = visibleItems[index + 1]
+        if (following) setSelectedId(following.id)
+      }
     } catch (error) {
       if (error instanceof SignInRequiredError) setSignInHint(true)
       focusCategory(item.id)
@@ -556,6 +551,36 @@ export function TransactionsView() {
         <DialogContent className="sm:max-w-lg">
           <DialogTitle className="sr-only">{selected ? subject(selected) : "Movement"}</DialogTitle>
           <DialogDescription className="sr-only">Category and treatment for this movement.</DialogDescription>
+          {selected ? (
+            <div className="mb-2 flex items-center justify-end gap-1 pr-8">
+              <Button
+                aria-label="Previous movement"
+                disabled={!visibleItems.some((entry, index) => entry.id === selected.id && index > 0)}
+                onClick={() => {
+                  const index = visibleItems.findIndex((entry) => entry.id === selected.id)
+                  const previous = visibleItems[index - 1]
+                  if (previous) setSelectedId(previous.id)
+                }}
+                size="icon-sm"
+                variant="ghost"
+              >
+                <ChevronLeft />
+              </Button>
+              <Button
+                aria-label="Next movement"
+                disabled={!visibleItems.some((entry, index) => entry.id === selected.id && index < visibleItems.length - 1)}
+                onClick={() => {
+                  const index = visibleItems.findIndex((entry) => entry.id === selected.id)
+                  const following = visibleItems[index + 1]
+                  if (following) setSelectedId(following.id)
+                }}
+                size="icon-sm"
+                variant="ghost"
+              >
+                <ChevronRight />
+              </Button>
+            </div>
+          ) : null}
           {inspector}
         </DialogContent>
       </Dialog>

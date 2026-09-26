@@ -139,7 +139,7 @@ Money in and money out are signed and named for screen readers. Colour is not th
 
 Tables (`components/ui/table`) when columns are compared: readings, ledger entries, sources, ingestion.
 
-Transactions are a compact table: date, merchant, account, category, amount. The row does not edit. Opening a row opens one dialog for category and treatment. Icons carry account type, pending, and transfer. Do not put Accept or a category picker on every row.
+Transactions are a compact table: date, merchant, account, category, amount. The row does not edit. Opening a row opens one dialog for category and treatment, with previous and next. Review mode moves to the next row after a category is saved. Icons carry account type, pending, and transfer. Do not put Accept or a category picker on every row. Review is the database queue: disagreement, an unmatched proposal, no category, abstention, or failure. Agreement is quiet.
 
 ## Feedback
 
