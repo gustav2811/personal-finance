@@ -17,7 +17,7 @@ Gustav and Cara, at home. Scan the newest movement, see the working category, ac
 
 ## Constraints
 
-The merged shadcn design system is the visual authority. Do not revive Common Orbit. No charts, budgets, or status-pill tables. Category and treatment stay independent. Provenance is a caption, not a badge.
+The shadcn design system is the visual authority. No charts, budgets, or status-pill tables. Category and treatment stay independent. The row does not edit.
 
 ## Direction contract
 

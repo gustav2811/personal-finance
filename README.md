@@ -11,7 +11,7 @@ Yarn monorepo for **bank statement email ingest** (SendGrid webhooks → parse a
 | [`libs/finwise`](libs/finwise) | `@investments/finwise` | Small Finwise API client used by ingest code. |
 | [`tools/ismrt`](tools/ismrt) | *(Python tools)* | ISMRT wallet API client, probes, exports, and API notes. |
 | [`tools/electricity`](tools/electricity) | *(Python tools)* | Household electricity analysis and dark HTML report builder. |
-| [`apps/dashboard`](apps/dashboard) | `@investments/dashboard` | Common Orbit — private, read-only household usage dashboard. |
+| [`apps/dashboard`](apps/dashboard) | `@investments/dashboard` | Household dashboard. shadcn design system. |
 | [`supabase/migrations`](supabase/migrations) | *(SQL migrations)* | Finance-data schema migrations, including household consumption. |
 | [`data/consumption`](data/consumption) | *(ignored private data)* | Raw household inputs and generated ISMRT/electricity extracts. |
 | [`reports/electricity`](reports/electricity) | *(ignored private reports)* | Generated HTML/PDF electricity reports. |
