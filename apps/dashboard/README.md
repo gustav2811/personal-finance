@@ -10,19 +10,12 @@ From `apps/dashboard` (this app is not a yarn workspace):
 
 ```bash
 yarn install
-set -a; source ../../.env; set +a
 yarn dev
 ```
 
 Local and production use the same Supabase project. Both require a Google
-session. There is no service-role data bridge.
-
-Required variables:
-
-```env
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
-```
+session. There is no service-role data bridge. `yarn dev` does not need the
+repo `.env`. The finance-data URL and publishable key are the defaults.
 
 Do not put a Supabase secret or a FinWise key on the dashboard host.
 

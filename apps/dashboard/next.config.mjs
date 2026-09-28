@@ -1,11 +1,11 @@
 /** @type {import("next").NextConfig} */
 const supabaseOrigin = (() => {
-  const raw = process.env.NEXT_PUBLIC_SUPABASE_URL
-  if (!raw) return "https://*.supabase.co"
+  const raw = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
+  if (!raw) return "https://irykogsfzzoexmnnthgc.supabase.co"
   try {
     return new URL(raw).origin
   } catch {
-    return "https://*.supabase.co"
+    return "https://irykogsfzzoexmnnthgc.supabase.co"
   }
 })()
 
