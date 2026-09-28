@@ -90,6 +90,7 @@ describe("incurred dates", () => {
       incurredInstant({
         postedAt: "2026-08-23T22:00:00.000Z",
         utility: "electricity",
+        entryType: "usage_charge",
         description: "ENERGY (SLIDING SCALE)",
       }),
     ).toEqual({
@@ -103,6 +104,7 @@ describe("incurred dates", () => {
       incurredInstant({
         postedAt: "2026-05-06T22:01:00.000Z",
         utility: "water",
+        entryType: "usage_charge",
         description: "April monthly Water Usage 9.199 kl",
       }).occurredAt,
     ).toBe("2026-03-31T22:00:00.000Z");
@@ -113,9 +115,60 @@ describe("incurred dates", () => {
       incurredInstant({
         postedAt: "2027-01-06T22:01:00.000Z",
         utility: "water",
+        entryType: "usage_charge",
         description: "December monthly Water Usage 1 kl",
       }).occurredAt,
     ).toBe("2026-11-30T22:00:00.000Z");
+  });
+
+  it("does not treat a 22:00Z deposit or EFT fee as a usage close", () => {
+    expect(
+      incurredInstant({
+        postedAt: "2026-08-23T22:00:00.000Z",
+        utility: "wallet",
+        entryType: "deposit",
+        description: "PURCHASE",
+      }).rule,
+    ).toBe("event_timestamp");
+    expect(
+      incurredInstant({
+        postedAt: "2026-08-23T22:00:00.000Z",
+        utility: "wallet",
+        entryType: "fee",
+        description: "SUMS EFT FEE",
+      }).rule,
+    ).toBe("event_timestamp");
+  });
+
+  it("shifts only the daily subscription when a wallet fee closes at 22:00Z", () => {
+    expect(
+      incurredInstant({
+        postedAt: "2026-08-23T22:00:00.000Z",
+        utility: "wallet",
+        entryType: "fee",
+        description: "SUMS WORLDS VIEW BC SUBSCRIPTION FEE",
+      }),
+    ).toEqual({
+      occurredAt: "2026-08-22T22:00:00.000Z",
+      rule: "daily_close",
+    });
+  });
+
+  it("keeps two wallets from sharing a ledger id", () => {
+    const shared = {
+      utility: "wallet",
+      entryType: "fee",
+      postedAt: "2026-08-23T22:00:00.000Z",
+      direction: "debit",
+      amount: 1.92,
+      meterSerial: null,
+      description: "SUMS WORLDS VIEW BC SUBSCRIPTION FEE",
+      reference: null,
+      occurrence: 0,
+    };
+    expect(ledgerSourceRecordId({ ...shared, walletId: "wallet-a" })).not.toBe(
+      ledgerSourceRecordId({ ...shared, walletId: "wallet-b" }),
+    );
   });
 
   it("keeps an EFT fee on its event timestamp", () => {
@@ -123,6 +176,7 @@ describe("incurred dates", () => {
       incurredInstant({
         postedAt: "2026-05-05T12:39:01.743Z",
         utility: "wallet",
+        entryType: "fee",
         description: "SUMS EFT FEE",
       }),
     ).toEqual({
@@ -159,11 +213,15 @@ describe("consumption batch", () => {
     const electricity = batch.ledger_entries.find((entry) => entry.utility_type === "electricity");
     expect(electricity).toMatchObject({
       source_record_id: ledgerSourceRecordId({
+        walletId: WALLET,
         utility: "electricity",
         entryType: "usage_charge",
         postedAt: "2026-08-23T22:00:00.000Z",
         direction: "debit",
         amount: 49.01,
+        meterSerial: METER,
+        description: "ENERGY (SLIDING SCALE)",
+        reference: null,
         occurrence: 0,
       }),
       occurred_at: "2026-08-22T22:00:00.000Z",
@@ -205,8 +263,8 @@ describe("consumption batch", () => {
     const debits = batch.ledger_entries.filter((entry) => entry.direction === "debit");
     expect(debits.map((entry) => entry.quantity)).toEqual([9.199, null]);
     expect(debits.map((entry) => entry.source_record_id)).toEqual([
-      "ismrt:ledger:water:usage_charge:2026-05-06T22:01:00.000Z:debit:184.6200:0",
-      "ismrt:ledger:water:usage_charge:2026-05-06T22:01:00.000Z:debit:184.6200:1",
+      `ismrt:ledger:${WALLET}:water:usage_charge:2026-05-06T22:01:00.000Z:debit:184.6200:-:April monthly Water Usage 9.199 kl:April monthly Water Usage 9.199 kl:0`,
+      `ismrt:ledger:${WALLET}:water:usage_charge:2026-05-06T22:01:00.000Z:debit:184.6200:-:April monthly Water Usage 9.199 kl:April monthly Water Usage 9.199 kl:1`,
     ]);
     expect(debits[0]?.occurred_at).toBe("2026-03-31T22:00:00.000Z");
     expect(debits[0]?.device_external_id).toBe(`water:${WALLET}`);

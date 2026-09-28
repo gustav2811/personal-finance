@@ -2,6 +2,7 @@ import {
   HOUSEHOLD_TIMEZONE,
   canonicalTimestamp,
   incurredInstant,
+  ledgerIdentity,
   ledgerSourceRecordId,
   type IncurredDateRule,
 } from "./dates.js";
@@ -164,7 +165,7 @@ export function mergeBatches(batches: ConsumptionBatch[], fetchedAt: string): Co
       rows_fetched: rows,
       rows_written: rows,
       metadata: {
-        wallet_ids: batches.map((batch) => batch.ingestion_run.metadata),
+        wallet_ids: batches.map((batch) => walletIdOf(batch)),
         incurred_date_rule: "daily_close_v1",
       },
     },
@@ -313,7 +314,12 @@ function buildLedger(
     const direction = directionOf(row.debit, row.credit);
     const amount = direction === "debit" ? requiredNumber(row.debit, "debit") : requiredNumber(row.credit, "credit");
     const entryType = utility === "wallet" ? "fee" : "usage_charge";
-    const incurred = incurredInstant({ postedAt, utility, description: row.charge });
+    const incurred = incurredInstant({
+      postedAt,
+      utility,
+      entryType,
+      description: row.charge,
+    });
     const quantity = quantityFor(row, utility, direction, waterQuantities);
     entries.push(
       ledgerEntry({
@@ -331,7 +337,19 @@ function buildLedger(
         rate: row.rate,
         deviceExternalId: deviceFor(utility, row.meterSerial, walletId, waterDeviceId),
         rawRecordId: expenseRawId,
-        occurrence: nextOccurrence(occurrences, utility, entryType, postedAt, direction, amount),
+        walletId,
+        meterSerial: row.meterSerial,
+        occurrence: nextOccurrence(occurrences, {
+          walletId,
+          utility,
+          entryType,
+          postedAt,
+          direction,
+          amount,
+          meterSerial: row.meterSerial,
+          description: row.charge,
+          reference: row.reference,
+        }),
         metadata: {
           meter_serial: row.meterSerial,
           incurred_date_rule: incurred.rule,
@@ -348,7 +366,12 @@ function buildLedger(
       continue;
     }
     const amount = requiredNumber(row.credit, "credit");
-    const incurred = incurredInstant({ postedAt, utility: "wallet", description: "PURCHASE" });
+    const incurred = incurredInstant({
+      postedAt,
+      utility: "wallet",
+      entryType: "deposit",
+      description: "PURCHASE",
+    });
     entries.push(
       ledgerEntry({
         utility: "wallet",
@@ -365,7 +388,19 @@ function buildLedger(
         rate: null,
         deviceExternalId: walletId,
         rawRecordId: depositRawId,
-        occurrence: nextOccurrence(occurrences, "wallet", "deposit", postedAt, "credit", amount),
+        walletId,
+        meterSerial: null,
+        occurrence: nextOccurrence(occurrences, {
+          walletId,
+          utility: "wallet",
+          entryType: "deposit",
+          postedAt,
+          direction: "credit",
+          amount,
+          meterSerial: null,
+          description: "PURCHASE",
+          reference: null,
+        }),
         metadata: { incurred_date_rule: incurred.rule },
       }),
     );
@@ -459,6 +494,8 @@ function ledgerEntry(input: {
   quantity: number | null;
   quantityUnit: string | null;
   rate: number | null;
+  walletId: string;
+  meterSerial: string | null;
   deviceExternalId: string;
   rawRecordId: string;
   occurrence: number;
@@ -467,11 +504,15 @@ function ledgerEntry(input: {
   return {
     source: SOURCE,
     source_record_id: ledgerSourceRecordId({
+      walletId: input.walletId,
       utility: input.utility,
       entryType: input.entryType,
       postedAt: input.postedAt,
       direction: input.direction,
       amount: input.amount,
+      meterSerial: input.meterSerial,
+      description: input.description,
+      reference: input.reference,
       occurrence: input.occurrence,
     }),
     utility_type: input.utility,
@@ -546,16 +587,34 @@ function deviceFor(
 
 function nextOccurrence(
   seen: Map<string, number>,
-  utility: string,
-  entryType: string,
-  postedAt: string,
-  direction: string,
-  amount: number,
+  input: {
+    walletId: string;
+    utility: string;
+    entryType: string;
+    postedAt: string;
+    direction: string;
+    amount: number;
+    meterSerial: string | null;
+    description: string | null;
+    reference: string | null;
+  },
 ): number {
-  const key = `${utility}:${entryType}:${postedAt}:${direction}:${amount.toFixed(4)}`;
+  const key = ledgerIdentity(input);
   const occurrence = seen.get(key) ?? 0;
   seen.set(key, occurrence + 1);
   return occurrence;
+}
+
+function walletIdOf(batch: ConsumptionBatch): string {
+  const metadata = batch.ingestion_run.metadata;
+  const walletId =
+    metadata && typeof metadata === "object" && !Array.isArray(metadata)
+      ? (metadata as JsonObject).wallet_id
+      : undefined;
+  if (typeof walletId !== "string" || walletId.length === 0) {
+    throw new Error("ingestion run is missing wallet_id");
+  }
+  return walletId;
 }
 
 function utilityOf(value: string): Utility {

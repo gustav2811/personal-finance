@@ -3,6 +3,7 @@ const TOKEN_URL =
 const GRAPHQL_URL = "https://api-gateway.rmsconnect.net/graphql";
 const CLIENT_ID = "ismrt-dashboard";
 const DAILY_INTERVAL = "1440";
+const REQUEST_TIMEOUT_MS = 30_000;
 
 export class IsmrtError extends Error {
   constructor(message: string) {
@@ -93,6 +94,7 @@ export class IsmrtClient {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body,
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     if (!response.ok) {
       throw new IsmrtError(`token request failed (${response.status})`);
@@ -257,6 +259,7 @@ export class IsmrtClient {
         "x-access-token": this.accessToken,
       },
       body: JSON.stringify({ query, variables, operationName }),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     if (!response.ok) {
       const detail = (await response.text()).slice(0, 180);

@@ -89,10 +89,10 @@ the meter-profile interval **end**, not the day the electricity was used. The
 matching kWh sits on the interval that starts 24 hours earlier.
 
 - `posted_at` keeps the API timestamp.
-- `occurred_at` for a daily close (`22:00:00.000Z`, electricity and the daily
-  wallet subscription) is that timestamp minus one day: 00:00 SAST on the usage
-  day. The dashboard reads `occurred_at` in Johannesburg, so this is the usage
-  date.
+- `occurred_at` moves back one day only for an electricity usage charge or a
+  wallet subscription fee stamped at `22:00:00.000Z`. That instant is midnight
+  Johannesburg the next day, the close of the usage day. A deposit or EFT fee
+  at the same clock time stays on the event timestamp.
 - Water charges name the usage month (`April monthly Water Usage`) and are
   posted around the 6th of the next month at `22:01Z`. `occurred_at` is 00:00
   SAST on the 1st of the named month.
@@ -111,7 +111,7 @@ already has `SUPABASE_URL` and `SUPABASE_SERVICE_KEY`. The ISMRT pull reuses
 those. The only new secrets are the ISMRT login. It calls the same
 service-role `ingest_consumption_batch` RPC, with a 45-day overlap. Source ids
 are a stable natural key
-(`ismrt:ledger:{utility}:{entry_type}:{posted_at}:{direction}:{amount}:{occurrence}`),
+(`ismrt:ledger:{wallet}:{utility}:{entry_type}:{posted_at}:{direction}:{amount}:{meter}:{description}:{reference}:{occurrence}`),
 not the probe row index.
 
 ```bash
