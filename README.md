@@ -9,8 +9,7 @@ Yarn monorepo for **bank statement email ingest** (SendGrid webhooks → parse a
 | [`apps/ingest-cloudflare`](apps/ingest-cloudflare) | `@investments/ingest-cloudflare` | Cloudflare Workers — SendGrid webhook accepts payloads to R2, queue triggers consumer (mailparser, XLSX parsers, Finwise, Supabase). The consumer cron also pulls ISMRT electricity, water, and wallet into `consumption`. |
 | [`libs/ingest-core`](libs/ingest-core) | `@investments/ingest-core` | Shared logic: mailparser, XLSX parsing, Finwise upload, Supabase DLQ / idempotency. |
 | [`libs/finwise`](libs/finwise) | `@investments/finwise` | Small Finwise API client used by ingest code. |
-| [`tools/ismrt`](tools/ismrt) | *(Python tools)* | ISMRT wallet API client, probes, exports, and API notes. |
-| [`tools/electricity`](tools/electricity) | *(Python tools)* | Household electricity analysis and dark HTML report builder. |
+| [`tools/electricity`](tools/electricity) | *(Python tools)* | Manual Lelit Bianca backfill and the electricity report. Not the ISMRT path. |
 | [`apps/dashboard`](apps/dashboard) | `@investments/dashboard` | Household dashboard. shadcn design system. |
 | [`supabase/migrations`](supabase/migrations) | *(SQL migrations)* | Finance-data schema migrations, including household consumption. |
 | [`data/consumption`](data/consumption) | *(ignored private data)* | Raw household inputs and generated ISMRT/electricity extracts. |
@@ -52,15 +51,13 @@ yarn deploy:all
 
 Wrangler is a devDependency of that app; prefer `yarn wrangler` from `apps/ingest-cloudflare`. Setup (R2, queues, secrets, `.dev.vars`) is in [docs/ingest-cloudflare.md](docs/ingest-cloudflare.md).
 
-**Household consumption tools**
+**Household consumption**
 
-Add `ISMRT_USERNAME` and `ISMRT_PASSWORD` to the local, ignored `.env`, then load
-it into the shell without printing it:
+ISMRT electricity, water, and wallet load on the ingest consumer cron. See
+[docs/consumption-model.md](docs/consumption-model.md). The Lelit Bianca backfill
+is still manual:
 
 ```bash
-set -a; source .env; set +a
-python3 tools/ismrt/probe_ismrt_api.py --days 120
-python3 tools/ismrt/export_ismrt_daily.py --days 120
 python3 tools/electricity/load_espresso_to_supabase.py
 python3 tools/electricity/build_report.py
 ```
@@ -75,15 +72,10 @@ The dashboard uses the Supabase publishable key in the browser and relies on
 RLS for the household allowlist. It never uses `SUPABASE_SERVICE_KEY`. Setup
 details live in [`apps/dashboard/README.md`](apps/dashboard/README.md).
 
-The ISMRT probe writes private extracts under
-`data/consumption/ismrt/`. The electricity report reads the raw household CSV
-from `data/consumption/electricity/raw/` and writes HTML under
-`reports/electricity/`.
-
-The ISMRT loader writes the extracts into the private `consumption` schema in
-the `finance-data` Supabase project through a service-role-only RPC. Bneta plug
-data currently uses the same RPC through a manual CSV backfill loader; automated
-Bneta retrieval is not wired yet.
+The electricity report reads the raw household CSV from
+`data/consumption/electricity/raw/` and writes HTML under `reports/electricity/`.
+Bneta plug data still uses a manual CSV backfill. Automated plug retrieval is
+not wired yet.
 
 ## Documentation
 

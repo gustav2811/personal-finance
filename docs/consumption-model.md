@@ -121,9 +121,6 @@ yarn wrangler secret put ISMRT_PASSWORD -c wrangler.consumer.toml
 yarn deploy:consumer
 ```
 
-`tools/ismrt/probe_ismrt_api.py` remains a local probe. Do not run
-`load_to_supabase.py`; it is retired.
-
 The Supabase project currently reports six pre-existing `dw.int_*` tables with
 RLS disabled and no policies. Do not silently enable RLS there: existing
 readers would be blocked. Remediate those tables separately with explicit

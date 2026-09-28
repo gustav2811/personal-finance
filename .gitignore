@@ -50,7 +50,6 @@ data/
 # Private generated reports and downloaded evidence
 /reports/
 /tools/categorise-eval/out/
-/tools/ismrt/evidence/
 __pycache__/
 *.pyc
 *.tsbuildinfo
