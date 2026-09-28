@@ -61,8 +61,50 @@ jobs:
       - name: Install dependencies
         run: yarn install --frozen-lockfile
 
-      - name: Typecheck (ingest-cloudflare)
-        run: yarn workspace @investments/ingest-cloudflare run types
+      - name: Typecheck and test (ingest-cloudflare)
+        run: |
+          yarn workspace @investments/ingest-cloudflare run types
+          yarn workspace @investments/ingest-cloudflare test
+
+  categorise-cloudflare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Test and typecheck (categorise-cloudflare)
+        run: |
+          yarn workspace @investments/categorise-cloudflare test
+          yarn workspace @investments/categorise-cloudflare run types
+          yarn workspace @investments/source-rpc test
+
+  wrangler-dry-run-categoriser:
+    if: github.event.pull_request.head.repo.fork == false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Wrangler bundle dry-run (categoriser)
+        working-directory: apps/categorise-cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: yarn wrangler deploy --dry-run
 
   wrangler-dry-run-ingest:
     if: github.event.pull_request.head.repo.fork == false

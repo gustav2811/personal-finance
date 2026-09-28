@@ -8,6 +8,8 @@ INGEST_TOKEN=
 # --- consumer worker (wrangler.consumer.toml) ---
 FINWISE_API_KEY=
 SUPABASE_SERVICE_KEY=
+ISMRT_USERNAME=
+ISMRT_PASSWORD=
 
 # Optional for local consumer (override wrangler.consumer.toml [vars]):
 # SUPABASE_URL=
