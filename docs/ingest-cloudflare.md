@@ -128,6 +128,8 @@ Set via Wrangler (run from `apps/ingest-cloudflare`):
 | Ingest | `yarn wrangler secret put INGEST_TOKEN -c wrangler.ingest.toml` | Shared secret for SendGrid `token` query / `Authorization: Bearer` |
 | Consumer | `yarn wrangler secret put FINWISE_API_KEY -c wrangler.consumer.toml` | Finwise API key |
 | Consumer | `yarn wrangler secret put SUPABASE_SERVICE_KEY -c wrangler.consumer.toml` | Supabase service role key |
+| Consumer | `yarn wrangler secret put ISMRT_USERNAME -c wrangler.consumer.toml` | ISMRT login. Omit to skip the daily consumption pull |
+| Consumer | `yarn wrangler secret put ISMRT_PASSWORD -c wrangler.consumer.toml` | ISMRT password |
 
 **`SUPABASE_URL`**, **`BANK_ZERO_ACCOUNT_MAP`**, and optional **`BANK_ZERO_ACCOUNT_ID`** are **not** in the committed `wrangler.consumer.toml` so you can keep them only in the **Cloudflare dashboard** (or `.dev.vars` locally). Set them under **Workers → `investments-ingest-consumer` → Settings → Variables**. The TOML only sets **`FINWISE_BASE_URL`** and **`UPLOAD_TO_FINWISE`**, and **`keep_vars = true`** ensures dashboard vars survive deploy (see warning section above).
 
@@ -159,7 +161,7 @@ SendGrid → Ingest Worker → R2 + Queue → Consumer Worker → Finwise API
 
 ## Daily cron (Supabase keep-alive + DLQ summary)
 
-The **consumer** Worker has a **Cron Trigger** (`[triggers]` in [`wrangler.consumer.toml`](../apps/ingest-cloudflare/wrangler.consumer.toml)): **07:00 UTC every day** it runs a lightweight query against `dlq_ingest_jobs` — a `count` with `created_at >= now() - 7 days` (no row payload). That:
+The **consumer** Worker has a **Cron Trigger** (`[triggers]` in [`wrangler.consumer.toml`](../apps/ingest-cloudflare/wrangler.consumer.toml)): **07:00 UTC every day** (09:00 in Johannesburg, after the previous ISMRT usage day has closed). It runs a lightweight query against `dlq_ingest_jobs` — a `count` with `created_at >= now() - 7 days` (no row payload) — and, when `ISMRT_USERNAME` / `ISMRT_PASSWORD` are set, pulls electricity, water, and wallet charges into `consumption` using the consumer's existing `SUPABASE_URL` and `SUPABASE_SERVICE_KEY`. That:
 
 1. **Touches Supabase regularly** so a free project is less likely to hit the ~7-day inactivity pause when bank imports only run monthly.
 2. **Logs a small report** you can watch in **Workers → Logs** or `wrangler tail`: JSON with `msg: "dlq_daily_report"`, `window_days`, `dlq_count`.

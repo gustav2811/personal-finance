@@ -1,7 +1,8 @@
 # Household consumption model
 
-Status: initial schema applied to the `finance-data` Supabase project on
-2026-08-24. Bneta plug ingestion is intentionally not included yet.
+Status: schema applied to the `finance-data` Supabase project. ISMRT
+electricity, water, and wallet ingestion runs on the existing ingest
+consumer's daily cron. Bneta plug ingestion is not included yet.
 
 ## Goal
 
@@ -80,19 +81,48 @@ build reporting views that join:
 3. device-level readings;
 4. weather and household annotations.
 
+## Incurred dates
+
+ISMRT stamps a completed electricity day at `T22:00:00.000Z`. That instant is
+midnight in `Africa/Johannesburg` on the following calendar day, and it matches
+the meter-profile interval **end**, not the day the electricity was used. The
+matching kWh sits on the interval that starts 24 hours earlier.
+
+- `posted_at` keeps the API timestamp.
+- `occurred_at` for a daily close (`22:00:00.000Z`, electricity and the daily
+  wallet subscription) is that timestamp minus one day: 00:00 SAST on the usage
+  day. The dashboard reads `occurred_at` in Johannesburg, so this is the usage
+  date.
+- Water charges name the usage month (`April monthly Water Usage`) and are
+  posted around the 6th of the next month at `22:01Z`. `occurred_at` is 00:00
+  SAST on the 1st of the named month.
+- EFT fees and `PURCHASE` deposits keep their event timestamp.
+- Meter readings already use the profile interval. Intervals with no
+  consumption are the open day and are not written.
+
+The wallet does not expose a partial current day, so the job stops at the last
+closed Johannesburg midnight.
+
 ## Loading
 
-Regenerate the private ISMRT extracts, then load them:
+Production ingestion is the existing ingest consumer
+(`investments-ingest-consumer`). Its daily cron at 07:00 UTC (09:00 SAST)
+already has `SUPABASE_URL` and `SUPABASE_SERVICE_KEY`. The ISMRT pull reuses
+those. The only new secrets are the ISMRT login. It calls the same
+service-role `ingest_consumption_batch` RPC, with a 45-day overlap. Source ids
+are a stable natural key
+(`ismrt:ledger:{utility}:{entry_type}:{posted_at}:{direction}:{amount}:{occurrence}`),
+not the probe row index.
 
 ```bash
-set -a; source .env; set +a
-python3 tools/ismrt/probe_ismrt_api.py --days 120
-python3 tools/ismrt/load_to_supabase.py
+cd apps/ingest-cloudflare
+yarn wrangler secret put ISMRT_USERNAME -c wrangler.consumer.toml
+yarn wrangler secret put ISMRT_PASSWORD -c wrangler.consumer.toml
+yarn deploy:consumer
 ```
 
-The loader is idempotent for source facts. Re-running the same capture keeps
-the row counts stable; it appends an `ingestion_runs` audit row. Private raw
-extracts remain under ignored `data/consumption/`.
+`tools/ismrt/probe_ismrt_api.py` remains a local probe. Do not run
+`load_to_supabase.py`; it is retired.
 
 The Supabase project currently reports six pre-existing `dw.int_*` tables with
 RLS disabled and no policies. Do not silently enable RLS there: existing

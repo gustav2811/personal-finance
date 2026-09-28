@@ -24,7 +24,8 @@ max_batch_size = 1
 max_batch_timeout = 2
 max_retries = 5
 
-# Daily Supabase touch + DLQ visibility (count rows in last 7 days). Keeps free-tier projects from pausing.
+# 07:00 UTC is 09:00 in Johannesburg, after the previous ISMRT usage day has closed.
+# The same run touches Supabase (DLQ count) so a free project is less likely to pause.
 [triggers]
 crons = ["0 7 * * *"]
 

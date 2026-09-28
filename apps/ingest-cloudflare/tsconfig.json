@@ -14,5 +14,6 @@
       "@investments/ingest-core/*": ["../../libs/ingest-core/src/*"]
     }
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts"]
 }

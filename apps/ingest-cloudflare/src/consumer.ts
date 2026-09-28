@@ -1,3 +1,4 @@
+import { logSummary, runConsumptionSync } from "./ismrt/run.js";
 import {
   attachmentToPayload,
   ChunkIncomplete,
@@ -25,6 +26,9 @@ export interface ConsumerEnv {
   GEMINI_API_BASE?: string;
   CATEGORISATION_LLM_TIMEOUT_MS?: string;
   CATEGORISATION_MIN_CONFIDENCE?: string;
+  ISMRT_USERNAME?: string;
+  ISMRT_PASSWORD?: string;
+  ISMRT_LOOKBACK_DAYS?: string;
 }
 
 function getConsumerConfig(env: ConsumerEnv): IngestCoreConfig {
@@ -163,36 +167,77 @@ function fetchForQueueOnlyWorker(request: Request): Response {
 const DLQ_REPORT_WINDOW_DAYS = 7;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
+async function reportDlq(env: ConsumerEnv): Promise<void> {
+  const config = getConsumerConfig(env);
+  if (!config.supabaseUrl?.trim() || !config.supabaseServiceRoleKey?.trim()) {
+    console.log(
+      JSON.stringify({
+        level: "info",
+        msg: "dlq_cron_skipped",
+        reason: "supabase_not_configured",
+      }),
+    );
+    return;
+  }
+  const since = new Date(Date.now() - DLQ_REPORT_WINDOW_DAYS * MS_PER_DAY);
+  const { count, error } = await countDlqSince(config, since);
+  console.log(
+    JSON.stringify({
+      level: error ? "warn" : "info",
+      msg: "dlq_daily_report",
+      window_days: DLQ_REPORT_WINDOW_DAYS,
+      dlq_count: count,
+      ...(error ? { err: error } : {}),
+    }),
+  );
+}
+
+async function syncIsmrt(event: ScheduledEvent, env: ConsumerEnv): Promise<void> {
+  if (!env.ISMRT_USERNAME?.trim() || !env.ISMRT_PASSWORD?.trim()) {
+    console.log(
+      JSON.stringify({
+        level: "info",
+        msg: "ismrt_cron_skipped",
+        reason: "credentials_not_configured",
+      }),
+    );
+    return;
+  }
+  try {
+    logSummary(
+      await runConsumptionSync(
+        {
+          ISMRT_USERNAME: env.ISMRT_USERNAME,
+          ISMRT_PASSWORD: env.ISMRT_PASSWORD,
+          SUPABASE_URL: env.SUPABASE_URL,
+          SUPABASE_SERVICE_KEY: env.SUPABASE_SERVICE_KEY,
+          ISMRT_LOOKBACK_DAYS: env.ISMRT_LOOKBACK_DAYS,
+        },
+        new Date(event.scheduledTime),
+      ),
+    );
+  } catch (err: unknown) {
+    console.log(
+      JSON.stringify({
+        level: "error",
+        msg: "ismrt_consumption_sync_failed",
+        error: err instanceof Error ? err.message : "unknown",
+      }),
+    );
+    throw err;
+  }
+}
+
 export default {
   fetch: fetchForQueueOnlyWorker,
 
   async scheduled(
-    _event: ScheduledEvent,
+    event: ScheduledEvent,
     env: ConsumerEnv,
     _ctx: ExecutionContext,
   ): Promise<void> {
-    const config = getConsumerConfig(env);
-    if (!config.supabaseUrl?.trim() || !config.supabaseServiceRoleKey?.trim()) {
-      console.log(
-        JSON.stringify({
-          level: "info",
-          msg: "dlq_cron_skipped",
-          reason: "supabase_not_configured",
-        }),
-      );
-      return;
-    }
-    const since = new Date(Date.now() - DLQ_REPORT_WINDOW_DAYS * MS_PER_DAY);
-    const { count, error } = await countDlqSince(config, since);
-    console.log(
-      JSON.stringify({
-        level: error ? "warn" : "info",
-        msg: "dlq_daily_report",
-        window_days: DLQ_REPORT_WINDOW_DAYS,
-        dlq_count: count,
-        ...(error ? { err: error } : {}),
-      }),
-    );
+    await reportDlq(env);
+    await syncIsmrt(event, env);
   },
 
   async queue(

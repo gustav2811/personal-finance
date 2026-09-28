@@ -1,23 +1,16 @@
 #!/usr/bin/env python3
-"""Load the latest ISMRT probe extracts into the private consumption schema.
+"""Retired ISMRT loader.
 
-Run from the repository root after loading the ignored .env:
-
-    set -a; source .env; set +a
-    python3 tools/ismrt/load_to_supabase.py
-
-The loader sends one transactional batch to the service-role-only Supabase RPC.
-It is safe to rerun: source records are upserted by deterministic keys and raw
-events are retained immutably per probe capture.
+Production ingestion is the investments-ingest-consumer daily cron.
+This script exits immediately so it cannot rewrite incurred dates back to the
+expense close stamp.
 """
 
 from __future__ import annotations
 
-import argparse
 import hashlib
 import json
 import logging
-import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -628,34 +621,10 @@ def load_payload(
 
 
 def main() -> int:
-    configure_logging()
-    parser = argparse.ArgumentParser(
-        description="Load ISMRT extracts into Supabase consumption schema"
+    raise SystemExit(
+        "Retired. ISMRT loads run in apps/consumption-cloudflare. "
+        "This script writes the expense close stamp as the incurred date."
     )
-    parser.add_argument(
-        "--data-dir",
-        type=Path,
-        default=DEFAULT_DATA_DIR,
-        help="Directory containing probe JSON outputs",
-    )
-    args = parser.parse_args()
-
-    supabase_url = os.environ.get("SUPABASE_URL", "").strip()
-    service_key = os.environ.get("SUPABASE_SERVICE_KEY", "").strip()
-    if not supabase_url or not service_key:
-        raise RuntimeError(
-            "Set SUPABASE_URL and SUPABASE_SERVICE_KEY before running."
-        )
-
-    payload, counts = build_payload(args.data_dir)
-    log_info("Prepared ISMRT batch", **counts)
-    result = load_payload(
-        supabase_url=supabase_url,
-        service_key=service_key,
-        payload=payload,
-    )
-    log_info("Loaded ISMRT batch into Supabase", rpc_result=result, **counts)
-    return 0
 
 
 if __name__ == "__main__":

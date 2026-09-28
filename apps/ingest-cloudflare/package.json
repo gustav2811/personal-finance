@@ -9,7 +9,8 @@
     "deploy:all": "yarn deploy:ingest && yarn deploy:consumer",
     "dev:ingest": "wrangler dev -c wrangler.ingest.toml",
     "dev:consumer": "wrangler dev -c wrangler.consumer.toml",
-    "types": "tsc --noEmit"
+    "types": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@investments/ingest-core": "file:../../libs/ingest-core"

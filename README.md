@@ -6,7 +6,7 @@ Yarn monorepo for **bank statement email ingest** (SendGrid webhooks → parse a
 
 | Path | Package | Purpose |
 |------|---------|---------|
-| [`apps/ingest-cloudflare`](apps/ingest-cloudflare) | `@investments/ingest-cloudflare` | Cloudflare Workers — SendGrid webhook accepts payloads to R2, queue triggers consumer (mailparser, XLSX parsers, Finwise, Supabase). |
+| [`apps/ingest-cloudflare`](apps/ingest-cloudflare) | `@investments/ingest-cloudflare` | Cloudflare Workers — SendGrid webhook accepts payloads to R2, queue triggers consumer (mailparser, XLSX parsers, Finwise, Supabase). The consumer cron also pulls ISMRT electricity, water, and wallet into `consumption`. |
 | [`libs/ingest-core`](libs/ingest-core) | `@investments/ingest-core` | Shared logic: mailparser, XLSX parsing, Finwise upload, Supabase DLQ / idempotency. |
 | [`libs/finwise`](libs/finwise) | `@investments/finwise` | Small Finwise API client used by ingest code. |
 | [`tools/ismrt`](tools/ismrt) | *(Python tools)* | ISMRT wallet API client, probes, exports, and API notes. |
@@ -61,7 +61,6 @@ it into the shell without printing it:
 set -a; source .env; set +a
 python3 tools/ismrt/probe_ismrt_api.py --days 120
 python3 tools/ismrt/export_ismrt_daily.py --days 120
-python3 tools/ismrt/load_to_supabase.py
 python3 tools/electricity/load_espresso_to_supabase.py
 python3 tools/electricity/build_report.py
 ```

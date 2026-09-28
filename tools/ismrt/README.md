@@ -20,8 +20,12 @@ From the repository root:
 set -a; source .env; set +a
 python3 tools/ismrt/probe_ismrt_api.py --days 120
 python3 tools/ismrt/export_ismrt_daily.py --days 120
-python3 tools/ismrt/load_to_supabase.py
 ```
+
+Production loads run on the ingest consumer cron
+(`apps/ingest-cloudflare`), not `load_to_supabase.py`. That script is
+retired: its row indexes are not stable, and it stored the expense close stamp
+as the incurred date. The consumer reuses its existing Supabase service key.
 
 The probe collects:
 
@@ -37,11 +41,8 @@ Private output is written to `data/consumption/ismrt/`, which is ignored by
 Git. The downloaded dashboard bundle used for API discovery lives under the
 ignored `evidence/` directory.
 
-`load_to_supabase.py` loads the latest probe output into the `consumption`
-schema in the `finance-data` Supabase project. It uses only
-`SUPABASE_URL` and `SUPABASE_SERVICE_KEY`, calls the service-role-only
-`ingest_consumption_batch` RPC, preserves raw API responses, and can be safely
-rerun. Bneta plug data is not loaded by this script yet.
+The scheduled Worker calls the service-role-only `ingest_consumption_batch`
+RPC. Bneta plug data is not loaded yet.
 
 The ISMRT device model is one wallet parent with electricity and logical water
 billing children. Wallet fees and deposits attach to the parent; electricity
