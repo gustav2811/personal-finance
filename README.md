@@ -16,7 +16,7 @@ Yarn monorepo for **bank statement email ingest** (SendGrid webhooks → parse a
 | [`data/consumption`](data/consumption) | *(ignored private data)* | Raw household inputs and generated ISMRT/electricity extracts. |
 | [`reports/electricity`](reports/electricity) | *(ignored private reports)* | Generated HTML/PDF electricity reports. |
 
-The repo root is an [Nx](https://nx.dev) workspace scaffold (`nx.json`, `nx` in devDependencies); **routine work uses Yarn workspaces**, not Nx targets.
+Routine work uses Yarn workspaces. Read [`AGENTS.md`](AGENTS.md) before opening more of the repo.
 
 ## Prerequisites
 

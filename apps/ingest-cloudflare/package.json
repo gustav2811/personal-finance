@@ -13,7 +13,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@investments/ingest-core": "file:../../libs/ingest-core"
+    "@investments/ingest-core": "file:../../libs/ingest-core",
+    "@investments/source-rpc": "file:../../libs/source-rpc"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250214.0",

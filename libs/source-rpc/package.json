@@ -1,0 +1,17 @@
+{
+  "name": "@investments/source-rpc",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/rpc.ts",
+  "types": "./src/rpc.ts",
+  "exports": {
+    ".": "./src/rpc.ts"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.6"
+  }
+}

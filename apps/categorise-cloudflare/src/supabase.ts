@@ -1,3 +1,5 @@
+import { callServiceRoleRpc } from "@investments/source-rpc";
+
 export class FinanceRpc {
   constructor(
     private readonly url: string,
@@ -76,29 +78,7 @@ export class FinanceRpc {
     });
   }
 
-  private async call<T>(name: string, body: unknown): Promise<T> {
-    const response = await fetch(`${this.url.replace(/\/$/, "")}/rest/v1/rpc/${name}`, {
-      method: "POST",
-      headers: {
-        apikey: this.key,
-        Authorization: `Bearer ${this.key}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
-    if (!response.ok) {
-      throw new Error(`supabase ${name} ${await errorMessage(response)}`);
-    }
-    return response.json() as Promise<T>;
-  }
-}
-
-async function errorMessage(response: Response): Promise<string> {
-  const text = await response.text();
-  try {
-    const body = JSON.parse(text) as { message?: string };
-    return body.message?.slice(0, 180) ?? `HTTP ${response.status}`;
-  } catch {
-    return `HTTP ${response.status}`;
+  private call<T>(name: string, body: unknown): Promise<T> {
+    return callServiceRoleRpc<T>(this.url, this.key, name, body);
   }
 }

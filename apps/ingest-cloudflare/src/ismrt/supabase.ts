@@ -1,3 +1,4 @@
+import { callServiceRoleRpc } from "@investments/source-rpc";
 import type { ConsumptionBatch, JsonObject } from "./map.js";
 
 const RPC_NAME = "ingest_consumption_batch";
@@ -35,29 +36,7 @@ export class ConsumptionRpc {
     return this.call(RPC_NAME, { p_payload: { ingestion_run: run } });
   }
 
-  private async call(name: string, body: unknown): Promise<unknown> {
-    const response = await this.fetchImpl(`${this.url.replace(/\/$/, "")}/rest/v1/rpc/${name}`, {
-      method: "POST",
-      headers: {
-        apikey: this.key,
-        Authorization: `Bearer ${this.key}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
-    if (!response.ok) {
-      throw new Error(`supabase ${name} ${await errorMessage(response)}`);
-    }
-    return response.json();
-  }
-}
-
-async function errorMessage(response: Response): Promise<string> {
-  const text = await response.text();
-  try {
-    const body = JSON.parse(text) as { message?: string };
-    return body.message?.slice(0, 180) ?? `HTTP ${response.status}`;
-  } catch {
-    return `HTTP ${response.status}`;
+  private call(name: string, body: unknown): Promise<unknown> {
+    return callServiceRoleRpc(this.url, this.key, name, body, this.fetchImpl);
   }
 }

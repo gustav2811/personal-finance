@@ -11,7 +11,8 @@
     "migrate": "wrangler d1 execute investments-categoriser --remote --file migrations/0001_init.sql"
   },
   "dependencies": {
-    "@investments/categoriser": "file:../../libs/categoriser"
+    "@investments/categoriser": "file:../../libs/categoriser",
+    "@investments/source-rpc": "file:../../libs/source-rpc"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250214.0",

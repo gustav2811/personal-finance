@@ -7,9 +7,10 @@
   "workspaces": [
     "libs/finwise",
     "libs/ingest-core",
+    "libs/source-rpc",
+    "libs/categoriser",
     "apps/ingest-cloudflare",
-    "apps/categorise-cloudflare",
-    "libs/categoriser"
+    "apps/categorise-cloudflare"
   ],
   "dependencies": {
     "@supabase/supabase-js": "^2.79.0",
@@ -18,10 +19,7 @@
     "dotenv": "^17.2.3"
   },
   "devDependencies": {
-    "@nx/js": "18.3.5",
-    "@nx/workspace": "18.3.5",
     "@types/node": "^24.10.0",
-    "nx": "18.3.5",
     "tsx": "^4.20.6"
   },
   "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
