@@ -4,7 +4,6 @@ import { createContext, useContext, type ReactNode } from "react"
 
 type HouseholdContextValue = {
   email: string
-  isLocalPreview: boolean
   signIn: () => void
 }
 

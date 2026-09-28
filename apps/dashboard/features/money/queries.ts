@@ -1,6 +1,5 @@
 import type { DeviceRead, LedgerRead, SnapshotRead } from "@/lib/supabase/rows"
 import { getBrowserClient, type BrowserClient } from "@/lib/supabase/browser"
-import { isLocalPreview, readLocal } from "@/lib/supabase/local"
 import { countTransactions, readDevices, readLatestSnapshot, readLedger } from "@/lib/supabase/read"
 
 export type MoneyData = {
@@ -30,6 +29,5 @@ export async function loadMoneyData(client: BrowserClient): Promise<MoneyData> {
 }
 
 export function getMoneyData(): Promise<MoneyData> {
-  if (isLocalPreview()) return readLocal<MoneyData>("money")
   return loadMoneyData(getBrowserClient())
 }

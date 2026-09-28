@@ -1,6 +1,5 @@
 import type { DeviceRead, IngestionRunRead, ReadingRead } from "@/lib/supabase/rows"
 import { getBrowserClient, type BrowserClient } from "@/lib/supabase/browser"
-import { isLocalPreview, readLocal } from "@/lib/supabase/local"
 import { readDevices, readIngestionRuns, readReadings } from "@/lib/supabase/read"
 
 export type SourcesData = {
@@ -20,6 +19,5 @@ export async function loadSourcesData(client: BrowserClient): Promise<SourcesDat
 }
 
 export function getSourcesData(): Promise<SourcesData> {
-  if (isLocalPreview()) return readLocal<SourcesData>("sources")
   return loadSourcesData(getBrowserClient())
 }
