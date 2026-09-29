@@ -10,6 +10,7 @@ Household finance. Supabase project `finance-data`. Timezone `Africa/Johannesbur
 - **Source record id** — `ismrt:ledger:{wallet}:{utility}:{entry_type}:{posted_at}:{direction}:{amount}:{meter}:{description}:{reference}:{occurrence}`. Empty text fields are `-`. `occurrence` separates genuinely identical source rows.
 - **Owned category** — the household decision on a transaction. Distinct from the FinWise source category.
 - **Shadow** — the classifier records a proposal and does not write it.
+- **Job** — a scheduled unit of work on `investments-jobs`.
 
 ## Sources
 

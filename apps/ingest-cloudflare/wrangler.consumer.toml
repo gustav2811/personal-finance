@@ -25,11 +25,18 @@ max_batch_timeout = 2
 max_retries = 5
 
 [[queues.producers]]
-binding = "TUYA_QUEUE"
-queue = "investments-email-ingest"
+binding = "JOBS_QUEUE"
+queue = "investments-jobs"
+
+[[queues.consumers]]
+queue = "investments-jobs"
+max_batch_size = 1
+max_batch_timeout = 1
+max_retries = 3
 
 # 07:00 UTC is 09:00 in Johannesburg, after the previous ISMRT usage day has closed.
-# The same run touches Supabase (DLQ count) so a free project is less likely to pause.
+# The cron only enqueues jobs onto investments-jobs; each job has its own 50-subrequest
+# budget on the Cloudflare free plan.
 [triggers]
 crons = ["0 7 * * *"]
 

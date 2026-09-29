@@ -9,7 +9,7 @@ Supabase is the backend. Do not merge the dashboard and the Workers into one app
 | Job | Open | Leave closed |
 | --- | --- | --- |
 | Bank email ingest | `apps/ingest-cloudflare/src/ingest.ts`, then `libs/ingest-core` | classifier, dashboard |
-| Queue consumer, FinWise post, ISMRT cron | `apps/ingest-cloudflare/src/consumer.ts` | `src/ingest.ts` |
+| Queue consumer, FinWise post, ISMRT cron | `apps/ingest-cloudflare/src/consumer.ts`, `apps/ingest-cloudflare/src/jobs/`, `apps/ingest-cloudflare/src/tuya/` | `src/ingest.ts` |
 | ISMRT date mapping | `apps/ingest-cloudflare/src/ismrt/map.ts` | dashboard charts |
 | Classifier | `apps/categorise-cloudflare/src/run.ts`, then `libs/categoriser` | ingest webhook, `libs/ingest-core` |
 | Dashboard | `apps/dashboard` app routes and `domain/` | Workers, `components/ui`, generated types |
