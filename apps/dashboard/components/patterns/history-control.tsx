@@ -30,7 +30,11 @@ export function HistoryControl({
       variant="outline"
     >
       {ITEMS.map((item) => (
-        <ToggleGroupItem key={String(item.value)} value={String(item.value)}>
+        <ToggleGroupItem
+          className="pointer-coarse:h-9 pointer-coarse:px-3"
+          key={String(item.value)}
+          value={String(item.value)}
+        >
           {item.label}
         </ToggleGroupItem>
       ))}

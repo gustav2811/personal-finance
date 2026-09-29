@@ -95,7 +95,7 @@ export function MtdChart({
 
   return (
     <ChartContainer className="aspect-auto h-72 w-full" config={mtdConfig(metric)}>
-      <ComposedChart data={rows} margin={{ left: 8, right: 8, top: 8 }}>
+      <ComposedChart data={rows} margin={{ left: 8, right: 16, top: 8 }}>
         <defs>
           <linearGradient id="mtd-cursor" x1="0" x2="0" y1="0" y2="1">
             <stop offset="0%" style={{ stopColor: "var(--color-current)", stopOpacity: 0.22 }} />

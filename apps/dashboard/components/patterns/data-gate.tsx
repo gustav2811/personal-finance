@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 
 // `load` is a dependency. Pass a stable function (module-level or useCallback).
@@ -15,6 +16,7 @@ export function DataGate<T>({
 }) {
   const [data, setData] = useState<T | null>(null)
   const [dataError, setDataError] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -34,13 +36,18 @@ export function DataGate<T>({
     return () => {
       cancelled = true
     }
-  }, [load])
+  }, [load, attempt])
 
   if (dataError) {
     return (
       <Alert variant="destructive">
         <AlertTitle>Household data is unavailable</AlertTitle>
-        <AlertDescription>{dataError}</AlertDescription>
+        <AlertDescription className="space-y-3">
+          <p>{dataError}</p>
+          <Button onClick={() => setAttempt((count) => count + 1)} size="sm" variant="outline">
+            Try again
+          </Button>
+        </AlertDescription>
       </Alert>
     )
   }

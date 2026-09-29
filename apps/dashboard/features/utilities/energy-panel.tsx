@@ -45,18 +45,16 @@ const LAYERS: Array<{ dot: string; label: string; value: Layer }> = [
   { dot: "bg-info", label: "Rate changes", value: "rates" },
 ]
 
-function EnergyBody({
-  data,
-  layers,
-  metric,
-  window,
-}: {
-  data: EnergyData
-  layers: Layer[]
-  metric: MtdMetric
-  window: HistoryWindow
-}) {
+const TOUCH_ITEM = "pointer-coarse:h-9 pointer-coarse:px-3"
+
+function isLayer(value: string): value is Layer {
+  return LAYERS.some((layer) => layer.value === value)
+}
+
+export function EnergyPanel({ data, window }: { data: EnergyData; window: HistoryWindow }) {
   const currentMonth = monthKey(localDateKey(data.fetchedAt))
+  const [metric, setMetric] = useState<MtdMetric>("kwh")
+  const [layers, setLayers] = useState<Layer[]>(["last", "rates"])
   const [selectedMonth, setSelectedMonth] = useState(currentMonth)
   const [target, setTarget] = useState(HOME_TARGET)
 
@@ -104,36 +102,100 @@ function EnergyBody({
     : []
 
   return (
-    <div className="space-y-8">
-      <section aria-label="Month to date" className="space-y-1">
-        <p className="type-label text-muted-foreground">This month</p>
+    <div className="space-y-10">
+      <section aria-label="This month" className="space-y-4">
+        <div className="space-y-1">
+          <p className="type-label text-muted-foreground">This month</p>
+          {summary ? (
+            <>
+              <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
+                <p className="type-numeric flex items-center gap-3 text-4xl font-semibold tracking-tight @md/utilities:text-5xl">
+                  <span aria-hidden className="size-3 rounded-full bg-chart-1" />
+                  {formatNumber(summary.kwh)}
+                  <span className="ml-1 text-xl font-medium text-muted-foreground @md/utilities:text-2xl">
+                    kWh
+                  </span>
+                </p>
+                <p className="type-numeric flex items-center gap-3 text-2xl font-semibold tracking-tight @md/utilities:text-3xl">
+                  <span aria-hidden className="size-2.5 rounded-full bg-chart-2" />
+                  {formatMoney(summary.rand)}
+                </p>
+              </div>
+              <p className="type-caption">
+                To {shortDate(`${summary.lastClosedKey}T12:00:00+02:00`)}
+                {summary.rate !== null ? ` · R${formatNumber(summary.rate, 2)} per kWh` : ""}
+                {summary.paceDelta !== null
+                  ? ` · ${summary.paceDelta >= 0 ? "+" : ""}${formatNumber(summary.paceDelta * 100)}% vs last month`
+                  : ""}
+              </p>
+            </>
+          ) : (
+            <p className="type-body text-muted-foreground">No closed days yet.</p>
+          )}
+        </div>
+
         {summary ? (
-          <>
-            <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
-              <p className="type-numeric flex items-center gap-3 text-5xl font-semibold tracking-tight">
-                <span aria-hidden className="size-3 rounded-full bg-chart-1" />
-                {formatNumber(summary.kwh)}
-                <span className="ml-2 text-2xl font-medium text-muted-foreground">kWh</span>
-              </p>
-              <p className="type-numeric flex items-center gap-3 text-3xl font-semibold tracking-tight">
-                <span aria-hidden className="size-2.5 rounded-full bg-chart-2" />
-                {formatMoney(summary.rand)}
-              </p>
-            </div>
-            <p className="type-caption">
-              To {shortDate(`${summary.lastClosedKey}T12:00:00+02:00`)}
-              {summary.rate !== null ? ` · R${formatNumber(summary.rate, 2)} per kWh` : ""}
-              {summary.paceDelta !== null
-                ? ` · ${summary.paceDelta >= 0 ? "+" : ""}${formatNumber(summary.paceDelta * 100)}% vs last month`
-                : ""}
-            </p>
-          </>
-        ) : (
-          <p className="type-body text-muted-foreground">No closed days yet.</p>
-        )}
+          <dl className="grid gap-px overflow-hidden rounded-lg border bg-border @xl/utilities:grid-cols-3">
+            <Stat
+              detail={summary.projectedRand === null ? undefined : formatMoney(summary.projectedRand)}
+              label="Projected month end"
+              value={`${formatNumber(summary.projectedKwh, 0)} kWh`}
+            />
+            <Stat
+              detail={shortDate(`${summary.highestDay.key}T12:00:00+02:00`)}
+              label="Highest day"
+              value={`${formatNumber(summary.highestDay.kwh)} kWh`}
+            />
+            <Stat
+              label="Daily average"
+              value={`${formatNumber(summary.kwh / summary.lastClosedDay)} kWh`}
+            />
+          </dl>
+        ) : null}
       </section>
 
-      <Section title="Month to date">
+      <Section
+        actions={
+          <>
+            <ToggleGroup
+              aria-label="Chart layers"
+              className="flex-wrap"
+              onValueChange={(next) => setLayers(next.filter(isLayer))}
+              size="sm"
+              spacing={1}
+              type="multiple"
+              value={layers}
+              variant="outline"
+            >
+              {LAYERS.map((layer) => (
+                <ToggleGroupItem className={TOUCH_ITEM} key={layer.value} value={layer.value}>
+                  <span aria-hidden className={`size-2 rounded-full ${layer.dot}`} />
+                  {layer.label}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+            <ToggleGroup
+              aria-label="Month to date measure"
+              onValueChange={(next) => {
+                if (next === "kwh" || next === "rand") setMetric(next)
+              }}
+              size="sm"
+              spacing={0}
+              type="single"
+              value={metric}
+              variant="outline"
+            >
+              <ToggleGroupItem className={TOUCH_ITEM} value="kwh">
+                kWh
+              </ToggleGroupItem>
+              <ToggleGroupItem className={TOUCH_ITEM} value="rand">
+                Rand
+              </ToggleGroupItem>
+            </ToggleGroup>
+          </>
+        }
+        title="Month to date"
+      >
         <MtdChart
           metric={metric}
           points={mtd.points}
@@ -143,32 +205,12 @@ function EnergyBody({
         />
       </Section>
 
-      {summary ? (
-        <dl className="grid gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-3">
-          <Stat
-            label="Projected month end"
-            value={`${formatNumber(summary.projectedKwh, 0)} kWh${
-              summary.projectedRand === null ? "" : ` · ${formatMoney(summary.projectedRand)}`
-            }`}
-          />
-          <Stat
-            detail={shortDate(`${summary.highestDay.key}T12:00:00+02:00`)}
-            label="Highest day"
-            value={`${formatNumber(summary.highestDay.kwh)} kWh`}
-          />
-          <Stat
-            label="Daily average"
-            value={`${formatNumber(summary.kwh / summary.lastClosedDay)} kWh`}
-          />
-        </dl>
-      ) : null}
-
-      <div className="grid gap-x-6 gap-y-8 lg:grid-cols-2 [&>section]:min-w-0">
+      <div className="grid gap-x-8 gap-y-10 @3xl/utilities:grid-cols-2 [&>section]:min-w-0">
         <Section title="Usage">
           <MonthBars
             bars={monthly.map((point) => ({ label: point.label, month: point.month, value: point.kwh }))}
             color="var(--chart-1)"
-          emptyLabel="No electricity readings"
+            emptyLabel="No electricity readings"
             format={(value) => `${formatNumber(value, 0)} kWh`}
             markers={markers}
             onSelect={setSelectedMonth}
@@ -180,7 +222,7 @@ function EnergyBody({
           <MonthBars
             bars={monthly.map((point) => ({ label: point.label, month: point.month, value: point.cost }))}
             color="var(--chart-2)"
-          emptyLabel="No electricity charges"
+            emptyLabel="No electricity charges"
             format={(value) => formatMoney(value)}
             markers={markers}
             onSelect={setSelectedMonth}
@@ -197,19 +239,23 @@ function EnergyBody({
           ))}
         </Section>
 
-        <Section title="By device">
-          <Select onValueChange={setTarget} value={target}>
-            <SelectTrigger className="w-56">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {deviceOptions.map((option) => (
-                <SelectItem key={option.target} value={option.target}>
-                  {option.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <Section
+          actions={
+            <Select onValueChange={setTarget} value={target}>
+              <SelectTrigger aria-label="Device" className="w-48 pointer-coarse:h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {deviceOptions.map((option) => (
+                  <SelectItem key={option.target} value={option.target}>
+                    {option.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          }
+          title="By device"
+        >
           <DeviceLineChart points={deviceDaily} />
         </Section>
 
@@ -227,53 +273,14 @@ function EnergyBody({
 
 function Stat({ detail, label, value }: { detail?: string; label: string; value: string }) {
   return (
-    <div className="bg-card px-4 py-3">
+    <div className="flex items-baseline justify-between gap-4 bg-card px-4 py-3 @xl/utilities:block">
       <dt className="type-label text-muted-foreground">{label}</dt>
-      <dd className="type-numeric mt-1 text-xl font-semibold tracking-tight">{value}</dd>
-      {detail ? <p className="type-caption mt-1">{detail}</p> : null}
-    </div>
-  )
-}
-
-export function EnergyPanel({ data, window }: { data: EnergyData; window: HistoryWindow }) {
-  const [metric, setMetric] = useState<MtdMetric>("kwh")
-  const [layers, setLayers] = useState<Layer[]>(["last", "rates"])
-
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-3">
-        <ToggleGroup
-          aria-label="Chart layers"
-          onValueChange={(next) => setLayers(next as Layer[])}
-          size="sm"
-          spacing={0}
-          type="multiple"
-          value={layers}
-          variant="outline"
-        >
-          {LAYERS.map((layer) => (
-            <ToggleGroupItem key={layer.value} value={layer.value}>
-              <span aria-hidden className={`size-2 rounded-full ${layer.dot}`} />
-              {layer.label}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
-        <ToggleGroup
-          aria-label="Month to date measure"
-          onValueChange={(next) => {
-            if (next === "kwh" || next === "rand") setMetric(next)
-          }}
-          size="sm"
-          spacing={0}
-          type="single"
-          value={metric}
-          variant="outline"
-        >
-          <ToggleGroupItem value="kwh">kWh</ToggleGroupItem>
-          <ToggleGroupItem value="rand">Rand</ToggleGroupItem>
-        </ToggleGroup>
-      </div>
-      <EnergyBody data={data} layers={layers} metric={metric} window={window} />
+      <dd className="flex flex-col items-end text-right @xl/utilities:mt-1 @xl/utilities:items-start @xl/utilities:text-left">
+        <span className="type-numeric text-lg font-semibold tracking-tight @xl/utilities:text-xl">
+          {value}
+        </span>
+        {detail ? <span className="type-caption">{detail}</span> : null}
+      </dd>
     </div>
   )
 }

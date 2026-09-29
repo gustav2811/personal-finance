@@ -48,7 +48,8 @@ export function DeviceShareChart({ share }: { share: DeviceShare }) {
             </linearGradient>
           ))}
         </defs>
-        <XAxis axisLine={false} dataKey="label" interval={0} tickLine={false} />
+        <XAxis axisLine={false} dataKey="label" interval={share.points.length > 7 ? "preserveEnd" : 0}
+          minTickGap={4} tickLine={false} />
         <YAxis domain={[0, 100]} hide />
         <ChartTooltip
           content={

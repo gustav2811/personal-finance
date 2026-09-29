@@ -17,25 +17,29 @@ export function UtilitiesView() {
   const [utility, setUtility] = useState<Utility>("electricity")
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        actions={<HistoryControl onChange={setWindow} value={window} />}
-        title="Utilities"
-      />
-      <ToggleGroup
-        aria-label="Utility"
-        onValueChange={(next) => {
-          if (next === "electricity" || next === "water") setUtility(next)
-        }}
-        size="sm"
-        spacing={0}
-        type="single"
-        value={utility}
-        variant="outline"
-      >
-        <ToggleGroupItem value="electricity">Electricity</ToggleGroupItem>
-        <ToggleGroupItem value="water">Water</ToggleGroupItem>
-      </ToggleGroup>
+    <div className="@container/utilities space-y-6">
+      <PageHeader title="Utilities" />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <ToggleGroup
+          aria-label="Utility"
+          onValueChange={(next) => {
+            if (next === "electricity" || next === "water") setUtility(next)
+          }}
+          size="sm"
+          spacing={0}
+          type="single"
+          value={utility}
+          variant="outline"
+        >
+          <ToggleGroupItem className="pointer-coarse:h-9 pointer-coarse:px-3" value="electricity">
+            Electricity
+          </ToggleGroupItem>
+          <ToggleGroupItem className="pointer-coarse:h-9 pointer-coarse:px-3" value="water">
+            Water
+          </ToggleGroupItem>
+        </ToggleGroup>
+        <HistoryControl onChange={setWindow} value={window} />
+      </div>
       <DataGate load={getEnergyData}>
         {(data) =>
           utility === "electricity" ? (

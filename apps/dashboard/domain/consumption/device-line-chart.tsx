@@ -2,6 +2,7 @@
 
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
 import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/chart"
+import { Empty, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import type { DeviceDayPoint } from "@/domain/consumption/energy-model"
 import { formatNumber } from "@/lib/format/money"
 
@@ -12,9 +13,19 @@ const lineConfig = {
 
 // Two overlapping series with a vertical guide and ring marker, after Smart Charts 9.
 export function DeviceLineChart({ points }: { points: DeviceDayPoint[] }) {
+  if (points.every((point) => point.current === null && point.previous === null)) {
+    return (
+      <Empty className="min-h-48 border">
+        <EmptyHeader>
+          <EmptyTitle>No readings for this device in the last two months</EmptyTitle>
+        </EmptyHeader>
+      </Empty>
+    )
+  }
+
   return (
     <ChartContainer className="aspect-auto h-64 w-full" config={lineConfig}>
-      <LineChart data={points} margin={{ left: 8, right: 8, top: 8 }}>
+      <LineChart data={points} margin={{ left: 8, right: 16, top: 8 }}>
         <CartesianGrid vertical={false} />
         <XAxis axisLine={false} dataKey="day" interval={2} tickLine={false} />
         <YAxis
