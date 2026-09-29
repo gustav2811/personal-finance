@@ -1,4 +1,7 @@
-import { countDlqSince } from "@investments/ingest-core";
+import {
+  countDlqSince,
+  type IngestCoreConfig,
+} from "@investments/ingest-core";
 import { type ConsumerEnv, getConsumerConfig } from "../config.js";
 import { logSummary, runConsumptionSync } from "../ismrt/run.js";
 import { budgetedFetch, SubrequestBudget } from "./budget.js";
@@ -8,8 +11,9 @@ import {
   planTuyaDays,
   type TuyaEnv,
 } from "../tuya/run.js";
+import { runHealthCheck } from "./health.js";
 
-const DLQ_REPORT_WINDOW_DAYS = 7;
+export const DLQ_REPORT_WINDOW_DAYS = 7;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 export type JobRunOptions = {
@@ -43,9 +47,34 @@ export async function runJob(
         budget,
       );
       return;
+    case "health-check":
+      await runHealthCheck(
+        env,
+        budget,
+        options.now ?? new Date(),
+        fetchImpl,
+      );
+      return;
     default:
       assertNever(job);
   }
+}
+
+export type DlqReport = {
+  count: number;
+  error: string | null;
+};
+
+export async function countDlqForHealth(
+  env: ConsumerEnv,
+  budget: SubrequestBudget,
+  now: Date,
+): Promise<DlqReport> {
+  const config = getConsumerConfig(env);
+  if (!config.supabaseUrl.trim() || !config.supabaseServiceRoleKey.trim()) {
+    throw new Error("missing Supabase credentials for health check");
+  }
+  return countDlq(config, budget, now);
 }
 
 async function reportDlq(
@@ -67,9 +96,7 @@ async function reportDlq(
     );
     return;
   }
-  const since = new Date(Date.now() - DLQ_REPORT_WINDOW_DAYS * MS_PER_DAY);
-  budget.external("supabase:dlq");
-  const { count, error } = await countDlqSince(config, since);
+  const { count, error } = await countDlq(config, budget, new Date());
   console.log(
     JSON.stringify({
       level: error ? "warn" : "info",
@@ -82,6 +109,16 @@ async function reportDlq(
       ...(error ? { err: error } : {}),
     }),
   );
+}
+
+async function countDlq(
+  config: IngestCoreConfig,
+  budget: SubrequestBudget,
+  now: Date,
+): Promise<DlqReport> {
+  const since = new Date(now.getTime() - DLQ_REPORT_WINDOW_DAYS * MS_PER_DAY);
+  budget.external("supabase:dlq");
+  return countDlqSince(config, since);
 }
 
 async function syncIsmrt(

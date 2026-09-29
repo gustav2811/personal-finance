@@ -21,3 +21,5 @@ bucket_name = "investments-ingest"
 [[queues.producers]]
 binding = "INGEST_QUEUE"
 queue = "investments-email-ingest"
+
+# Secret: INGEST_TOKEN, SENTRY_DSN.

@@ -25,6 +25,7 @@ export interface ConsumerEnv {
   TUYA_DEVICE_ID: string;
   TUYA_ACCESS_ID: string;
   TUYA_ACCESS_SECRET: string;
+  SENTRY_DSN: string;
 }
 
 export function getConsumerConfig(env: ConsumerEnv): IngestCoreConfig {

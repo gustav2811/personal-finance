@@ -29,7 +29,19 @@ export type TuyaDayJob = {
   codes?: TuyaCode[];
 };
 
-export type JobV1 = DlqReportJob | IsmrtSyncJob | TuyaPlanJob | TuyaDayJob;
+export type HealthCheckJob = {
+  v: 1;
+  jobId: string;
+  type: "health-check";
+  scheduledTime: string;
+};
+
+export type JobV1 =
+  | DlqReportJob
+  | IsmrtSyncJob
+  | TuyaPlanJob
+  | TuyaDayJob
+  | HealthCheckJob;
 export type Job = JobV1;
 
 export class InvalidJobError extends Error {
@@ -75,6 +87,18 @@ export function createTuyaPlanJob(
     v: 1,
     jobId: `tuya-plan:${utcDate(scheduledTimeValue)}`,
     type: "tuya-plan",
+    scheduledTime: scheduledTimeValue,
+  };
+}
+
+export function createHealthCheckJob(
+  scheduledTime: Date | string,
+): HealthCheckJob {
+  const scheduledTimeValue = scheduledTimeString(scheduledTime);
+  return {
+    v: 1,
+    jobId: `health-check:${utcDate(scheduledTimeValue)}`,
+    type: "health-check",
     scheduledTime: scheduledTimeValue,
   };
 }
@@ -132,6 +156,8 @@ export function upgradeLegacyJob(value: Record<string, unknown>): JobV1 {
       return createIsmrtSyncJob(requiredScheduledTime(value.scheduledTime));
     case "tuya-plan":
       return createTuyaPlanJob(requiredScheduledTime(value.scheduledTime));
+    case "health-check":
+      throw new InvalidJobError("health-check has no legacy form");
     case "tuya-day":
       return createTuyaDayJob(
         requiredString(value.deviceId, "deviceId"),
@@ -167,6 +193,13 @@ function parseV1Job(value: Record<string, unknown>): JobV1 {
     }
     case "tuya-plan": {
       const job = createTuyaPlanJob(requiredScheduledTime(value.scheduledTime));
+      if (job.jobId !== jobId) throw new InvalidJobError("jobId is not deterministic");
+      return job;
+    }
+    case "health-check": {
+      const job = createHealthCheckJob(
+        requiredScheduledTime(value.scheduledTime),
+      );
       if (job.jobId !== jobId) throw new InvalidJobError("jobId is not deterministic");
       return job;
     }

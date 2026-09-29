@@ -35,12 +35,13 @@ max_batch_timeout = 1
 max_retries = 3
 
 # 07:00 UTC is 09:00 in Johannesburg, after the previous ISMRT usage day has closed.
-# The cron only enqueues jobs onto investments-jobs; each job has separate external
+# 10:00 UTC runs the health check after the source jobs have finished/retried.
+# Crons only enqueue jobs onto investments-jobs; each job has separate external
 # and internal subrequest budgets below the Cloudflare free-plan ceilings.
 [triggers]
-crons = ["0 7 * * *"]
+crons = ["0 7 * * *", "0 10 * * *"]
 
-# Dashboard secrets: FINWISE_API_KEY, SUPABASE_*, BANK_ZERO_*.
+# Dashboard secrets: FINWISE_API_KEY, SUPABASE_*, BANK_ZERO_*, SENTRY_DSN.
 # Tuya secrets: TUYA_ACCESS_ID, TUYA_ACCESS_SECRET.
 # Optional: GEMINI_API_KEY when CATEGORISATION_ENABLED=true (batched Gemini for uncategorized rows).
 # (Workers → investments-ingest-consumer → Settings → Variables and secrets). Omitting them here

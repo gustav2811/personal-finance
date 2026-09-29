@@ -3,6 +3,13 @@ import consumer from "./consumer.js";
 import { createTuyaDayJob } from "./jobs/jobs.js";
 import type { ConsumerEnv } from "./config.js";
 
+vi.mock("@sentry/cloudflare", () => ({
+  withSentry: (_options: unknown, handler: unknown) => handler,
+  captureException: vi.fn(),
+  captureMessage: vi.fn(),
+  captureCheckIn: vi.fn(),
+}));
+
 describe("consumer schedule", () => {
   it("enqueues all scheduled jobs in one batch", async () => {
     const batches: unknown[][] = [];
@@ -14,6 +21,7 @@ describe("consumer schedule", () => {
       },
     } as unknown as ConsumerEnv;
     const event = {
+      cron: "0 7 * * *",
       scheduledTime: Date.parse("2026-09-29T07:00:00.000Z"),
     } as unknown as ScheduledEvent;
 
@@ -110,5 +118,51 @@ describe("consumer schedule", () => {
 
     expect(acked).toEqual(["invalid", "abandon"]);
     expect(retried).toEqual(["unsupported", "retry"]);
+  });
+
+  it("enqueues only the health check at 10:00 UTC", async () => {
+    const batches: unknown[][] = [];
+    const env = {
+      JOBS_QUEUE: {
+        sendBatch: async (batch: unknown[]) => {
+          batches.push(batch);
+        },
+      },
+    } as unknown as ConsumerEnv;
+
+    await consumer.scheduled(
+      {
+        cron: "0 10 * * *",
+        scheduledTime: Date.parse("2026-09-29T10:00:00.000Z"),
+      } as unknown as ScheduledEvent,
+      env,
+      {} as ExecutionContext,
+    );
+
+    expect(batches).toEqual([
+      [
+        {
+          body: {
+            v: 1,
+            jobId: "health-check:2026-09-29",
+            type: "health-check",
+            scheduledTime: "2026-09-29T10:00:00.000Z",
+          },
+        },
+      ],
+    ]);
+  });
+
+  it("throws for an unknown cron", async () => {
+    await expect(
+      consumer.scheduled(
+        {
+          cron: "0 12 * * *",
+          scheduledTime: Date.parse("2026-09-29T12:00:00.000Z"),
+        } as unknown as ScheduledEvent,
+        { JOBS_QUEUE: { sendBatch: vi.fn() } } as unknown as ConsumerEnv,
+        {} as ExecutionContext,
+      ),
+    ).rejects.toThrow("Unknown consumer cron");
   });
 });

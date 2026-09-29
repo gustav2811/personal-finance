@@ -42,13 +42,7 @@ export async function planTuyaDays(
   jobId = createTuyaPlanJob(now).jobId,
 ): Promise<void> {
   const deviceId = required(env.TUYA_DEVICE_ID, "TUYA_DEVICE_ID");
-  const missingDates: string[] = [];
-  for (const date of tuyaPlanDates(now)) {
-    budget.internal("r2:head");
-    if (!(await env.INGEST_BUCKET.head(tuyaSuccessKey(deviceId, date)))) {
-      missingDates.push(date);
-    }
-  }
+  const missingDates = await missingTuyaDays(env, now, budget);
   for (const date of missingDates) {
     const markerKey = tuyaSuccessKey(deviceId, date);
 
@@ -73,6 +67,22 @@ export async function planTuyaDays(
       })),
     );
   }
+}
+
+export async function missingTuyaDays(
+  env: Pick<TuyaEnv, "INGEST_BUCKET" | "TUYA_DEVICE_ID">,
+  now: Date,
+  budget = new SubrequestBudget(),
+): Promise<string[]> {
+  const deviceId = required(env.TUYA_DEVICE_ID, "TUYA_DEVICE_ID");
+  const missingDates: string[] = [];
+  for (const date of tuyaPlanDates(now)) {
+    budget.internal("r2:head");
+    if (!(await env.INGEST_BUCKET.head(tuyaSuccessKey(deviceId, date)))) {
+      missingDates.push(date);
+    }
+  }
+  return missingDates;
 }
 
 export async function handleTuyaDay(

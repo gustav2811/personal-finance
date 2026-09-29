@@ -621,7 +621,7 @@
 "@investments/ingest-core@file:libs/ingest-core":
   version "0.1.0"
   dependencies:
-    "@investments/finwise" "file:../../../Library/Caches/Yarn/v6/npm-@investments-ingest-core-0.1.0-56e5dd24-73a6-47e4-8896-60bd6f2f37ef-1790604854532/node_modules/@investments/finwise"
+    "@investments/finwise" "file:../../../Library/Caches/Yarn/v6/npm-@investments-ingest-core-0.1.0-6b59f918-674f-4369-a615-8fc6cf52ac6d-1790663850172/node_modules/@investments/finwise"
     "@supabase/supabase-js" "^2.79.0"
     mailparser "^3.9.4"
     xlsx "^0.18.5"
@@ -699,6 +699,11 @@
   dependencies:
     "@nodelib/fs.scandir" "2.1.5"
     fastq "^1.6.0"
+
+"@opentelemetry/api@^1.9.1":
+  version "1.9.1"
+  resolved "https://registry.yarnpkg.com/@opentelemetry/api/-/api-1.9.1.tgz#c1b0346de336ba55af2d5a7970882037baedec05"
+  integrity sha512-gLyJlPHPZYdAk1JENA9LeHejZe1Ti77/pTeFm/nMXmQH/HFZlcS/O2XJB+L8fkbrNSqhdtlvjBVjxwUYanNH5Q==
 
 "@pkgjs/parseargs@^0.11.0":
   version "0.11.0"
@@ -867,6 +872,47 @@
   dependencies:
     domhandler "^5.0.3"
     selderee "^0.11.0"
+
+"@sentry/cloudflare@^11.1.0":
+  version "11.1.0"
+  resolved "https://registry.yarnpkg.com/@sentry/cloudflare/-/cloudflare-11.1.0.tgz#f082f5d8b02531bf9616213423450afdb80995e2"
+  integrity sha512-Y/1nNLES7IcHrtkecss381Qpr5NXwdbi6QCNYx2he5FShRRzrIKnpa+N1FByMqJO7joFAmdMj/PgCeG/nJyKEw==
+  dependencies:
+    "@opentelemetry/api" "^1.9.1"
+    "@sentry/conventions" "^0.24.0"
+    "@sentry/core" "11.1.0"
+    "@sentry/opentelemetry" "11.1.0"
+    "@sentry/server-utils" "11.1.0"
+    magic-string "~0.30.21"
+
+"@sentry/conventions@^0.24.0":
+  version "0.24.0"
+  resolved "https://registry.yarnpkg.com/@sentry/conventions/-/conventions-0.24.0.tgz#b65931682a7150ffe7914e34af908b7afb2b87ab"
+  integrity sha512-pmmF2mLy7A23z8gnLRG87lYu4SSPIBColtfqu9cfkh1omn/0CI3w0/AqZ/uf/VGAtM/wJMN61J58Ks/IWBCHpQ==
+
+"@sentry/core@11.1.0":
+  version "11.1.0"
+  resolved "https://registry.yarnpkg.com/@sentry/core/-/core-11.1.0.tgz#71d9fe1e54540fb7b6ed0874d9c5cdc3b804b99c"
+  integrity sha512-ObM47oMWxRQiVxUdkV6bs2BeHxPVWim571hw1iT3suyAc8iRfJ27f+QdIdmDKZtvHFGJ0Vh/LpeTZP5Z8FXyEA==
+  dependencies:
+    "@sentry/conventions" "^0.24.0"
+
+"@sentry/opentelemetry@11.1.0":
+  version "11.1.0"
+  resolved "https://registry.yarnpkg.com/@sentry/opentelemetry/-/opentelemetry-11.1.0.tgz#fdd247ae2a9d36c5b6eaa90b1f65e8790a6b5503"
+  integrity sha512-ZFRwYDSuTIzpS1yOFTMn6p568tQW8k7KIjwzlI8VMOYYAEDkXQK+D/ZUGedSA/iu9fbiZXX+/wFfKqk7AYIiGg==
+  dependencies:
+    "@sentry/conventions" "^0.24.0"
+    "@sentry/core" "11.1.0"
+
+"@sentry/server-utils@11.1.0":
+  version "11.1.0"
+  resolved "https://registry.yarnpkg.com/@sentry/server-utils/-/server-utils-11.1.0.tgz#6ee999c5cf773df55ead76692911892bcfe90b87"
+  integrity sha512-5IQtU8SommZyTZgJxZFunQQHay8Vq78D8P0qP9ggQ1hTa6GU6kQKBDDN8eNayUA/Hl2qPei/LAmvmyiZNDIJ0Q==
+  dependencies:
+    "@opentelemetry/api" "^1.9.1"
+    "@sentry/conventions" "^0.24.0"
+    "@sentry/core" "11.1.0"
 
 "@sindresorhus/is@^7.0.2":
   version "7.2.0"
@@ -2085,7 +2131,7 @@ lru-cache@^10.2.0:
   resolved "https://registry.yarnpkg.com/lru-cache/-/lru-cache-10.4.3.tgz#410fc8a17b70e598013df257c2446b7f3383f119"
   integrity sha512-JNAzZcXrCt42VGLuYz0zfAzDfAvJWW6AfYlDBQyDV5DClI2m5sAmK+OIO7s59XfsRsWHp02jAJrRadPRGTt6SQ==
 
-magic-string@^0.30.12:
+magic-string@^0.30.12, magic-string@~0.30.21:
   version "0.30.21"
   resolved "https://registry.yarnpkg.com/magic-string/-/magic-string-0.30.21.tgz#56763ec09a0fa8091df27879fd94d19078c00d91"
   integrity sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ==

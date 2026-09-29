@@ -11,6 +11,7 @@ Household finance. Supabase project `finance-data`. Timezone `Africa/Johannesbur
 - **Owned category** — the household decision on a transaction. Distinct from the FinWise source category.
 - **Shadow** — the classifier records a proposal and does not write it.
 - **Job** — a scheduled unit of work on `investments-jobs`.
+- **Health check** — 10:00 UTC job verifying Tuya markers/readings, ISMRT freshness, and email DLQ.
 
 ## Sources
 

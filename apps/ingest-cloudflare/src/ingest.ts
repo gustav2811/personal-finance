@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/cloudflare";
 import type { IngestQueueMessageV1 } from "@investments/ingest-core";
 
 /** Raw MIME `email` field larger than this is stored in R2 to keep queue messages smaller. */
@@ -7,6 +8,7 @@ export interface IngestEnv {
   INGEST_BUCKET: R2Bucket;
   INGEST_QUEUE: Queue<IngestQueueMessageV1>;
   INGEST_TOKEN: string;
+  SENTRY_DSN: string;
 }
 
 function jsonResponse(data: unknown, status = 200): Response {
@@ -20,7 +22,7 @@ function unauthorized(): Response {
   return jsonResponse({ error: "Unauthorized" }, 401);
 }
 
-export default {
+const handler = {
   async fetch(
     request: Request,
     env: IngestEnv,
@@ -124,3 +126,12 @@ export default {
     return jsonResponse({ job_id, status: "queued" });
   },
 };
+
+export default Sentry.withSentry(
+  (env) => ({
+    dsn: env.SENTRY_DSN,
+    environment: "production",
+    tracesSampleRate: 0,
+  }),
+  handler,
+);

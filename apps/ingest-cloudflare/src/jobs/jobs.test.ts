@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createDlqReportJob,
+  createHealthCheckJob,
   createIsmrtSyncJob,
   createTuyaDayJob,
   createTuyaPlanJob,
@@ -25,6 +26,12 @@ describe("scheduled job parsing", () => {
       jobId: "tuya-plan:2026-09-29",
       type: "tuya-plan",
       scheduledTime: "2026-09-29T07:00:00.000Z",
+    });
+    expect(createHealthCheckJob("2026-09-29T10:00:00.000Z")).toEqual({
+      v: 1,
+      jobId: "health-check:2026-09-29",
+      type: "health-check",
+      scheduledTime: "2026-09-29T10:00:00.000Z",
     });
     expect(createTuyaDayJob("device", "2026-09-28")).toEqual({
       v: 1,
@@ -75,6 +82,7 @@ describe("scheduled job parsing", () => {
     {},
     { type: "unknown" },
     { v: 1, type: "ismrt-sync", scheduledTime: "not-a-date", jobId: "bad" },
+    { type: "health-check", scheduledTime: "2026-09-29T10:00:00.000Z" },
     { v: 1, type: "tuya-day", deviceId: "device", date: "2026-09-28", jobId: "bad" },
   ])("returns invalid for garbage body %#", (body) => {
     expect(parseJob(body)).toEqual({ ok: false, reason: "invalid" });
