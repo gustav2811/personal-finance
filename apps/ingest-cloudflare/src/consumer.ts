@@ -281,10 +281,24 @@ async function processJobsQueueBatch(
         }),
       );
       if (parsed.reason === "unsupported_version") {
-        Sentry.captureMessage("unsupported_version", "error");
+        Sentry.captureMessage("unsupported_version", {
+          level: "error",
+          tags: {
+            queue: "investments-jobs",
+            job_id: jobIdFromBody(message.body),
+            error_type: "unsupported_version",
+          },
+        });
         message.retry();
       } else {
-        Sentry.captureMessage("invalid_job_body", "error");
+        Sentry.captureMessage("invalid_job_body", {
+          level: "error",
+          tags: {
+            queue: "investments-jobs",
+            job_id: jobIdFromBody(message.body),
+            error_type: "invalid_job_body",
+          },
+        });
         message.ack();
       }
       continue;
