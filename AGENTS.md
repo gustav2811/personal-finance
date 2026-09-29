@@ -13,6 +13,7 @@ Supabase is the backend. Do not merge the dashboard and the Workers into one app
 | ISMRT date mapping | `apps/ingest-cloudflare/src/ismrt/map.ts` | dashboard charts |
 | Classifier | `apps/categorise-cloudflare/src/run.ts`, then `libs/categoriser` | ingest webhook, `libs/ingest-core` |
 | Dashboard | `apps/dashboard` app routes and `domain/` | Workers, `components/ui`, generated types |
+| Chart design | `docs/design/smart-charts/README.md`, then `docs/design/references/svg-reference/README.md` and `tokens.json` | Figma, embedding the SVGs, `components/ui` |
 | Schema | `supabase/migrations` for the change, `CONTEXT.md` for names | `database.types.ts` |
 
 ## Seams that stay
@@ -21,6 +22,7 @@ Supabase is the backend. Do not merge the dashboard and the Workers into one app
 - The dashboard stays a member client. It never receives a service key.
 - The classifier stays `CLASSIFIER_MODE = "shadow"`. It is not the ingest path.
 - ISMRT electricity, water, and wallet run on the ingest consumer cron and reuse that Worker's Supabase service key. Do not add a second consumption Worker.
+- Chart work starts at `docs/design/smart-charts/README.md`. The SVGs are look references. Do not embed them, hard-code 600px, or treat SF Pro Display as the app font.
 
 ## Do not read
 
