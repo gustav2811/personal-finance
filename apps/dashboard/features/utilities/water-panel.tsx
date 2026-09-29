@@ -29,11 +29,13 @@ function WaterBody({ data, window }: { data: EnergyData; window: HistoryWindow }
       <section aria-label="Latest month" className="space-y-1">
         <p className="type-label text-muted-foreground">{latest.label}</p>
         <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
-          <p className="type-numeric text-5xl font-semibold tracking-tight">
+          <p className="type-numeric flex items-center gap-3 text-5xl font-semibold tracking-tight">
+            <span aria-hidden className="size-3 rounded-full bg-chart-4" />
             {formatNumber(latest.kl)}
             <span className="ml-2 text-2xl font-medium text-muted-foreground">kl</span>
           </p>
-          <p className="type-numeric text-3xl font-semibold tracking-tight">
+          <p className="type-numeric flex items-center gap-3 text-3xl font-semibold tracking-tight">
+            <span aria-hidden className="size-2.5 rounded-full bg-chart-2" />
             {formatMoney(latest.cost)}
           </p>
         </div>
@@ -42,27 +44,31 @@ function WaterBody({ data, window }: { data: EnergyData; window: HistoryWindow }
         </p>
       </section>
 
-      <Section title="Usage">
-        <MonthBars
-          bars={visible.map((point) => ({ label: point.label, month: point.month, value: point.kl }))}
-          emptyLabel="No water invoices"
-          format={(value) => `${formatNumber(value)} kl`}
-          markers={[]}
-          onSelect={setSelectedMonth}
-          selected={selectedMonth}
-        />
-      </Section>
+      <div className="grid gap-x-6 gap-y-8 lg:grid-cols-2 [&>section]:min-w-0">
+        <Section title="Usage">
+          <MonthBars
+            bars={visible.map((point) => ({ label: point.label, month: point.month, value: point.kl }))}
+            color="var(--chart-4)"
+            emptyLabel="No water invoices"
+            format={(value) => `${formatNumber(value)} kl`}
+            markers={[]}
+            onSelect={setSelectedMonth}
+            selected={selectedMonth}
+          />
+        </Section>
 
-      <Section title="Cost">
-        <MonthBars
-          bars={visible.map((point) => ({ label: point.label, month: point.month, value: point.cost }))}
-          emptyLabel="No water invoices"
-          format={(value) => formatMoney(value)}
-          markers={[]}
-          onSelect={setSelectedMonth}
-          selected={selectedMonth}
-        />
-      </Section>
+        <Section title="Cost">
+          <MonthBars
+            bars={visible.map((point) => ({ label: point.label, month: point.month, value: point.cost }))}
+            color="var(--chart-2)"
+            emptyLabel="No water invoices"
+            format={(value) => formatMoney(value)}
+            markers={[]}
+            onSelect={setSelectedMonth}
+            selected={selectedMonth}
+          />
+        </Section>
+      </div>
     </div>
   )
 }

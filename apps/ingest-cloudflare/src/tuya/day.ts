@@ -145,7 +145,7 @@ export function buildTuyaConsumptionBatch(input: {
     source: TUYA_SOURCE,
     external_id: input.deviceId,
     kind: "smart_plug",
-    name: "BNETA espresso smart plug",
+    name: "Lelit Bianca",
     utility_type: "electricity",
     location: "home",
     timezone: "Africa/Johannesburg",

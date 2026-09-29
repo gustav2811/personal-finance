@@ -11,7 +11,7 @@ const DEVICES: DeviceRead[] = [
   device("wallet", "ISMRT wallet", "wallet", "wallet", "ismrt"),
   device("meter", "ISMRT meter", "utility_meter", "electricity", "ismrt"),
   device("water", "ISMRT water billing", "utility_stream", "water", "ismrt"),
-  device("espresso", "BNETA espresso smart plug", "smart_plug", "electricity", "tuya"),
+  device("espresso", "Lelit Bianca", "smart_plug", "electricity", "tuya"),
   device("geyser", "Geyser controller", "smart_plug", "electricity", "tuya"),
   device("pool", "Pool pump", "smart_plug", "electricity", "tuya"),
 ]
@@ -134,7 +134,13 @@ export function buildMockEnergyData(now: Date): EnergyData {
       "meter",
     )
     addLedger(
-      { amount: 2.03, direction: "debit", entry_type: "fee", utility_type: "wallet" },
+      {
+        amount: 2.03,
+        description: "SUMS WORLDS VIEW BC SUBSCRIPTION FEE",
+        direction: "debit",
+        entry_type: "fee",
+        utility_type: "wallet",
+      },
       start,
       "wallet",
     )
@@ -146,7 +152,13 @@ export function buildMockEnergyData(now: Date): EnergyData {
         "wallet",
       )
       addLedger(
-        { amount: 8, direction: "debit", entry_type: "fee", utility_type: "wallet" },
+        {
+          amount: 8,
+          description: "SUMS EFT FEE",
+          direction: "debit",
+          entry_type: "fee",
+          utility_type: "wallet",
+        },
         at,
         "wallet",
       )

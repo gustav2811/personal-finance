@@ -167,19 +167,26 @@ export function buildMtd(
     if ((days.get(dayKey(currentMonth, day))?.kwh ?? 0) > 0) lastClosedDay = day
   }
 
+  // kwh and rand are running totals for the month. Payments and fees stay per day.
   const points: MtdPoint[] = []
+  const running = { kwh: 0, rand: 0, lastKwh: 0, lastRand: 0 }
   for (let day = 1; day <= span; day += 1) {
     const current = day <= daysInMonth(currentMonth) ? days.get(dayKey(currentMonth, day)) : undefined
-    const previous = day <= daysInMonth(previousMonth) ? days.get(dayKey(previousMonth, day)) : undefined
+    const hasPrevious = day <= daysInMonth(previousMonth)
+    const previous = hasPrevious ? days.get(dayKey(previousMonth, day)) : undefined
     const closed = day <= lastClosedDay
+    running.kwh += current?.kwh ?? 0
+    running.rand += current?.rand ?? 0
+    running.lastKwh += previous?.kwh ?? 0
+    running.lastRand += previous?.rand ?? 0
     points.push({
       day,
       deposits: current ? positive(current.deposits) : null,
       fees: current ? positive(current.fees) : null,
-      kwh: closed && current ? current.kwh : null,
-      lastKwh: previous ? previous.kwh : null,
-      lastRand: previous ? previous.rand : null,
-      rand: closed && current ? current.rand : null,
+      kwh: closed ? running.kwh : null,
+      lastKwh: hasPrevious ? running.lastKwh : null,
+      lastRand: hasPrevious ? running.lastRand : null,
+      rand: closed ? running.rand : null,
     })
   }
 
@@ -383,4 +390,70 @@ export function buildWeekdays(days: Map<string, DayTotals>, month: string): Week
     label,
     weekend: index >= 5,
   }))
+}
+
+export type DeviceOption = { target: string; name: string }
+
+export function buildDeviceOptions(readings: ReadingRead[], devices: DeviceRead[]): DeviceOption[] {
+  const deviceNames = new Map(devices.map((device) => [device.id, device.name]))
+  const names = new Map<string, string>()
+  for (const reading of readings) {
+    if (reading.measurement_target === HOME_TARGET || toKwh(reading) === null) continue
+    const name = reading.device_id ? deviceNames.get(reading.device_id) : undefined
+    names.set(reading.measurement_target, name ?? reading.measurement_target)
+  }
+  const options = [...names.entries()]
+    .sort(([, first], [, second]) => first.localeCompare(second))
+    .map(([target, name]) => ({ name, target }))
+  return [{ name: "Whole home", target: HOME_TARGET }, ...options]
+}
+
+export type DeviceDayPoint = { day: number; current: number | null; previous: number | null }
+
+// Daily kWh for one measurement target, this month against last, on day of month.
+export function buildDeviceDaily(
+  readings: ReadingRead[],
+  target: string,
+  currentMonth: string,
+): DeviceDayPoint[] {
+  const previousMonth = shiftMonth(currentMonth, -1)
+  const byDate = new Map<string, number>()
+  for (const reading of readings) {
+    if (reading.measurement_target !== target) continue
+    const kwh = toKwh(reading)
+    if (kwh === null) continue
+    const key = localDateKey(reading.period_start)
+    byDate.set(key, (byDate.get(key) ?? 0) + kwh)
+  }
+
+  const dayKey = (month: string, day: number) => `${month}-${String(day).padStart(2, "0")}`
+  const span = Math.max(daysInMonth(currentMonth), daysInMonth(previousMonth))
+  const points: DeviceDayPoint[] = []
+  for (let day = 1; day <= span; day += 1) {
+    points.push({
+      current: byDate.get(dayKey(currentMonth, day)) ?? null,
+      day,
+      previous: byDate.get(dayKey(previousMonth, day)) ?? null,
+    })
+  }
+  return points
+}
+
+export type WalletFees = { total: number; eft: number; daily: number }
+
+// ISMRT does not type its fees. EFT fees are the ones whose description says EFT, and the
+// rest are the daily subscription fee.
+export function buildWalletFees(ledgerEntries: LedgerRead[], month: string): WalletFees {
+  const fees: WalletFees = { daily: 0, eft: 0, total: 0 }
+  for (const entry of ledgerEntries) {
+    const key = incurredKey(entry)
+    if (!key || monthKey(key) !== month) continue
+    if (entry.utility_type !== "wallet" || entry.entry_type !== "fee" || entry.direction !== "debit") {
+      continue
+    }
+    if (/\bEFT\b/i.test(entry.description ?? "")) fees.eft += entry.amount
+    else fees.daily += entry.amount
+    fees.total += entry.amount
+  }
+  return fees
 }
