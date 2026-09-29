@@ -1,6 +1,7 @@
 import { InvalidSourceDataError } from "../errors.js";
 import {
   TuyaApiError,
+  TuyaRateLimitedError,
   TuyaSubscriptionExpiredError,
 } from "./errors.js";
 
@@ -160,6 +161,9 @@ export class TuyaClient {
           `Tuya API subscription expired (${context})`,
           details,
         );
+      }
+      if (code === "40000309") {
+        throw new TuyaRateLimitedError(`Tuya API rate limited (${context})`, details);
       }
       throw new TuyaApiError(`Tuya API request failed (${context})`, details);
     }
