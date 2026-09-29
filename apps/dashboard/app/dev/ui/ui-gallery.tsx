@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { Bar, BarChart, CartesianGrid, XAxis } from "recharts"
 import { ThemeToggle } from "@/components/shell/theme-toggle"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -47,6 +47,11 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { HistoryControl } from "@/components/patterns/history-control"
+import { EnergyPanel } from "@/features/utilities/energy-panel"
+import { buildMockEnergyData } from "@/features/utilities/mock-data"
+import { WaterPanel } from "@/features/utilities/water-panel"
+import type { HistoryWindow } from "@/lib/range"
 
 const SWATCHES = [
   ["shocking-pink", "bg-shocking-pink-500"],
@@ -63,6 +68,8 @@ const chartConfig = {
 
 export function UiGallery() {
   const [range, setRange] = useState("90")
+  const [history, setHistory] = useState<HistoryWindow>(6)
+  const mock = useMemo(() => buildMockEnergyData(new Date()), [])
 
   return (
     <main className="mx-auto flex max-w-5xl flex-col gap-10 p-6">
@@ -202,6 +209,18 @@ export function UiGallery() {
             <Bar dataKey="violet" fill="var(--color-violet)" radius={4} />
           </BarChart>
         </ChartContainer>
+      </section>
+
+      <section className="space-y-6" id="utilities-mock">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="type-section-title">Utilities with mock data</h2>
+          </div>
+          <HistoryControl onChange={setHistory} value={history} />
+        </div>
+        <EnergyPanel data={mock} window={history} />
+        <h3 className="type-section-title">Water</h3>
+        <WaterPanel data={mock} window={history} />
       </section>
     </main>
   )

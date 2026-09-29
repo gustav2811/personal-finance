@@ -14,7 +14,7 @@ const DEVICE_SELECT =
 const READING_SELECT =
   "id,device_id,source,source_record_id,period_start,period_end,metric,measurement_target,value,unit,quality"
 const LEDGER_SELECT =
-  "id,device_id,source,utility_type,entry_type,direction,amount,currency,quantity,occurred_at,posted_at,description"
+  "id,device_id,source,utility_type,entry_type,direction,amount,currency,quantity,rate,occurred_at,posted_at,description"
 const INGESTION_SELECT =
   "id,source,runner,status,error,started_at,finished_at,rows_fetched,rows_written"
 const SNAPSHOT_SELECT = "account_id,date,amount_cents,currency_code"
@@ -59,6 +59,43 @@ export async function readLedger(client: BrowserClient): Promise<LedgerRead[]> {
     .order("occurred_at")
   assertOk(error, "ledger")
   return data ?? []
+}
+
+// Full history, paged past the API row cap. Ordered by id as a tiebreak so pages never overlap.
+const PAGE_SIZE = 1000
+
+export async function readReadingsHistory(client: BrowserClient): Promise<ReadingRead[]> {
+  const rows: ReadingRead[] = []
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await client
+      .schema("consumption")
+      .from("readings")
+      .select(READING_SELECT)
+      .order("period_start")
+      .order("id")
+      .range(from, from + PAGE_SIZE - 1)
+    assertOk(error, "reading")
+    const page = data ?? []
+    rows.push(...page)
+    if (page.length < PAGE_SIZE) return rows
+  }
+}
+
+export async function readLedgerHistory(client: BrowserClient): Promise<LedgerRead[]> {
+  const rows: LedgerRead[] = []
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await client
+      .schema("consumption")
+      .from("ledger_entries")
+      .select(LEDGER_SELECT)
+      .order("occurred_at")
+      .order("id")
+      .range(from, from + PAGE_SIZE - 1)
+    assertOk(error, "ledger")
+    const page = data ?? []
+    rows.push(...page)
+    if (page.length < PAGE_SIZE) return rows
+  }
 }
 
 export async function readIngestionRuns(client: BrowserClient): Promise<IngestionRunRead[]> {

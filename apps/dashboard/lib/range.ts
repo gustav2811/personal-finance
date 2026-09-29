@@ -5,3 +5,5 @@ export const RANGE_ITEMS: Array<{ days: RangeDays; label: string }> = [
   { days: 90, label: "90 days" },
   { days: 365, label: "1 year" },
 ]
+
+export type HistoryWindow = 3 | 6 | "all"
