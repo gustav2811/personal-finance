@@ -438,3 +438,22 @@ export function buildDeviceDaily(
   }
   return points
 }
+
+export type WalletFees = { total: number; eft: number; daily: number }
+
+// ISMRT does not type its fees. EFT fees are the ones whose description says EFT, and the
+// rest are the daily subscription fee.
+export function buildWalletFees(ledgerEntries: LedgerRead[], month: string): WalletFees {
+  const fees: WalletFees = { daily: 0, eft: 0, total: 0 }
+  for (const entry of ledgerEntries) {
+    const key = incurredKey(entry)
+    if (!key || monthKey(key) !== month) continue
+    if (entry.utility_type !== "wallet" || entry.entry_type !== "fee" || entry.direction !== "debit") {
+      continue
+    }
+    if (/\bEFT\b/i.test(entry.description ?? "")) fees.eft += entry.amount
+    else fees.daily += entry.amount
+    fees.total += entry.amount
+  }
+  return fees
+}

@@ -134,7 +134,13 @@ export function buildMockEnergyData(now: Date): EnergyData {
       "meter",
     )
     addLedger(
-      { amount: 2.03, direction: "debit", entry_type: "fee", utility_type: "wallet" },
+      {
+        amount: 2.03,
+        description: "SUMS WORLDS VIEW BC SUBSCRIPTION FEE",
+        direction: "debit",
+        entry_type: "fee",
+        utility_type: "wallet",
+      },
       start,
       "wallet",
     )
@@ -146,7 +152,13 @@ export function buildMockEnergyData(now: Date): EnergyData {
         "wallet",
       )
       addLedger(
-        { amount: 8, direction: "debit", entry_type: "fee", utility_type: "wallet" },
+        {
+          amount: 8,
+          description: "SUMS EFT FEE",
+          direction: "debit",
+          entry_type: "fee",
+          utility_type: "wallet",
+        },
         at,
         "wallet",
       )

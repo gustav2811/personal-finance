@@ -20,6 +20,7 @@ import {
   buildMonths,
   buildMtd,
   buildRateSteps,
+  buildWalletFees,
   buildWeekdays,
   earliestMonth,
   HOME_TARGET,
@@ -28,6 +29,7 @@ import {
 } from "@/domain/consumption/energy-model"
 import { MonthBars } from "@/domain/consumption/month-bars"
 import { MtdChart, type MtdMetric } from "@/domain/consumption/mtd-chart"
+import { WalletFeesChart } from "@/domain/consumption/wallet-fees-chart"
 import { WeekdayChart } from "@/domain/consumption/weekday-chart"
 import type { EnergyData } from "@/features/utilities/queries"
 import { localDateKey, shortDate } from "@/lib/format/date"
@@ -86,6 +88,10 @@ function EnergyBody({
   const deviceDaily = useMemo(
     () => buildDeviceDaily(data.readings, target, currentMonth),
     [data.readings, target, currentMonth],
+  )
+  const walletFees = useMemo(
+    () => buildWalletFees(data.ledgerEntries, currentMonth),
+    [data.ledgerEntries, currentMonth],
   )
   const weekdays = useMemo(() => buildWeekdays(days, currentMonth), [days, currentMonth])
 
@@ -175,6 +181,10 @@ function EnergyBody({
           onSelect={setSelectedMonth}
           selected={selectedMonth}
         />
+      </Section>
+
+      <Section title="Wallet fees">
+        <WalletFeesChart fees={walletFees} />
       </Section>
 
       <Section title="Devices">
