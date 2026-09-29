@@ -42,32 +42,18 @@ export class ConsumptionRpc {
   }
 
   health(tuyaSourceRecordId: string): Promise<IngestHealth> {
-    return this.call(
-      "ingest_health",
-      { p_tuya_source_record_id: tuyaSourceRecordId },
-      "consumption",
-    );
+    return this.call("ingest_health", {
+      p_tuya_source_record_id: tuyaSourceRecordId,
+    });
   }
 
-  private call<T = unknown>(
-    name: string,
-    body: unknown,
-    schema?: string,
-  ): Promise<T> {
-    const fetchImpl =
-      schema === undefined
-        ? this.fetchImpl
-        : (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-            const headers = new Headers(init?.headers);
-            headers.set("Content-Profile", schema);
-            return this.fetchImpl(input, { ...init, headers });
-          };
+  private call<T = unknown>(name: string, body: unknown): Promise<T> {
     return callServiceRoleRpc<T>(
       this.url,
       this.key,
       name,
       body,
-      fetchImpl,
+      this.fetchImpl,
     );
   }
 }
