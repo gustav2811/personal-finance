@@ -1,6 +1,11 @@
 import { createHash, createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { buildTuyaStringToSign, createTuyaSignature } from "./client.js";
+import {
+  buildTuyaStringToSign,
+  createTuyaSignature,
+  TuyaClient,
+} from "./client.js";
+import { TuyaRateLimitedError } from "./errors.js";
 
 describe("Tuya signing", () => {
   it("builds the documented string and uppercase HMAC signature", async () => {
@@ -29,5 +34,14 @@ describe("Tuya signing", () => {
       buildTuyaStringToSign(input.method, input.body, input.pathWithQuery),
     ).resolves.toBe(stringToSign);
     await expect(createTuyaSignature(input)).resolves.toBe(expected);
+  });
+});
+
+describe("Tuya errors", () => {
+  it("raises TuyaRateLimitedError for code 40000309", async () => {
+    const fetchImpl: typeof fetch = async () =>
+      Response.json({ success: false, code: 40000309, msg: "The log query is too frequent", tid: "t1" });
+    const client = new TuyaClient("client-id", "secret", { fetchImpl, now: () => 1 });
+    await expect(client.authenticate()).rejects.toBeInstanceOf(TuyaRateLimitedError);
   });
 });

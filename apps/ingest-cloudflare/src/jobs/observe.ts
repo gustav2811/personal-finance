@@ -2,7 +2,10 @@ import { InvalidSourceDataError } from "../errors.js";
 import { SubrequestBudgetExceededError } from "./budget.js";
 import type { Job } from "./jobs.js";
 import type { JobFailureOutcome } from "./policy.js";
-import { TuyaSubscriptionExpiredError } from "../tuya/errors.js";
+import {
+  TuyaRateLimitedError,
+  TuyaSubscriptionExpiredError,
+} from "../tuya/errors.js";
 
 export type FailureJob = Job | "email-ingest";
 
@@ -30,6 +33,9 @@ export function buildFailureTags(
 export function errorType(error: unknown): string {
   if (error instanceof TuyaSubscriptionExpiredError) {
     return "tuya_subscription_expired";
+  }
+  if (error instanceof TuyaRateLimitedError) {
+    return "tuya_rate_limited";
   }
   if (error instanceof SubrequestBudgetExceededError) {
     return "subrequest_budget_exceeded";

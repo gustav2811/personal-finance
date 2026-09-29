@@ -7,7 +7,7 @@ import {
   type Job,
 } from "./jobs/jobs.js";
 import { SubrequestBudget } from "./jobs/budget.js";
-import { classifyJobFailure } from "./jobs/policy.js";
+import { backoffDelaySeconds, classifyJobFailure } from "./jobs/policy.js";
 import { buildFailureTags, errorType } from "./jobs/observe.js";
 import { runJob } from "./jobs/run.js";
 import { getConsumerConfig, type ConsumerEnv } from "./config.js";
@@ -354,6 +354,26 @@ async function processJobsQueueBatch(
           );
           message.retry();
           break;
+        case "backoff": {
+          const delaySeconds = backoffDelaySeconds(message.attempts);
+          console.log(
+            JSON.stringify({
+              level: "warn",
+              msg: "scheduled_job_failed",
+              component: "ingest-consumer",
+              outcome,
+              attempts: message.attempts,
+              delay_seconds: delaySeconds,
+              error_type: errorType(err),
+              error: errorMessage(err),
+              job_id: job.jobId,
+              job_type: job.type,
+              subrequests_used: budget.used,
+            }),
+          );
+          message.retry({ delaySeconds });
+          break;
+        }
         default:
           assertNever(outcome);
       }

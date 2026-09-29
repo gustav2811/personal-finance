@@ -32,7 +32,9 @@ queue = "investments-jobs"
 queue = "investments-jobs"
 max_batch_size = 1
 max_batch_timeout = 1
-max_retries = 3
+max_retries = 5
+# Tuya rate-limits report-log queries per project; run one job at a time.
+max_concurrency = 1
 
 # 07:00 UTC is 09:00 in Johannesburg, after the previous ISMRT usage day has closed.
 # 10:00 UTC runs the health check after the source jobs have finished/retried.
