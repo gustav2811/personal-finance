@@ -1,4 +1,5 @@
 import * as Sentry from "@sentry/cloudflare";
+import { sentryOptions } from "./sentry.js";
 import type { IngestQueueMessageV1 } from "@investments/ingest-core";
 
 /** Raw MIME `email` field larger than this is stored in R2 to keep queue messages smaller. */
@@ -127,11 +128,4 @@ const handler = {
   },
 };
 
-export default Sentry.withSentry(
-  (env) => ({
-    dsn: env.SENTRY_DSN,
-    environment: "production",
-    tracesSampleRate: 0,
-  }),
-  handler,
-);
+export default Sentry.withSentry(sentryOptions, handler);

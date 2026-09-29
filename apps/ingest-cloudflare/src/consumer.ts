@@ -12,6 +12,7 @@ import { buildFailureTags, errorType } from "./jobs/observe.js";
 import { runJob } from "./jobs/run.js";
 import { getConsumerConfig, type ConsumerEnv } from "./config.js";
 import * as Sentry from "@sentry/cloudflare";
+import { sentryOptions } from "./sentry.js";
 import { TuyaSubscriptionExpiredError } from "./tuya/errors.js";
 import {
   attachmentToPayload,
@@ -189,14 +190,7 @@ const handler = {
   },
 };
 
-export default Sentry.withSentry(
-  (env) => ({
-    dsn: env.SENTRY_DSN,
-    environment: "production",
-    tracesSampleRate: 0,
-  }),
-  handler,
-);
+export default Sentry.withSentry(sentryOptions, handler);
 
 async function processEmailQueueBatch(
   batch: MessageBatch<IngestQueueMessageV1 | Job>,
