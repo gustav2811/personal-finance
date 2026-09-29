@@ -43,7 +43,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { setTransactionCategory, undoTransactionCategory } from "./mutations"
+import { setTransactionCategory, setTransactionTreatment, undoTransactionCategory } from "./mutations"
 import { getTransactionFilters, listTransactions } from "./queries"
 import { SignInRequiredError } from "./rpc"
 import type {
@@ -99,24 +99,6 @@ function rememberCategory(id: string) {
     localStorage.setItem(RECENT_KEY, JSON.stringify(next))
   } catch {
     return
-  }
-}
-
-function applyCategory(
-  item: TransactionFeedItem,
-  category: CategoryOption,
-): TransactionFeedItem {
-  return {
-    ...item,
-    category: {
-      confidence: null,
-      id: category.id,
-      name: category.name,
-      proposalDiffersFromSource: false,
-      provenance: "user",
-      state: "confirmed",
-    },
-    reviewState: "confirmed",
   }
 }
 
@@ -241,17 +223,9 @@ export function TransactionsView() {
 
   async function classify(item: TransactionFeedItem, category: CategoryOption) {
     const priorCategoryId = item.category.id
+    const rollback = optimisticLeave(item)
     rememberCategory(category.id)
     setSignInHint(false)
-    setOverlays((current) => ({
-      ...current,
-      [item.id]: {
-        error: null,
-        item: applyCategory(item, category),
-        pending: true,
-        undo: null,
-      },
-    }))
     try {
       const result = await setTransactionCategory({
         categoryId: category.id,
@@ -260,27 +234,38 @@ export function TransactionsView() {
         reviewCommandId: commandId(),
         transactionId: item.id,
       })
-      setOverlays((current) => ({
-        ...current,
-        [item.id]: {
-          error: result.conflict ? "This movement changed. Showing the current decision." : null,
-          item: result.item,
-          pending: false,
-          undo:
-            priorCategoryId !== category.id
-              ? {
-                  categoryId: priorCategoryId,
-                  expectedConfirmedClassificationId: result.item.revision.confirmedClassificationId,
-                }
-              : null,
-        },
-      }))
-      if (!result.conflict && review === "needs_review") {
-        const index = visibleItems.findIndex((entry) => entry.id === item.id)
-        const following = visibleItems[index + 1]
-        if (following) setSelectedId(following.id)
+      if (result.conflict || needsReview(result.item)) {
+        rollback()
+        setOverlays((current) => ({
+          ...current,
+          [item.id]: {
+            error: result.conflict ? "This movement changed. Showing the current decision." : null,
+            item: result.item,
+            pending: false,
+            undo: null,
+          },
+        }))
+        return
+      }
+      if (review !== "needs_review") {
+        setOverlays((current) => ({
+          ...current,
+          [item.id]: {
+            error: null,
+            item: result.item,
+            pending: false,
+            undo:
+              priorCategoryId !== category.id
+                ? {
+                    categoryId: priorCategoryId,
+                    expectedConfirmedClassificationId: result.item.revision.confirmedClassificationId,
+                  }
+                : null,
+          },
+        }))
       }
     } catch (error) {
+      rollback()
       if (error instanceof SignInRequiredError) setSignInHint(true)
       focusCategory(item.id)
       setOverlays((current) => ({
@@ -292,6 +277,58 @@ export function TransactionsView() {
           undo: null,
         },
       }))
+    }
+  }
+
+  async function confirmTreatment(
+    item: TransactionFeedItem,
+    input: { isTransfer: boolean; excludeFromSpend: boolean; nature: string | null },
+  ): Promise<string | null> {
+    const rollback = optimisticLeave(item)
+    const categoryConfirmed = item.category.state === "confirmed" && item.category.id != null
+    try {
+      if (item.category.id && !categoryConfirmed) {
+        const categoryResult = await setTransactionCategory({
+          categoryId: item.category.id,
+          expectedConfirmedClassificationId: item.revision.confirmedClassificationId,
+          expectedProposedClassificationId: item.revision.proposedClassificationId,
+          reviewCommandId: commandId(),
+          transactionId: item.id,
+        })
+        if (categoryResult.conflict || needsReview(categoryResult.item)) {
+          rollback()
+          return categoryResult.conflict ? "This movement changed. Showing the current decision." : null
+        }
+      }
+      const result = await setTransactionTreatment({
+        excludeFromSpend: input.excludeFromSpend,
+        expectedConfirmedTreatmentId: item.revision.confirmedTreatmentId,
+        expectedProposedTreatmentId: item.revision.proposedTreatmentId,
+        isTransfer: input.isTransfer,
+        nature: input.nature,
+        reviewCommandId: commandId(),
+        transactionId: item.id,
+      })
+      if (result.conflict) {
+        if (categoryConfirmed) rollback()
+        return "Treatment changed. Showing the current decision."
+      }
+      if (review !== "needs_review") {
+        setOverlays((current) => ({
+          ...current,
+          [item.id]: {
+            error: null,
+            item: result.item,
+            pending: false,
+            undo: current[item.id]?.undo ?? null,
+          },
+        }))
+      }
+      return null
+    } catch (error) {
+      if (!categoryConfirmed) rollback()
+      if (error instanceof SignInRequiredError) setSignInHint(true)
+      return error instanceof Error ? error.message : "Treatment could not be saved."
     }
   }
 
@@ -329,6 +366,48 @@ export function TransactionsView() {
     }
   }
 
+  function optimisticLeave(item: TransactionFeedItem): () => void {
+    if (!needsReview(item) || !item.category.id) return () => {}
+    const index = visibleItems.findIndex((entry) => entry.id === item.id)
+    const followingId = visibleItems[index + 1]?.id ?? null
+    const snapshot = {
+      items,
+      overlay: overlays[item.id],
+      reviewCount,
+      selectedId,
+    }
+    if (review === "needs_review") {
+      setItems((current) => current.filter((entry) => entry.id !== item.id))
+      setSelectedId(followingId)
+      setReviewCount((count) => {
+        if (count == null || count.endsWith("+")) return count
+        const value = Number(count)
+        return Number.isFinite(value) ? String(Math.max(0, value - 1)) : count
+      })
+    } else {
+      setOverlays((current) => ({
+        ...current,
+        [item.id]: {
+          error: null,
+          item: { ...item, reviewState: "confirmed" },
+          pending: false,
+          undo: current[item.id]?.undo ?? null,
+        },
+      }))
+    }
+    return () => {
+      setItems(snapshot.items)
+      setSelectedId(snapshot.selectedId)
+      setReviewCount(snapshot.reviewCount)
+      setOverlays((current) => {
+        const next = { ...current }
+        if (snapshot.overlay) next[item.id] = snapshot.overlay
+        else delete next[item.id]
+        return next
+      })
+    }
+  }
+
   function clearFilters() {
     setReview("all")
     setAccountId("all")
@@ -345,17 +424,7 @@ export function TransactionsView() {
       categoryError={selectedOverlay?.error ?? null}
       item={selected}
       onClassify={(category) => void classify(selected, category)}
-      onTreatmentSaved={(next) => {
-        setOverlays((current) => ({
-          ...current,
-          [next.id]: {
-            error: null,
-            item: next,
-            pending: false,
-            undo: current[next.id]?.undo ?? null,
-          },
-        }))
-      }}
+      onConfirm={(input) => confirmTreatment(selected, input)}
       onUndo={() => {
         if (selectedOverlay?.undo) void undo(selected, selectedOverlay.undo)
       }}
