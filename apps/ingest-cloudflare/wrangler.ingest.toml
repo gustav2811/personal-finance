@@ -3,6 +3,7 @@
 name = "investments-ingest"
 main = "src/ingest.ts"
 compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
 # Preserve plain-text vars set in the dashboard (Wrangler’s default is to delete unlisted vars).
 keep_vars = true
 
