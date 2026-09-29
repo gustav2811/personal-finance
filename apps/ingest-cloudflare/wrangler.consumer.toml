@@ -24,15 +24,29 @@ max_batch_size = 1
 max_batch_timeout = 2
 max_retries = 5
 
-# 07:00 UTC is 09:00 in Johannesburg, after the previous ISMRT usage day has closed.
-# The same run touches Supabase (DLQ count) so a free project is less likely to pause.
-[triggers]
-crons = ["0 7 * * *"]
+[[queues.producers]]
+binding = "JOBS_QUEUE"
+queue = "investments-jobs"
 
-# Dashboard secrets: FINWISE_API_KEY, SUPABASE_*, BANK_ZERO_*.
+[[queues.consumers]]
+queue = "investments-jobs"
+max_batch_size = 1
+max_batch_timeout = 1
+max_retries = 3
+
+# 07:00 UTC is 09:00 in Johannesburg, after the previous ISMRT usage day has closed.
+# 10:00 UTC runs the health check after the source jobs have finished/retried.
+# Crons only enqueue jobs onto investments-jobs; each job has separate external
+# and internal subrequest budgets below the Cloudflare free-plan ceilings.
+[triggers]
+crons = ["0 7 * * *", "0 10 * * *"]
+
+# Dashboard secrets: FINWISE_API_KEY, SUPABASE_*, BANK_ZERO_*, SENTRY_DSN.
+# Tuya secrets: TUYA_ACCESS_ID, TUYA_ACCESS_SECRET.
 # Optional: GEMINI_API_KEY when CATEGORISATION_ENABLED=true (batched Gemini for uncategorized rows).
 # (Workers → investments-ingest-consumer → Settings → Variables and secrets). Omitting them here
 # avoids `wrangler deploy` replacing your dashboard values with empty defaults.
 [vars]
 FINWISE_BASE_URL = "https://api.finwiseapp.io"
 UPLOAD_TO_FINWISE = "true"
+TUYA_DEVICE_ID = "bf425b172390340134huph"

@@ -2,6 +2,7 @@ import { closedWindow } from "./dates.js";
 import { IsmrtClient, type IsmrtCredentials } from "./ismrt.js";
 import { buildConsumptionBatch, mergeBatches, type ConsumptionBatch } from "./map.js";
 import { ConsumptionRpc } from "./supabase.js";
+import type { SubrequestUsage } from "../jobs/budget.js";
 
 export type ConsumptionEnv = {
   ISMRT_USERNAME: string;
@@ -25,6 +26,7 @@ export async function runConsumptionSync(
   env: ConsumptionEnv,
   now: Date,
   fetchImpl: typeof fetch = fetch,
+  jobId?: string,
 ): Promise<RunSummary> {
   const startedAt = now.toISOString();
   const lookback = Number(env.ISMRT_LOOKBACK_DAYS ?? "45");
@@ -56,6 +58,8 @@ export async function runConsumptionSync(
         JSON.stringify({
           level: "warn",
           msg: "ismrt_failure_audit_failed",
+          component: "ingest-consumer",
+          ...(jobId === undefined ? {} : { job_id: jobId }),
           error: auditErr instanceof Error ? auditErr.message : "unknown",
         }),
       );
@@ -119,10 +123,19 @@ function openRpc(env: ConsumptionEnv, fetchImpl: typeof fetch): ConsumptionRpc {
   return new ConsumptionRpc(url, key, fetchImpl);
 }
 
-export function logSummary(summary: RunSummary): void {
+export function logSummary(
+  summary: RunSummary,
+  jobId?: string,
+  subrequestsUsed?: SubrequestUsage,
+): void {
   console.log(
     JSON.stringify({
+      component: "ingest-consumer",
       msg: "ismrt_consumption_sync",
+      ...(jobId === undefined ? {} : { job_id: jobId }),
+      ...(subrequestsUsed === undefined
+        ? {}
+        : { subrequests_used: subrequestsUsed }),
       wallets: summary.wallets,
       readings: summary.readings,
       ledger_entries: summary.ledgerEntries,

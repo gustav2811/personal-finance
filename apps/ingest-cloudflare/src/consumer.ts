@@ -1,67 +1,29 @@
-import { logSummary, runConsumptionSync } from "./ismrt/run.js";
+import {
+  createDlqReportJob,
+  createHealthCheckJob,
+  createIsmrtSyncJob,
+  createTuyaPlanJob,
+  parseJob,
+  type Job,
+} from "./jobs/jobs.js";
+import { SubrequestBudget } from "./jobs/budget.js";
+import { classifyJobFailure } from "./jobs/policy.js";
+import { buildFailureTags, errorType } from "./jobs/observe.js";
+import { runJob } from "./jobs/run.js";
+import { getConsumerConfig, type ConsumerEnv } from "./config.js";
+import * as Sentry from "@sentry/cloudflare";
+import { sentryOptions } from "./sentry.js";
+import { TuyaSubscriptionExpiredError } from "./tuya/errors.js";
 import {
   attachmentToPayload,
   ChunkIncomplete,
-  countDlqSince,
   finalizeIngestPayload,
-  parseBankZeroAccountMapJson,
   processIngestJob,
-  type IngestCoreConfig,
   type IngestQueueMessageV1,
   type ProcessJobLogger,
 } from "@investments/ingest-core";
 
-export interface ConsumerEnv {
-  INGEST_BUCKET: R2Bucket;
-  FINWISE_API_KEY: string;
-  FINWISE_BASE_URL: string;
-  SUPABASE_URL: string;
-  SUPABASE_SERVICE_KEY: string;
-  BANK_ZERO_ACCOUNT_ID: string;
-  BANK_ZERO_ACCOUNT_MAP: string;
-  UPLOAD_TO_FINWISE: string;
-  CATEGORISATION_ENABLED?: string;
-  GEMINI_API_KEY?: string;
-  GEMINI_MODEL?: string;
-  GEMINI_API_BASE?: string;
-  CATEGORISATION_LLM_TIMEOUT_MS?: string;
-  CATEGORISATION_MIN_CONFIDENCE?: string;
-  ISMRT_USERNAME?: string;
-  ISMRT_PASSWORD?: string;
-  ISMRT_LOOKBACK_DAYS?: string;
-}
-
-function getConsumerConfig(env: ConsumerEnv): IngestCoreConfig {
-  const timeoutRaw = env.CATEGORISATION_LLM_TIMEOUT_MS ?? "45000";
-  const timeoutParsed = parseInt(timeoutRaw, 10);
-  const confRaw = env.CATEGORISATION_MIN_CONFIDENCE ?? "0.35";
-  const confParsed = parseFloat(confRaw);
-  return {
-    finwiseApiKey: env.FINWISE_API_KEY,
-    finwiseBaseUrl: env.FINWISE_BASE_URL || "https://api.finwiseapp.io",
-    supabaseUrl: env.SUPABASE_URL,
-    supabaseServiceRoleKey: env.SUPABASE_SERVICE_KEY,
-    bankZeroAccountId: env.BANK_ZERO_ACCOUNT_ID ?? "",
-    bankZeroAccountMap: parseBankZeroAccountMapJson(
-      env.BANK_ZERO_ACCOUNT_MAP ?? "[]",
-    ),
-    uploadToFinwise:
-      env.UPLOAD_TO_FINWISE === "true" || env.UPLOAD_TO_FINWISE === "1",
-    categorisationEnabled:
-      env.CATEGORISATION_ENABLED === "true" ||
-      env.CATEGORISATION_ENABLED === "1",
-    geminiApiKey: env.GEMINI_API_KEY ?? "",
-    geminiModel: env.GEMINI_MODEL ?? "gemini-gemini-3-flash-preview",
-    geminiApiBase:
-      env.GEMINI_API_BASE ?? "https://generativelanguage.googleapis.com",
-    categorisationLlmTimeoutMs: Number.isFinite(timeoutParsed)
-      ? timeoutParsed
-      : 45_000,
-    categorisationMinConfidence: Number.isFinite(confParsed)
-      ? confParsed
-      : 0.35,
-  };
-}
+export type { ConsumerEnv } from "./config.js";
 
 function createCfLogger(bindings: Record<string, unknown>): ProcessJobLogger {
   const line = (
@@ -90,7 +52,7 @@ function createCfLogger(bindings: Record<string, unknown>): ProcessJobLogger {
   };
 }
 
-async function processQueueMessage(
+async function processEmailIngestMessage(
   body: IngestQueueMessageV1,
   env: ConsumerEnv,
 ): Promise<void> {
@@ -164,71 +126,7 @@ function fetchForQueueOnlyWorker(request: Request): Response {
   });
 }
 
-const DLQ_REPORT_WINDOW_DAYS = 7;
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
-
-async function reportDlq(env: ConsumerEnv): Promise<void> {
-  const config = getConsumerConfig(env);
-  if (!config.supabaseUrl?.trim() || !config.supabaseServiceRoleKey?.trim()) {
-    console.log(
-      JSON.stringify({
-        level: "info",
-        msg: "dlq_cron_skipped",
-        reason: "supabase_not_configured",
-      }),
-    );
-    return;
-  }
-  const since = new Date(Date.now() - DLQ_REPORT_WINDOW_DAYS * MS_PER_DAY);
-  const { count, error } = await countDlqSince(config, since);
-  console.log(
-    JSON.stringify({
-      level: error ? "warn" : "info",
-      msg: "dlq_daily_report",
-      window_days: DLQ_REPORT_WINDOW_DAYS,
-      dlq_count: count,
-      ...(error ? { err: error } : {}),
-    }),
-  );
-}
-
-async function syncIsmrt(event: ScheduledEvent, env: ConsumerEnv): Promise<void> {
-  if (!env.ISMRT_USERNAME?.trim() || !env.ISMRT_PASSWORD?.trim()) {
-    console.log(
-      JSON.stringify({
-        level: "info",
-        msg: "ismrt_cron_skipped",
-        reason: "credentials_not_configured",
-      }),
-    );
-    return;
-  }
-  try {
-    logSummary(
-      await runConsumptionSync(
-        {
-          ISMRT_USERNAME: env.ISMRT_USERNAME,
-          ISMRT_PASSWORD: env.ISMRT_PASSWORD,
-          SUPABASE_URL: env.SUPABASE_URL,
-          SUPABASE_SERVICE_KEY: env.SUPABASE_SERVICE_KEY,
-          ISMRT_LOOKBACK_DAYS: env.ISMRT_LOOKBACK_DAYS,
-        },
-        new Date(event.scheduledTime),
-      ),
-    );
-  } catch (err: unknown) {
-    console.log(
-      JSON.stringify({
-        level: "error",
-        msg: "ismrt_consumption_sync_failed",
-        error: err instanceof Error ? err.message : "unknown",
-      }),
-    );
-    throw err;
-  }
-}
-
-export default {
+const handler = {
   fetch: fetchForQueueOnlyWorker,
 
   async scheduled(
@@ -236,39 +134,278 @@ export default {
     env: ConsumerEnv,
     _ctx: ExecutionContext,
   ): Promise<void> {
-    await reportDlq(env);
-    await syncIsmrt(event, env);
+    try {
+      const scheduledTime = new Date(event.scheduledTime).toISOString();
+      switch (event.cron) {
+        case "0 7 * * *":
+          {
+            const budget = new SubrequestBudget();
+            budget.internal("queue:sendBatch");
+          await env.JOBS_QUEUE.sendBatch([
+              { body: createDlqReportJob(scheduledTime) },
+              { body: createIsmrtSyncJob(scheduledTime) },
+              { body: createTuyaPlanJob(scheduledTime) },
+          ]);
+          }
+          return;
+        case "0 10 * * *":
+          {
+            const budget = new SubrequestBudget();
+            budget.internal("queue:sendBatch");
+          await env.JOBS_QUEUE.sendBatch([
+              { body: createHealthCheckJob(scheduledTime) },
+          ]);
+          }
+          return;
+        default:
+          throw new Error(`Unknown consumer cron: ${event.cron}`);
+      }
+    } catch (err: unknown) {
+      console.log(
+        JSON.stringify({
+          level: "error",
+          msg: "scheduled_jobs_enqueue_failed",
+          component: "ingest-consumer",
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
+      throw err;
+    }
   },
 
   async queue(
-    batch: MessageBatch<IngestQueueMessageV1>,
+    batch: MessageBatch<IngestQueueMessageV1 | Job>,
     env: ConsumerEnv,
     _ctx: ExecutionContext,
   ): Promise<void> {
-    for (const message of batch.messages) {
-      try {
-        await processQueueMessage(message.body, env);
-        message.ack();
-      } catch (err) {
-        const b = message.body;
-        const isChunk = err instanceof ChunkIncomplete;
-        console.log(
-          JSON.stringify({
-            level: isChunk ? "info" : "error",
-            msg: isChunk
-              ? "queue_message_chunk_deferred"
-              : "queue_message_failed",
-            component: "ingest-consumer",
-            err: err instanceof Error ? err.message : String(err),
-            job_id: b.job_id,
-            ...(b.email_r2_key !== undefined
-              ? { email_r2_key: b.email_r2_key }
-              : {}),
-            attachment_r2_keys: b.attachments.map((a) => a.r2_key),
-          }),
-        );
-        message.retry();
-      }
+    if (batch.queue === "investments-email-ingest") {
+      await processEmailQueueBatch(batch, env);
+      return;
     }
+    if (batch.queue === "investments-jobs") {
+      await processJobsQueueBatch(batch, env);
+      return;
+    }
+    throw new Error(`Unknown queue: ${batch.queue}`);
   },
 };
+
+export default Sentry.withSentry(sentryOptions, handler);
+
+async function processEmailQueueBatch(
+  batch: MessageBatch<IngestQueueMessageV1 | Job>,
+  env: ConsumerEnv,
+): Promise<void> {
+  for (const message of batch.messages) {
+    if (!isIngestQueueMessage(message.body)) {
+      console.log(
+        JSON.stringify({
+          level: "error",
+          msg: "queue_message_invalid",
+          component: "ingest-consumer",
+          queue: "investments-email-ingest",
+        }),
+      );
+      Sentry.captureMessage("invalid_job_body", {
+        level: "error",
+        tags: {
+          queue: "investments-email-ingest",
+          job_type: "email-ingest",
+          error_type: "invalid_job_body",
+        },
+      });
+      message.ack();
+      continue;
+    }
+    try {
+      await processEmailIngestMessage(message.body, env);
+      message.ack();
+    } catch (err: unknown) {
+      const body = message.body;
+      const isChunk = err instanceof ChunkIncomplete;
+      console.log(
+        JSON.stringify({
+          level: isChunk ? "info" : "error",
+          msg: isChunk
+            ? "queue_message_chunk_deferred"
+            : "queue_message_failed",
+          component: "ingest-consumer",
+          err: err instanceof Error ? err.message : String(err),
+          error_type:
+            err instanceof TuyaSubscriptionExpiredError
+              ? "tuya_subscription_expired"
+              : err instanceof Error
+                ? err.name
+                : "unknown",
+          job_id: body.job_id,
+          ...(body.email_r2_key !== undefined
+            ? { email_r2_key: body.email_r2_key }
+            : {}),
+          attachment_r2_keys: body.attachments.map((a) => a.r2_key),
+        }),
+      );
+      if (!isChunk) {
+        Sentry.captureException(err, {
+          tags: buildFailureTags(
+            "investments-email-ingest",
+            "email-ingest",
+            err,
+            { jobId: body.job_id },
+          ),
+        });
+      }
+      message.retry();
+    }
+  }
+}
+
+async function processJobsQueueBatch(
+  batch: MessageBatch<IngestQueueMessageV1 | Job>,
+  env: ConsumerEnv,
+): Promise<void> {
+  for (const message of batch.messages) {
+    const parsed = parseJob(message.body);
+    if (!parsed.ok) {
+      console.log(
+        JSON.stringify({
+          level: "error",
+          msg:
+            parsed.reason === "unsupported_version"
+              ? "scheduled_job_unsupported_version"
+              : "scheduled_job_invalid",
+          component: "ingest-consumer",
+          job_id: jobIdFromBody(message.body),
+          ...(parsed.reason === "unsupported_version"
+            ? { version: parsed.v, outcome: "retry", attempts: message.attempts }
+            : { outcome: "abandoned" }),
+        }),
+      );
+      if (parsed.reason === "unsupported_version") {
+        Sentry.captureMessage("unsupported_version", "error");
+        message.retry();
+      } else {
+        Sentry.captureMessage("invalid_job_body", "error");
+        message.ack();
+      }
+      continue;
+    }
+
+    const job: Job = parsed.job;
+    const budget = new SubrequestBudget();
+    try {
+      await runJob(job, env, budget);
+      console.log(
+        JSON.stringify({
+          level: "info",
+          msg: "scheduled_job_completed",
+          component: "ingest-consumer",
+          job_id: job.jobId,
+          job_type: job.type,
+          subrequests_used: budget.used,
+          ...(job.type === "tuya-day"
+            ? { device_id: job.deviceId, date: job.date }
+            : job.type === "ismrt-sync" ||
+                job.type === "tuya-plan" ||
+                job.type === "health-check"
+              ? { scheduled_time: job.scheduledTime }
+              : {}),
+        }),
+      );
+      message.ack();
+    } catch (err: unknown) {
+      const outcome = classifyJobFailure(err);
+      Sentry.captureException(err, {
+        tags: buildFailureTags("investments-jobs", job, err, {
+          jobId: job.jobId,
+          outcome,
+        }),
+      });
+      switch (outcome) {
+        case "abandon":
+          console.log(
+            JSON.stringify({
+              level: "error",
+              msg: "scheduled_job_failed",
+              component: "ingest-consumer",
+              outcome: "abandoned",
+              error_type: errorType(err),
+              error: errorMessage(err),
+              job_id: job.jobId,
+              job_type: job.type,
+              subrequests_used: budget.used,
+            }),
+          );
+          message.ack();
+          break;
+        case "retry":
+          console.log(
+            JSON.stringify({
+              level: "error",
+              msg: "scheduled_job_failed",
+              component: "ingest-consumer",
+              outcome,
+              attempts: message.attempts,
+              error_type: errorType(err),
+              error: errorMessage(err),
+              job_id: job.jobId,
+              job_type: job.type,
+              subrequests_used: budget.used,
+            }),
+          );
+          message.retry();
+          break;
+        default:
+          assertNever(outcome);
+      }
+    }
+  }
+}
+
+function jobIdFromBody(value: unknown): string | null {
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    typeof (value as { jobId?: unknown }).jobId === "string"
+  ) {
+    return (value as { jobId: string }).jobId;
+  }
+  return null;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unhandled job failure outcome: ${value}`);
+}
+
+function isIngestQueueMessage(value: unknown): value is IngestQueueMessageV1 {
+  if (!isRecord(value) || value.v !== 1) return false;
+  if (typeof value.job_id !== "string" || !isRecord(value.fields)) return false;
+  if (!Object.values(value.fields).every((field) => typeof field === "string")) {
+    return false;
+  }
+  if (
+    (value.email !== undefined && typeof value.email !== "string") ||
+    (value.email_r2_key !== undefined && typeof value.email_r2_key !== "string")
+  ) {
+    return false;
+  }
+  return (
+    Array.isArray(value.attachments) &&
+    value.attachments.every(
+      (attachment) =>
+        isRecord(attachment) &&
+        typeof attachment.fieldname === "string" &&
+        typeof attachment.filename === "string" &&
+        typeof attachment.mimetype === "string" &&
+        typeof attachment.r2_key === "string",
+    )
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}

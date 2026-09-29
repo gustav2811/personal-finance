@@ -14,7 +14,8 @@
   },
   "dependencies": {
     "@investments/ingest-core": "file:../../libs/ingest-core",
-    "@investments/source-rpc": "file:../../libs/source-rpc"
+    "@investments/source-rpc": "file:../../libs/source-rpc",
+    "@sentry/cloudflare": "^11.1.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250214.0",

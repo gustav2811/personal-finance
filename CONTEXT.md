@@ -10,8 +10,12 @@ Household finance. Supabase project `finance-data`. Timezone `Africa/Johannesbur
 - **Source record id** — `ismrt:ledger:{wallet}:{utility}:{entry_type}:{posted_at}:{direction}:{amount}:{meter}:{description}:{reference}:{occurrence}`. Empty text fields are `-`. `occurrence` separates genuinely identical source rows.
 - **Owned category** — the household decision on a transaction. Distinct from the FinWise source category.
 - **Shadow** — the classifier records a proposal and does not write it.
+- **Job** — a scheduled unit of work on `investments-jobs`.
+- **Health check** — 10:00 UTC job verifying Tuya markers/readings, ISMRT freshness, and email DLQ.
 
 ## Sources
 
 - FinWise is the connected-account source. Bank Zero statements arrive by email.
-- ISMRT is the utility source: electricity meter, water invoice, wallet fees and deposits. Plug readings are not ingested yet.
+- ISMRT is the utility source: electricity meter, water invoice, wallet fees and deposits.
+- Tuya is the smart-plug source: closed-day BNETA espresso readings use `tuya:day:{device_id}:{YYYY-MM-DD}` and write raw logs to `tuya/{device_id}/date={YYYY-MM-DD}/{code}.ndjson.gz`, with `_SUCCESS` last.
+- Ingestion run identities: Tuya uses `tuya:{device_id}:{YYYY-MM-DD}`; ISMRT runs are per execution.
