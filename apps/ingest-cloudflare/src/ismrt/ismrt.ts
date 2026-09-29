@@ -1,3 +1,5 @@
+import { InvalidSourceDataError } from "../errors.js";
+
 const TOKEN_URL =
   "https://account.rmsconnect.net/auth/realms/rms/protocol/openid-connect/token";
 const GRAPHQL_URL = "https://api-gateway.rmsconnect.net/graphql";
@@ -99,10 +101,15 @@ export class IsmrtClient {
     if (!response.ok) {
       throw new IsmrtError(`token request failed (${response.status})`);
     }
-    const payload: unknown = await response.json();
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch {
+      throw new InvalidSourceDataError("token response was not valid JSON");
+    }
     const token = field(payload, "access_token");
     if (typeof token !== "string" || token.length === 0) {
-      throw new IsmrtError("token response missing access_token");
+      throw new InvalidSourceDataError("token response missing access_token");
     }
     this.accessToken = token;
   }
@@ -135,7 +142,9 @@ export class IsmrtClient {
       "WalletMeters",
     );
     const wallet = field(data, "wallet");
-    if (!isRecord(wallet)) throw new IsmrtError("wallet meters response missing wallet");
+    if (!isRecord(wallet)) {
+      throw new InvalidSourceDataError("wallet meters response missing wallet");
+    }
     const contracts = nodes(wallet, "contracts");
     const meters: IsmrtMeter[] = [];
     for (const contract of contracts) {
@@ -186,7 +195,9 @@ export class IsmrtClient {
       "WalletDeposits",
     );
     const wallet = field(data, "wallet");
-    if (!isRecord(wallet)) throw new IsmrtError("wallet deposits response missing wallet");
+    if (!isRecord(wallet)) {
+      throw new InvalidSourceDataError("wallet deposits response missing wallet");
+    }
     return nodes(wallet, "consolidatedTransactions")
       .filter((node) => node.utilityType === "PURCHASE")
       .map((node, index) => ({
@@ -212,9 +223,15 @@ export class IsmrtClient {
       "MeterProfile",
     );
     const profile = field(data, "meterProfile");
-    if (!isRecord(profile)) throw new IsmrtError(`meter ${serial} profile was empty`);
+    if (!isRecord(profile)) {
+      throw new InvalidSourceDataError(`meter ${serial} profile was empty`);
+    }
     const intervals = field(profile, "intervals");
-    if (!Array.isArray(intervals)) throw new IsmrtError(`meter ${serial} profile has no intervals`);
+    if (!Array.isArray(intervals)) {
+      throw new InvalidSourceDataError(
+        `meter ${serial} profile has no intervals`,
+      );
+    }
     return {
       serial,
       intervalMinutes: Number(DAILY_INTERVAL),
@@ -265,8 +282,19 @@ export class IsmrtClient {
       const detail = (await response.text()).slice(0, 180);
       throw new IsmrtError(`${operationName} HTTP ${response.status}${detail ? `: ${detail}` : ""}`);
     }
-    const payload: unknown = await response.json();
-    if (!isRecord(payload)) throw new IsmrtError(`${operationName} response was not an object`);
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch {
+      throw new InvalidSourceDataError(
+        `${operationName} response was not valid JSON`,
+      );
+    }
+    if (!isRecord(payload)) {
+      throw new InvalidSourceDataError(
+        `${operationName} response was not an object`,
+      );
+    }
     const errors = payload.errors;
     if (Array.isArray(errors) && errors.length > 0) {
       const first = errors[0];
@@ -274,21 +302,35 @@ export class IsmrtClient {
       throw new IsmrtError(`${operationName}: ${message}`);
     }
     const data = payload.data;
-    if (!isRecord(data)) throw new IsmrtError(`${operationName} response missing data`);
+    if (!isRecord(data)) {
+      throw new InvalidSourceDataError(
+        `${operationName} response missing data`,
+      );
+    }
     return data;
   }
 }
 
 function parseInterval(value: unknown, serial: string, index: number): IsmrtInterval {
-  if (!isRecord(value)) throw new IsmrtError(`meter ${serial} interval ${index} was not an object`);
+  if (!isRecord(value)) {
+    throw new InvalidSourceDataError(
+      `meter ${serial} interval ${index} was not an object`,
+    );
+  }
   const measures = field(value, "measures");
-  if (!Array.isArray(measures)) throw new IsmrtError(`meter ${serial} interval ${index} has no measures`);
+  if (!Array.isArray(measures)) {
+    throw new InvalidSourceDataError(
+      `meter ${serial} interval ${index} has no measures`,
+    );
+  }
   return {
     startDate: requiredString(value, "startDate", `interval[${index}]`),
     endDate: requiredString(value, "endDate", `interval[${index}]`),
     measures: measures.map((measure, measureIndex) => {
       if (!isRecord(measure)) {
-        throw new IsmrtError(`meter ${serial} measure ${measureIndex} was not an object`);
+        throw new InvalidSourceDataError(
+          `meter ${serial} measure ${measureIndex} was not an object`,
+        );
       }
       return {
         name: requiredString(measure, "name", `measure[${measureIndex}]`),
@@ -304,11 +346,19 @@ function parseInterval(value: unknown, serial: string, index: number): IsmrtInte
 
 function nodes(parent: Record<string, unknown>, fieldName: string): Record<string, unknown>[] {
   const connection = field(parent, fieldName);
-  if (!isRecord(connection)) throw new IsmrtError(`${fieldName} was not an object`);
+  if (!isRecord(connection)) {
+    throw new InvalidSourceDataError(`${fieldName} was not an object`);
+  }
   const rows = field(connection, "nodes");
-  if (!Array.isArray(rows)) throw new IsmrtError(`${fieldName}.nodes was not a list`);
+  if (!Array.isArray(rows)) {
+    throw new InvalidSourceDataError(`${fieldName}.nodes was not a list`);
+  }
   return rows.map((row, index) => {
-    if (!isRecord(row)) throw new IsmrtError(`${fieldName}[${index}] was not an object`);
+    if (!isRecord(row)) {
+      throw new InvalidSourceDataError(
+        `${fieldName}[${index}] was not an object`,
+      );
+    }
     return row;
   });
 }
@@ -321,7 +371,7 @@ function field(value: unknown, key: string): unknown {
 function requiredString(row: Record<string, unknown>, key: string, label: string): string {
   const value = row[key];
   if (typeof value !== "string" || value.length === 0) {
-    throw new IsmrtError(`${label}.${key} must be a non-empty string`);
+    throw new InvalidSourceDataError(`${label}.${key} must be a non-empty string`);
   }
   return value;
 }
@@ -329,7 +379,9 @@ function requiredString(row: Record<string, unknown>, key: string, label: string
 function optionalString(row: Record<string, unknown>, key: string): string | null {
   const value = row[key];
   if (value === null || value === undefined || value === "") return null;
-  if (typeof value !== "string") throw new IsmrtError(`${key} must be a string`);
+  if (typeof value !== "string") {
+    throw new InvalidSourceDataError(`${key} must be a string`);
+  }
   return value;
 }
 
@@ -337,14 +389,16 @@ function optionalNumber(row: Record<string, unknown>, key: string): number | nul
   const value = row[key];
   if (value === null || value === undefined) return null;
   if (typeof value !== "number" || !Number.isFinite(value)) {
-    throw new IsmrtError(`${key} must be a number`);
+    throw new InvalidSourceDataError(`${key} must be a number`);
   }
   return value;
 }
 
 function requiredNumber(row: Record<string, unknown>, key: string, label: string): number {
   const value = optionalNumber(row, key);
-  if (value === null) throw new IsmrtError(`${label}.${key} is required`);
+  if (value === null) {
+    throw new InvalidSourceDataError(`${label}.${key} is required`);
+  }
   return value;
 }
 

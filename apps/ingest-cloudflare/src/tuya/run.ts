@@ -3,7 +3,11 @@ import {
   SubrequestBudget,
   SubrequestBudgetExceededError,
 } from "../jobs/budget.js";
-import type { Job } from "../jobs/jobs.js";
+import {
+  createTuyaDayJob,
+  createTuyaPlanJob,
+  type TuyaDayJob,
+} from "../jobs/jobs.js";
 import {
   TUYA_CODES,
   assertTuyaDayClosed,
@@ -19,16 +23,11 @@ import {
 } from "./day.js";
 import { TuyaClient } from "./client.js";
 
-export type TuyaDayMessage = {
-  type: "tuya-day";
-  deviceId: string;
-  date: string;
-  codes?: TuyaCode[];
-};
+export type TuyaDayMessage = TuyaDayJob;
 
 export type TuyaEnv = {
   INGEST_BUCKET: R2Bucket;
-  JOBS_QUEUE: Queue<Job>;
+  JOBS_QUEUE: Queue<unknown>;
   TUYA_DEVICE_ID: string;
   TUYA_ACCESS_ID: string;
   TUYA_ACCESS_SECRET: string;
@@ -40,30 +39,16 @@ export async function planTuyaDays(
   env: TuyaEnv,
   now: Date,
   budget = new SubrequestBudget(),
+  jobId = createTuyaPlanJob(now).jobId,
 ): Promise<void> {
   const deviceId = required(env.TUYA_DEVICE_ID, "TUYA_DEVICE_ID");
-  const prefix = `tuya/${deviceId}/date=`;
-  const completedDates = new Set<string>();
-  let cursor: string | undefined;
-  for (;;) {
-    budget.spend("r2:list");
-    const page = await env.INGEST_BUCKET.list({
-      prefix,
-      ...(cursor === undefined ? {} : { cursor }),
-    });
-    for (const object of page.objects) {
-      if (!object.key.endsWith("/_SUCCESS")) continue;
-      const date = object.key.slice(prefix.length, -"/_SUCCESS".length);
-      if (date) completedDates.add(date);
+  const missingDates: string[] = [];
+  for (const date of tuyaPlanDates(now)) {
+    budget.internal("r2:head");
+    if (!(await env.INGEST_BUCKET.head(tuyaSuccessKey(deviceId, date)))) {
+      missingDates.push(date);
     }
-    if (!page.truncated) break;
-    if (!page.cursor) throw new Error("R2 list page is truncated without a cursor");
-    cursor = page.cursor;
   }
-
-  const missingDates = tuyaPlanDates(now).filter(
-    (date) => !completedDates.has(date),
-  );
   for (const date of missingDates) {
     const markerKey = tuyaSuccessKey(deviceId, date);
 
@@ -72,24 +57,26 @@ export async function planTuyaDays(
         level: "warn",
         msg: "tuya_day_missing",
         component: "ingest-consumer",
+        job_id: jobId,
         device_id: deviceId,
         date,
         marker_key: markerKey,
+        subrequests_used: budget.used,
       }),
     );
   }
   if (missingDates.length > 0) {
-    budget.spend("queue:sendBatch");
+    budget.internal("queue:sendBatch");
     await env.JOBS_QUEUE.sendBatch(
       missingDates.map((date) => ({
-        body: { type: "tuya-day" as const, deviceId, date },
+        body: createTuyaDayJob(deviceId, date),
       })),
     );
   }
 }
 
 export async function handleTuyaDay(
-  message: TuyaDayMessage,
+  message: TuyaDayJob,
   env: TuyaEnv,
   fetchImpl: typeof fetch = fetch,
   now: Date = new Date(),
@@ -98,13 +85,14 @@ export async function handleTuyaDay(
   const deviceId = required(message.deviceId, "Tuya device id");
   const date = message.date;
   const markerKey = tuyaSuccessKey(deviceId, date);
-  budget.spend("r2:head");
+  budget.internal("r2:head");
   if (await env.INGEST_BUCKET.head(markerKey)) {
     console.log(
       JSON.stringify({
         level: "info",
         msg: "tuya_day_already_ingested",
         component: "ingest-consumer",
+        job_id: message.jobId,
         device_id: deviceId,
         date,
         subrequests_used: budget.used,
@@ -117,17 +105,7 @@ export async function handleTuyaDay(
   const startedAt = now.toISOString();
   const window = tuyaDayWindow(date);
   const requestedCodes = message.codes ?? TUYA_CODES;
-  const existingCodes = new Set<TuyaCode>();
-  if (message.codes !== undefined) {
-    for (const code of requestedCodes) {
-      budget.spend("r2:head");
-      if (await env.INGEST_BUCKET.head(tuyaRawKey(deviceId, date, code))) {
-        existingCodes.add(code);
-      }
-    }
-  }
-
-  const codesToFetch = requestedCodes.filter((code) => !existingCodes.has(code));
+  const codesToFetch = requestedCodes;
   const logsByCode = {} as Partial<TuyaLogsByCode>;
   if (codesToFetch.length > 0) {
     const client = new TuyaClient(
@@ -166,7 +144,6 @@ export async function handleTuyaDay(
     logsByCode,
     budget,
     codesToFetch,
-    existingCodes,
   );
   const allRawFilesExist =
     message.codes === undefined
@@ -178,6 +155,7 @@ export async function handleTuyaDay(
         level: "info",
         msg: "tuya_day_raw_files_pending",
         component: "ingest-consumer",
+        job_id: message.jobId,
         device_id: deviceId,
         date,
         events: eventCounts,
@@ -187,13 +165,14 @@ export async function handleTuyaDay(
     return;
   }
 
-  budget.spend("r2:head");
+  budget.internal("r2:head");
   if (await env.INGEST_BUCKET.head(markerKey)) {
     console.log(
       JSON.stringify({
         level: "info",
         msg: "tuya_day_already_ingested",
         component: "ingest-consumer",
+      job_id: message.jobId,
         device_id: deviceId,
         date,
         subrequests_used: budget.used,
@@ -231,7 +210,7 @@ export async function handleTuyaDay(
     fetchImpl,
   ).ingest(batch);
 
-  budget.spend("r2:put");
+  budget.internal("r2:put");
   await env.INGEST_BUCKET.put(
     markerKey,
     JSON.stringify({
@@ -246,6 +225,7 @@ export async function handleTuyaDay(
       level: "info",
       msg: "tuya_day_ingested",
       component: "ingest-consumer",
+      job_id: message.jobId,
       device_id: deviceId,
       date,
       kwh: reading.value,
@@ -261,10 +241,10 @@ async function enqueueSplitJobs(
   date: string,
   budget: SubrequestBudget,
 ): Promise<void> {
-  budget.spendReserve("queue:sendBatch");
+  budget.internal("queue:sendBatch");
   await env.JOBS_QUEUE.sendBatch(
     TUYA_CODES.map((code) => ({
-      body: { type: "tuya-day" as const, deviceId, date, codes: [code] },
+      body: createTuyaDayJob(deviceId, date, [code]),
     })),
   );
 }
@@ -276,7 +256,7 @@ async function allRawFilesExistForDay(
   budget: SubrequestBudget,
 ): Promise<boolean> {
   for (const code of TUYA_CODES) {
-    budget.spend("r2:head");
+    budget.internal("r2:head");
     if (!(await bucket.head(tuyaRawKey(deviceId, date, code)))) return false;
   }
   return true;

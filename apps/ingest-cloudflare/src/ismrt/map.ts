@@ -6,12 +6,16 @@ import {
   ledgerSourceRecordId,
   type IncurredDateRule,
 } from "./dates.js";
+import { InvalidSourceDataError } from "../errors.js";
 
 export const SOURCE = "ismrt";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const ENERGY_MEASURE = "forwardActiveEnergy";
 
 export type JsonObject = Record<string, unknown>;
+export type IngestionRun = JsonObject & {
+  run_key?: string;
+};
 
 export type ExpenseRow = {
   utilityType: string;
@@ -89,7 +93,7 @@ export type ConsumptionBatch = {
   readings: JsonObject[];
   ledger_entries: JsonObject[];
   documents: JsonObject[];
-  ingestion_run: JsonObject;
+  ingestion_run: IngestionRun;
 };
 
 type Utility = "electricity" | "water" | "wallet";
@@ -101,7 +105,7 @@ export async function buildConsumptionBatch(input: CaptureInput): Promise<Consum
   const walletId = input.wallet.id;
   const location = input.wallet.propertyName;
   if (!location) {
-    throw new Error(`wallet ${walletId} is missing a property name`);
+    throw new InvalidSourceDataError(`wallet ${walletId} is missing a property name`);
   }
   const waterDeviceId = `water:${walletId}`;
   const devices = buildDevices(input, location, waterDeviceId);
@@ -141,11 +145,11 @@ export async function buildConsumptionBatch(input: CaptureInput): Promise<Consum
 
 export function mergeBatches(batches: ConsumptionBatch[], fetchedAt: string): ConsumptionBatch {
   if (batches.length === 0) {
-    throw new Error("no ISMRT wallets to ingest");
+    throw new InvalidSourceDataError("no ISMRT wallets to ingest");
   }
   const first = batches[0];
   if (!first) {
-    throw new Error("no ISMRT wallets to ingest");
+    throw new InvalidSourceDataError("no ISMRT wallets to ingest");
   }
   if (batches.length === 1) return first;
   const rows = batches.reduce(
@@ -177,12 +181,18 @@ function buildDevices(input: CaptureInput, location: string, waterDeviceId: stri
   const serials = new Set(input.meters.map((meter) => meter.serial));
   for (const row of input.expenses) {
     if (utilityOf(row.utilityType) === "electricity") {
-      if (!row.meterSerial) throw new Error("electricity expense is missing a meter serial");
+      if (!row.meterSerial) {
+        throw new InvalidSourceDataError(
+          "electricity expense is missing a meter serial",
+        );
+      }
       serials.add(row.meterSerial);
     }
   }
   if (serials.size === 0) {
-    throw new Error(`wallet ${walletId} has no electricity meter`);
+    throw new InvalidSourceDataError(
+      `wallet ${walletId} has no electricity meter`,
+    );
   }
   const devices: JsonObject[] = [
     {
@@ -259,10 +269,14 @@ function buildReadings(
         continue;
       }
       if (new Date(periodEnd).getTime() - new Date(periodStart).getTime() !== DAY_MS) {
-        throw new Error(`meter ${profile.serial} returned a non-daily interval ending ${periodEnd}`);
+        throw new InvalidSourceDataError(
+          `meter ${profile.serial} returned a non-daily interval ending ${periodEnd}`,
+        );
       }
       if (!measure.unit) {
-        throw new Error(`meter ${profile.serial} energy measure is missing a unit`);
+        throw new InvalidSourceDataError(
+          `meter ${profile.serial} energy measure is missing a unit`,
+        );
       }
       readings.push({
         source: SOURCE,
@@ -578,7 +592,11 @@ function deviceFor(
   waterDeviceId: string,
 ): string {
   if (utility === "electricity") {
-    if (!meterSerial) throw new Error("electricity expense is missing a meter serial");
+    if (!meterSerial) {
+      throw new InvalidSourceDataError(
+        "electricity expense is missing a meter serial",
+      );
+    }
     return meterSerial;
   }
   if (utility === "wallet") return walletId;
@@ -612,7 +630,7 @@ function walletIdOf(batch: ConsumptionBatch): string {
       ? (metadata as JsonObject).wallet_id
       : undefined;
   if (typeof walletId !== "string" || walletId.length === 0) {
-    throw new Error("ingestion run is missing wallet_id");
+    throw new InvalidSourceDataError("ingestion run is missing wallet_id");
   }
   return walletId;
 }
@@ -621,21 +639,21 @@ function utilityOf(value: string): Utility {
   if (value === "Electricity") return "electricity";
   if (value === "Water") return "water";
   if (value === "ismrt! Wallet Charges") return "wallet";
-  throw new Error(`unsupported ISMRT utility type: ${value}`);
+  throw new InvalidSourceDataError(`unsupported ISMRT utility type: ${value}`);
 }
 
 function directionOf(debit: number | null, credit: number | null): "debit" | "credit" {
   if (debit !== null && credit !== null) {
-    throw new Error("expense row has both debit and credit");
+    throw new InvalidSourceDataError("expense row has both debit and credit");
   }
   if (debit !== null) return "debit";
   if (credit !== null) return "credit";
-  throw new Error("expense row has neither debit nor credit");
+  throw new InvalidSourceDataError("expense row has neither debit nor credit");
 }
 
 function requiredNumber(value: number | null, field: string): number {
   if (value === null || !Number.isFinite(value)) {
-    throw new Error(`expected numeric ${field}`);
+    throw new InvalidSourceDataError(`expected numeric ${field}`);
   }
   return value;
 }

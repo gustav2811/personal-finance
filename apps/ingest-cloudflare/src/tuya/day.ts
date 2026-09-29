@@ -1,6 +1,7 @@
 import type { ConsumptionBatch, JsonObject } from "../ismrt/map.js";
 import { johannesburgParts } from "../ismrt/dates.js";
 import { SubrequestBudget } from "../jobs/budget.js";
+import { InvalidSourceDataError } from "../errors.js";
 import type { TuyaLogEntry } from "./client.js";
 
 export const TUYA_SOURCE = "tuya";
@@ -54,12 +55,16 @@ export function aggregateTuyaKwh(entries: TuyaLogEntry[]): number {
   for (const entry of entries) {
     const value = Number(entry.value);
     if (!Number.isFinite(value)) {
-      throw new Error(`invalid Tuya add_ele value: ${entry.value}`);
+      throw new InvalidSourceDataError(
+        `invalid Tuya add_ele value: ${entry.value}`,
+      );
     }
     millikwh += value;
   }
   const kwh = millikwh / 1000;
-  if (!Number.isFinite(kwh)) throw new Error("invalid Tuya daily kWh");
+  if (!Number.isFinite(kwh)) {
+    throw new InvalidSourceDataError("invalid Tuya daily kWh");
+  }
   return kwh;
 }
 
@@ -84,18 +89,16 @@ export async function writeTuyaRawFiles(
   logsByCode: Partial<TuyaLogsByCode>,
   budget: SubrequestBudget,
   codes: readonly TuyaCode[] = TUYA_CODES,
-  existingCodes: ReadonlySet<TuyaCode> = new Set(),
 ): Promise<Record<TuyaCode, number>> {
   const counts = Object.fromEntries(
     TUYA_CODES.map((code) => [code, logsByCode[code]?.length ?? 0]),
   ) as Record<TuyaCode, number>;
   for (const code of codes) {
-    if (existingCodes.has(code)) continue;
     const entries = logsByCode[code] ?? [];
     counts[code] = entries.length;
     const key = tuyaRawKey(deviceId, date, code);
     const compressed = await gzipText(serializeTuyaLogs(entries));
-    budget.spend("r2:put");
+    budget.internal("r2:put");
     await bucket.put(key, compressed, {
       httpMetadata: {
         contentType: "application/x-ndjson",
@@ -111,7 +114,7 @@ export async function readTuyaRawFile(
   key: string,
   budget: SubrequestBudget,
 ): Promise<TuyaLogEntry[]> {
-  budget.spend("r2:get");
+  budget.internal("r2:get");
   const object = await bucket.get(key);
   if (!object) throw new Error(`Missing R2 object: ${key}`);
   const decompressed = object.body.pipeThrough(new DecompressionStream("gzip"));
@@ -194,6 +197,7 @@ export function buildTuyaConsumptionBatch(input: {
         date: input.date,
         event_counts: eventCounts,
       },
+      run_key: `tuya:${input.deviceId}:${input.date}`,
     },
   };
 }
@@ -208,12 +212,12 @@ async function gzipText(value: string): Promise<ArrayBuffer> {
 
 function parseDate(value: string): Date {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    throw new Error(`invalid Johannesburg date: ${value}`);
+    throw new InvalidSourceDataError(`invalid Johannesburg date: ${value}`);
   }
   const [year, month, day] = value.split("-").map(Number);
   const date = new Date(Date.UTC(year, month - 1, day));
   if (date.toISOString().slice(0, 10) !== value) {
-    throw new Error(`invalid Johannesburg date: ${value}`);
+    throw new InvalidSourceDataError(`invalid Johannesburg date: ${value}`);
   }
   return date;
 }
@@ -227,7 +231,7 @@ function parseRawLogEntry(
   try {
     value = JSON.parse(line) as unknown;
   } catch {
-    throw new Error(`Invalid Tuya raw JSON at ${key}[${index}]`);
+    throw new InvalidSourceDataError(`Invalid Tuya raw JSON at ${key}[${index}]`);
   }
   if (
     !isRecord(value) ||
@@ -236,7 +240,7 @@ function parseRawLogEntry(
     !Number.isFinite(value.event_time) ||
     typeof value.value !== "string"
   ) {
-    throw new Error(`Invalid Tuya raw log at ${key}[${index}]`);
+    throw new InvalidSourceDataError(`Invalid Tuya raw log at ${key}[${index}]`);
   }
   return {
     code: value.code,

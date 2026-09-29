@@ -1,6 +1,14 @@
-import { InvalidJobError, parseJob, type Job } from "./jobs/jobs.js";
+import {
+  createDlqReportJob,
+  createIsmrtSyncJob,
+  createTuyaPlanJob,
+  parseJob,
+  type Job,
+} from "./jobs/jobs.js";
 import { SubrequestBudget } from "./jobs/budget.js";
-import { getConsumerConfig, runJob, type ConsumerEnv } from "./jobs/run.js";
+import { classifyJobFailure } from "./jobs/policy.js";
+import { runJob } from "./jobs/run.js";
+import { getConsumerConfig, type ConsumerEnv } from "./config.js";
 import { TuyaSubscriptionExpiredError } from "./tuya/client.js";
 import {
   attachmentToPayload,
@@ -11,7 +19,7 @@ import {
   type ProcessJobLogger,
 } from "@investments/ingest-core";
 
-export type { ConsumerEnv } from "./jobs/run.js";
+export type { ConsumerEnv } from "./config.js";
 
 function createCfLogger(bindings: Record<string, unknown>): ProcessJobLogger {
   const line = (
@@ -124,10 +132,12 @@ export default {
   ): Promise<void> {
     try {
       const scheduledTime = new Date(event.scheduledTime).toISOString();
+      const budget = new SubrequestBudget();
+      budget.internal("queue:sendBatch");
       await env.JOBS_QUEUE.sendBatch([
-        { body: { type: "dlq-report" as const } },
-        { body: { type: "ismrt-sync" as const, scheduledTime } },
-        { body: { type: "tuya-plan" as const, scheduledTime } },
+        { body: createDlqReportJob(scheduledTime) },
+        { body: createIsmrtSyncJob(scheduledTime) },
+        { body: createTuyaPlanJob(scheduledTime) },
       ]);
     } catch (err: unknown) {
       console.log(
@@ -204,22 +214,31 @@ async function processJobsQueueBatch(
   env: ConsumerEnv,
 ): Promise<void> {
   for (const message of batch.messages) {
-    let job: Job;
-    try {
-      job = parseJob(message.body);
-    } catch (err: unknown) {
+    const parsed = parseJob(message.body);
+    if (!parsed.ok) {
       console.log(
         JSON.stringify({
           level: "error",
-          msg: "scheduled_job_invalid",
+          msg:
+            parsed.reason === "unsupported_version"
+              ? "scheduled_job_unsupported_version"
+              : "scheduled_job_invalid",
           component: "ingest-consumer",
-          error: err instanceof InvalidJobError ? err.message : "unknown",
+          job_id: jobIdFromBody(message.body),
+          ...(parsed.reason === "unsupported_version"
+            ? { version: parsed.v, outcome: "retry", attempts: message.attempts }
+            : { outcome: "abandoned" }),
         }),
       );
-      message.ack();
+      if (parsed.reason === "unsupported_version") {
+        message.retry();
+      } else {
+        message.ack();
+      }
       continue;
     }
 
+    const job: Job = parsed.job;
     const budget = new SubrequestBudget();
     try {
       await runJob(job, env, budget);
@@ -228,6 +247,7 @@ async function processJobsQueueBatch(
           level: "info",
           msg: "scheduled_job_completed",
           component: "ingest-consumer",
+          job_id: job.jobId,
           job_type: job.type,
           subrequests_used: budget.used,
           ...(job.type === "tuya-day"
@@ -239,22 +259,68 @@ async function processJobsQueueBatch(
       );
       message.ack();
     } catch (err: unknown) {
-      console.log(
-        JSON.stringify({
-          level: "error",
-          msg: "scheduled_job_failed",
-          component: "ingest-consumer",
-          job_type: job.type,
-          error: err instanceof Error ? err.message : String(err),
-          subrequests_used: budget.used,
-          ...(job.type === "tuya-day"
-            ? { device_id: job.deviceId, date: job.date }
-            : job.type === "ismrt-sync" || job.type === "tuya-plan"
-              ? { scheduled_time: job.scheduledTime }
-              : {}),
-        }),
-      );
-      message.retry();
+      const outcome = classifyJobFailure(err);
+      switch (outcome) {
+        case "abandon":
+          console.log(
+            JSON.stringify({
+              level: "error",
+              msg: "scheduled_job_failed",
+              component: "ingest-consumer",
+              outcome: "abandoned",
+              error_type: errorType(err),
+              error: errorMessage(err),
+              job_id: job.jobId,
+              job_type: job.type,
+              subrequests_used: budget.used,
+            }),
+          );
+          message.ack();
+          break;
+        case "retry":
+          console.log(
+            JSON.stringify({
+              level: "error",
+              msg: "scheduled_job_failed",
+              component: "ingest-consumer",
+              outcome,
+              attempts: message.attempts,
+              error_type: errorType(err),
+              error: errorMessage(err),
+              job_id: job.jobId,
+              job_type: job.type,
+              subrequests_used: budget.used,
+            }),
+          );
+          message.retry();
+          break;
+        default:
+          assertNever(outcome);
+      }
     }
   }
+}
+
+function jobIdFromBody(value: unknown): string | null {
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    typeof (value as { jobId?: unknown }).jobId === "string"
+  ) {
+    return (value as { jobId: string }).jobId;
+  }
+  return null;
+}
+
+function errorType(error: unknown): string {
+  return error instanceof Error ? error.name : "unknown";
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unhandled job failure outcome: ${value}`);
 }

@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  SubrequestBudget,
-  SubrequestBudgetExceededError,
-} from "../jobs/budget.js";
+import { budgetedFetch, SubrequestBudget } from "../jobs/budget.js";
+import { createTuyaDayJob } from "../jobs/jobs.js";
 import { TUYA_CODES, tuyaRawKey, tuyaSuccessKey } from "./day.js";
 import { handleTuyaDay, planTuyaDays, type TuyaEnv } from "./run.js";
 
@@ -80,7 +78,10 @@ function env(
   } as TuyaEnv;
 }
 
-function tuyaFetch(rpcCalls: string[] = []): typeof fetch {
+function tuyaFetch(
+  rpcCalls: string[] = [],
+  value = "100",
+): typeof fetch {
   return async (input) => {
     const url = String(input);
     if (url.includes("/v1.0/token")) {
@@ -91,7 +92,7 @@ function tuyaFetch(rpcCalls: string[] = []): typeof fetch {
         success: true,
         result: {
           has_more: false,
-          logs: [{ code: "add_ele", event_time: 1, value: "100" }],
+          logs: [{ code: "add_ele", event_time: 1, value }],
         },
       });
     }
@@ -108,10 +109,11 @@ describe("Tuya planning", () => {
       [`tuya/${deviceId}/date=2026-09-28/_SUCCESS`]: { body: new ArrayBuffer(0) },
       [`tuya/${deviceId}/date=2026-09-26/_SUCCESS`]: { body: new ArrayBuffer(0) },
     });
+    const budget = new SubrequestBudget();
     await planTuyaDays(
       env(bucket, jobsQueue),
       new Date("2026-09-29T07:00:00.000Z"),
-      new SubrequestBudget(),
+      budget,
     );
     expect(jobsQueue.batches).toHaveLength(1);
     expect(jobsQueue.batches[0]).toEqual(
@@ -121,9 +123,10 @@ describe("Tuya planning", () => {
         "2026-09-24",
         "2026-09-23",
       ].map((date) => ({
-        body: { type: "tuya-day", deviceId, date },
+        body: createTuyaDayJob(deviceId, date),
       })),
     );
+    expect(budget.used).toEqual({ external: 0, internal: 7 });
   });
 
   it("does not send a batch when all planned days exist", async () => {
@@ -140,45 +143,67 @@ describe("Tuya planning", () => {
           {},
         ),
     );
+    const budget = new SubrequestBudget();
     await planTuyaDays(
       env(bucket, jobsQueue),
       new Date("2026-09-29T07:00:00.000Z"),
-      new SubrequestBudget(),
+      budget,
     );
     expect(jobsQueue.batches).toHaveLength(0);
+    expect(budget.used).toEqual({ external: 0, internal: 6 });
   });
 
   it("splits a fetch budget failure into one job per code", async () => {
     const jobsQueue = queue();
     const bucket = createR2();
-    const fetchImpl: typeof fetch = async () => {
-      throw new SubrequestBudgetExceededError(1, 45, "test:fetch");
-    };
+    const fetchImpl: typeof fetch = async () => Response.json({});
+    const budget = new SubrequestBudget();
+    for (let index = 0; index < 45; index += 1) {
+      budget.external(`external:${index}`);
+    }
     await handleTuyaDay(
-      {
-        type: "tuya-day",
-        deviceId: "bf425b172390340134huph",
-        date: "2026-09-28",
-      },
+      createTuyaDayJob("bf425b172390340134huph", "2026-09-28"),
       env(bucket, jobsQueue),
-      fetchImpl,
+      budgetedFetch(budget, fetchImpl),
       new Date("2026-09-29T07:00:00.000Z"),
-      new SubrequestBudget(),
+      budget,
     );
     expect(jobsQueue.batches).toEqual([
       TUYA_CODES.map((code) => ({
-        body: {
-          type: "tuya-day",
-          deviceId: "bf425b172390340134huph",
-          date: "2026-09-28",
-          codes: [code],
-        },
+        body: createTuyaDayJob(
+          "bf425b172390340134huph",
+          "2026-09-28",
+          [code],
+        ),
       })),
     ]);
+    expect(budget.used).toEqual({ external: 45, internal: 2 });
   });
 });
 
 describe("Tuya split jobs", () => {
+  it("overwrites an existing per-code raw file on retry", async () => {
+    const jobsQueue = queue();
+    const bucket = createR2();
+    const tuyaEnv = env(bucket, jobsQueue);
+    const job = createTuyaDayJob(tuyaEnv.TUYA_DEVICE_ID, "2026-09-28", [
+      "add_ele",
+    ]);
+    const now = new Date("2026-09-29T07:00:00.000Z");
+
+    await handleTuyaDay(job, tuyaEnv, tuyaFetch([], "100"), now, new SubrequestBudget());
+    await handleTuyaDay(job, tuyaEnv, tuyaFetch([], "200"), now, new SubrequestBudget());
+
+    const raw = await bucket.get(
+      tuyaRawKey(tuyaEnv.TUYA_DEVICE_ID, "2026-09-28", "add_ele"),
+    );
+    expect(raw).not.toBeNull();
+    const text = await new Response(
+      raw?.body?.pipeThrough(new DecompressionStream("gzip")),
+    ).text();
+    expect(text).toContain('"value":"200"');
+  });
+
   it("writes one code and the last code completes the day", async () => {
     const jobsQueue = queue();
     const bucket = createR2();
@@ -187,12 +212,7 @@ describe("Tuya split jobs", () => {
     const now = new Date("2026-09-29T07:00:00.000Z");
     for (const [index, code] of TUYA_CODES.entries()) {
       await handleTuyaDay(
-        {
-          type: "tuya-day",
-          deviceId: tuyaEnv.TUYA_DEVICE_ID,
-          date: "2026-09-28",
-          codes: [code],
-        },
+        createTuyaDayJob(tuyaEnv.TUYA_DEVICE_ID, "2026-09-28", [code]),
         tuyaEnv,
         tuyaFetch(rpcCalls),
         now,

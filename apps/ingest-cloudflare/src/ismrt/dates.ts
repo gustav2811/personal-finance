@@ -1,3 +1,5 @@
+import { InvalidSourceDataError } from "../errors.js";
+
 export const HOUSEHOLD_TIMEZONE = "Africa/Johannesburg";
 const SAST_OFFSET_MS = 2 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -22,7 +24,7 @@ export type IncurredDateRule = "daily_close" | "named_month" | "event_timestamp"
 export function canonicalTimestamp(value: string): string {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) {
-    throw new Error(`invalid timestamp: ${value}`);
+    throw new InvalidSourceDataError(`invalid timestamp: ${value}`);
   }
   return parsed.toISOString();
 }
@@ -60,14 +62,16 @@ export function johannesburgParts(timestamp: string): { year: number; month: num
   const month = Number(values.month);
   const day = Number(values.day);
   if (!year || !month || !day) {
-    throw new Error(`could not read Johannesburg date from ${timestamp}`);
+    throw new InvalidSourceDataError(
+      `could not read Johannesburg date from ${timestamp}`,
+    );
   }
   return { year, month, day };
 }
 
 export function monthStartSast(year: number, month: number): string {
   if (month < 1 || month > 12) {
-    throw new Error(`invalid month ${month}`);
+    throw new InvalidSourceDataError(`invalid month ${month}`);
   }
   return new Date(Date.UTC(year, month - 1, 1) - SAST_OFFSET_MS).toISOString();
 }
@@ -119,7 +123,9 @@ function waterIncurredAt(postedAt: string, description: string | null): string {
     /^(January|February|March|April|May|June|July|August|September|October|November|December)\s+monthly\b/,
   );
   if (!match) {
-    throw new Error(`water charge is missing a usage month: ${description ?? ""}`);
+    throw new InvalidSourceDataError(
+      `water charge is missing a usage month: ${description ?? ""}`,
+    );
   }
   const namedMonth = MONTHS.indexOf(match[1] as (typeof MONTHS)[number]) + 1;
   const posted = johannesburgParts(postedAt);
@@ -129,7 +135,7 @@ function waterIncurredAt(postedAt: string, description: string | null): string {
 
 export function moneyKey(amount: number): string {
   if (!Number.isFinite(amount) || amount < 0) {
-    throw new Error(`invalid money amount: ${amount}`);
+    throw new InvalidSourceDataError(`invalid money amount: ${amount}`);
   }
   return amount.toFixed(4);
 }

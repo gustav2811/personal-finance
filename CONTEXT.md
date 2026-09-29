@@ -17,3 +17,4 @@ Household finance. Supabase project `finance-data`. Timezone `Africa/Johannesbur
 - FinWise is the connected-account source. Bank Zero statements arrive by email.
 - ISMRT is the utility source: electricity meter, water invoice, wallet fees and deposits.
 - Tuya is the smart-plug source: closed-day BNETA espresso readings use `tuya:day:{device_id}:{YYYY-MM-DD}` and write raw logs to `tuya/{device_id}/date={YYYY-MM-DD}/{code}.ndjson.gz`, with `_SUCCESS` last.
+- Ingestion run identities: Tuya uses `tuya:{device_id}:{YYYY-MM-DD}`; ISMRT runs are per execution.

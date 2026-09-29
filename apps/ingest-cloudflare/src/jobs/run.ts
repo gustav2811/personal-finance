@@ -1,8 +1,5 @@
-import {
-  countDlqSince,
-  parseBankZeroAccountMapJson,
-  type IngestCoreConfig,
-} from "@investments/ingest-core";
+import { countDlqSince } from "@investments/ingest-core";
+import { type ConsumerEnv, getConsumerConfig } from "../config.js";
 import { logSummary, runConsumptionSync } from "../ismrt/run.js";
 import { budgetedFetch, SubrequestBudget } from "./budget.js";
 import type { Job, IsmrtSyncJob } from "./jobs.js";
@@ -14,30 +11,6 @@ import {
 
 const DLQ_REPORT_WINDOW_DAYS = 7;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
-
-export interface ConsumerEnv {
-  INGEST_BUCKET: R2Bucket;
-  JOBS_QUEUE: Queue<Job>;
-  FINWISE_API_KEY: string;
-  FINWISE_BASE_URL: string;
-  SUPABASE_URL: string;
-  SUPABASE_SERVICE_KEY: string;
-  BANK_ZERO_ACCOUNT_ID: string;
-  BANK_ZERO_ACCOUNT_MAP: string;
-  UPLOAD_TO_FINWISE: string;
-  CATEGORISATION_ENABLED?: string;
-  GEMINI_API_KEY?: string;
-  GEMINI_MODEL?: string;
-  GEMINI_API_BASE?: string;
-  CATEGORISATION_LLM_TIMEOUT_MS?: string;
-  CATEGORISATION_MIN_CONFIDENCE?: string;
-  ISMRT_USERNAME?: string;
-  ISMRT_PASSWORD?: string;
-  ISMRT_LOOKBACK_DAYS?: string;
-  TUYA_DEVICE_ID: string;
-  TUYA_ACCESS_ID: string;
-  TUYA_ACCESS_SECRET: string;
-}
 
 export type JobRunOptions = {
   fetchImpl?: typeof fetch;
@@ -53,13 +26,13 @@ export async function runJob(
   const fetchImpl = budgetedFetch(budget, options.fetchImpl ?? fetch);
   switch (job.type) {
     case "dlq-report":
-      await reportDlq(env, budget);
+      await reportDlq(job.jobId, env, budget);
       return;
     case "ismrt-sync":
       await syncIsmrt(job, env, fetchImpl, budget);
       return;
     case "tuya-plan":
-      await planTuyaDays(env, new Date(job.scheduledTime), budget);
+      await planTuyaDays(env, new Date(job.scheduledTime), budget, job.jobId);
       return;
     case "tuya-day":
       await handleTuyaDay(
@@ -71,11 +44,12 @@ export async function runJob(
       );
       return;
     default:
-      return assertNever(job);
+      assertNever(job);
   }
 }
 
 async function reportDlq(
+  jobId: string,
   env: ConsumerEnv,
   budget: SubrequestBudget,
 ): Promise<void> {
@@ -86,6 +60,7 @@ async function reportDlq(
         level: "info",
         msg: "dlq_cron_skipped",
         component: "ingest-consumer",
+        job_id: jobId,
         reason: "supabase_not_configured",
         subrequests_used: budget.used,
       }),
@@ -93,13 +68,14 @@ async function reportDlq(
     return;
   }
   const since = new Date(Date.now() - DLQ_REPORT_WINDOW_DAYS * MS_PER_DAY);
-  budget.spend("supabase:dlq");
+  budget.external("supabase:dlq");
   const { count, error } = await countDlqSince(config, since);
   console.log(
     JSON.stringify({
       level: error ? "warn" : "info",
       msg: "dlq_daily_report",
       component: "ingest-consumer",
+      job_id: jobId,
       window_days: DLQ_REPORT_WINDOW_DAYS,
       dlq_count: count,
       subrequests_used: budget.used,
@@ -120,70 +96,29 @@ async function syncIsmrt(
         level: "info",
         msg: "ismrt_cron_skipped",
         component: "ingest-consumer",
+        job_id: job.jobId,
         reason: "credentials_not_configured",
         subrequests_used: budget.used,
       }),
     );
     return;
   }
-  try {
-    logSummary(
-      await runConsumptionSync(
-        {
-          ISMRT_USERNAME: env.ISMRT_USERNAME,
-          ISMRT_PASSWORD: env.ISMRT_PASSWORD,
-          SUPABASE_URL: env.SUPABASE_URL,
-          SUPABASE_SERVICE_KEY: env.SUPABASE_SERVICE_KEY,
-          ISMRT_LOOKBACK_DAYS: env.ISMRT_LOOKBACK_DAYS,
-        },
-        new Date(job.scheduledTime),
-        fetchImpl,
-      ),
-    );
-  } catch (err: unknown) {
-    console.log(
-      JSON.stringify({
-        level: "error",
-        msg: "ismrt_consumption_sync_failed",
-        component: "ingest-consumer",
-        error: err instanceof Error ? err.message : "unknown",
-        subrequests_used: budget.used,
-      }),
-    );
-    throw err;
-  }
-}
-
-export function getConsumerConfig(env: ConsumerEnv): IngestCoreConfig {
-  const timeoutRaw = env.CATEGORISATION_LLM_TIMEOUT_MS ?? "45000";
-  const timeoutParsed = parseInt(timeoutRaw, 10);
-  const confRaw = env.CATEGORISATION_MIN_CONFIDENCE ?? "0.35";
-  const confParsed = parseFloat(confRaw);
-  return {
-    finwiseApiKey: env.FINWISE_API_KEY,
-    finwiseBaseUrl: env.FINWISE_BASE_URL || "https://api.finwiseapp.io",
-    supabaseUrl: env.SUPABASE_URL,
-    supabaseServiceRoleKey: env.SUPABASE_SERVICE_KEY,
-    bankZeroAccountId: env.BANK_ZERO_ACCOUNT_ID ?? "",
-    bankZeroAccountMap: parseBankZeroAccountMapJson(
-      env.BANK_ZERO_ACCOUNT_MAP ?? "[]",
+  logSummary(
+    await runConsumptionSync(
+      {
+        ISMRT_USERNAME: env.ISMRT_USERNAME,
+        ISMRT_PASSWORD: env.ISMRT_PASSWORD,
+        SUPABASE_URL: env.SUPABASE_URL,
+        SUPABASE_SERVICE_KEY: env.SUPABASE_SERVICE_KEY,
+        ISMRT_LOOKBACK_DAYS: env.ISMRT_LOOKBACK_DAYS,
+      },
+      new Date(job.scheduledTime),
+      fetchImpl,
+      job.jobId,
     ),
-    uploadToFinwise:
-      env.UPLOAD_TO_FINWISE === "true" || env.UPLOAD_TO_FINWISE === "1",
-    categorisationEnabled:
-      env.CATEGORISATION_ENABLED === "true" ||
-      env.CATEGORISATION_ENABLED === "1",
-    geminiApiKey: env.GEMINI_API_KEY ?? "",
-    geminiModel: env.GEMINI_MODEL ?? "gemini-gemini-3-flash-preview",
-    geminiApiBase:
-      env.GEMINI_API_BASE ?? "https://generativelanguage.googleapis.com",
-    categorisationLlmTimeoutMs: Number.isFinite(timeoutParsed)
-      ? timeoutParsed
-      : 45_000,
-    categorisationMinConfidence: Number.isFinite(confParsed)
-      ? confParsed
-      : 0.35,
-  };
+    job.jobId,
+    budget.used,
+  );
 }
 
 function assertNever(value: never): never {

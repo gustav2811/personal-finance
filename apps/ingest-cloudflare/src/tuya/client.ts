@@ -1,36 +1,19 @@
+import { InvalidSourceDataError } from "../errors.js";
+import {
+  TuyaApiError,
+  TuyaSubscriptionExpiredError,
+} from "./errors.js";
+
+export { TuyaApiError, TuyaSubscriptionExpiredError } from "./errors.js";
+
 const TUYA_BASE_URL = "https://openapi.tuyaeu.com";
 const REPORT_LOG_PAGE_SIZE = 100;
-const SUBSCRIPTION_EXPIRED_CODE = "28841002";
 
 export type TuyaLogEntry = {
   code: string;
   event_time: number;
   value: string;
 };
-
-export class TuyaApiError extends Error {
-  readonly code: string | null;
-  readonly tid: string | null;
-  readonly status: number | null;
-
-  constructor(
-    message: string,
-    details: { code?: string | null; tid?: string | null; status?: number | null } = {},
-  ) {
-    super(message);
-    this.name = "TuyaApiError";
-    this.code = details.code ?? null;
-    this.tid = details.tid ?? null;
-    this.status = details.status ?? null;
-  }
-}
-
-export class TuyaSubscriptionExpiredError extends TuyaApiError {
-  constructor(message: string, details: { tid?: string | null; status?: number | null } = {}) {
-    super(message, { ...details, code: SUBSCRIPTION_EXPIRED_CODE });
-    this.name = "TuyaSubscriptionExpiredError";
-  }
-}
 
 type TuyaClientOptions = {
   fetchImpl?: typeof fetch;
@@ -64,7 +47,9 @@ export class TuyaClient {
   async authenticate(): Promise<string> {
     const result = await this.request("/v1.0/token?grant_type=1");
     if (!isRecord(result) || typeof result.access_token !== "string" || !result.access_token) {
-      throw new TuyaApiError("Tuya token response is missing result.access_token");
+      throw new InvalidSourceDataError(
+        "Tuya token response is missing result.access_token",
+      );
     }
     this.accessToken = result.access_token;
     return result.access_token;
@@ -76,10 +61,16 @@ export class TuyaClient {
     startTime: number,
     endTime: number,
   ): Promise<TuyaLogEntry[]> {
-    if (!deviceId.trim()) throw new Error("missing Tuya device id");
-    if (!code.trim()) throw new Error("missing Tuya report code");
+    if (!deviceId.trim()) {
+      throw new InvalidSourceDataError("missing Tuya device id");
+    }
+    if (!code.trim()) {
+      throw new InvalidSourceDataError("missing Tuya report code");
+    }
     if (!Number.isInteger(startTime) || !Number.isInteger(endTime) || startTime >= endTime) {
-      throw new Error(`invalid Tuya report window: ${startTime}..${endTime}`);
+      throw new InvalidSourceDataError(
+        `invalid Tuya report window: ${startTime}..${endTime}`,
+      );
     }
 
     if (!this.accessToken) await this.authenticate();
@@ -102,10 +93,14 @@ export class TuyaClient {
 
       if (!page.hasMore) return logs;
       if (!page.lastRowKey) {
-        throw new TuyaApiError(`Tuya report logs page for ${code} has_more without last_row_key`);
+        throw new InvalidSourceDataError(
+          `Tuya report logs page for ${code} has_more without last_row_key`,
+        );
       }
       if (seenRowKeys.has(page.lastRowKey)) {
-        throw new TuyaApiError(`Tuya report logs pagination repeated last_row_key for ${code}`);
+        throw new InvalidSourceDataError(
+          `Tuya report logs pagination repeated last_row_key for ${code}`,
+        );
       }
       seenRowKeys.add(page.lastRowKey);
       lastRowKey = page.lastRowKey;
@@ -135,19 +130,24 @@ export class TuyaClient {
       },
     });
     const text = await response.text();
+    if (response.status >= 500) {
+      throw new TuyaApiError(`Tuya API request failed (HTTP ${response.status})`, {
+        status: response.status,
+      });
+    }
     let parsed: unknown;
     try {
       parsed = JSON.parse(text);
     } catch {
-      throw new TuyaApiError(`Tuya returned invalid JSON (HTTP ${response.status})`, {
-        status: response.status,
-      });
+      throw new InvalidSourceDataError(
+        `Tuya returned invalid JSON (HTTP ${response.status})`,
+      );
     }
 
     if (!isTuyaEnvelope(parsed)) {
-      throw new TuyaApiError(`Tuya returned an invalid response envelope (HTTP ${response.status})`, {
-        status: response.status,
-      });
+      throw new InvalidSourceDataError(
+        `Tuya returned an invalid response envelope (HTTP ${response.status})`,
+      );
     }
     if (!response.ok || !parsed.success) {
       const code = stringValue(parsed.code);
@@ -155,7 +155,7 @@ export class TuyaClient {
       const tid = stringValue(parsed.tid);
       const details = { code, tid, status: response.status };
       const context = `code=${code ?? "unknown"} msg=${msg} tid=${tid ?? "unknown"}`;
-      if (code === SUBSCRIPTION_EXPIRED_CODE) {
+      if (code === "28841002") {
         throw new TuyaSubscriptionExpiredError(
           `Tuya API subscription expired (${context})`,
           details,
@@ -220,13 +220,17 @@ function parseReportLogsResult(value: unknown, requestedCode: string): {
   logs: TuyaLogEntry[];
 } {
   if (!isRecord(value) || typeof value.has_more !== "boolean" || !Array.isArray(value.logs)) {
-    throw new TuyaApiError("Tuya report logs response is missing result fields");
+    throw new InvalidSourceDataError(
+      "Tuya report logs response is missing result fields",
+    );
   }
   let lastRowKey: string | undefined;
   if (value.last_row_key !== undefined && value.last_row_key !== null) {
     const parsedRowKey = stringValue(value.last_row_key);
     if (!parsedRowKey) {
-      throw new TuyaApiError("Tuya report logs response has an invalid last_row_key");
+      throw new InvalidSourceDataError(
+        "Tuya report logs response has an invalid last_row_key",
+      );
     }
     lastRowKey = parsedRowKey;
   }
@@ -240,7 +244,9 @@ function parseReportLogsResult(value: unknown, requestedCode: string): {
 
 function parseLogEntry(value: unknown, requestedCode: string, index: number): TuyaLogEntry {
   if (!isRecord(value)) {
-    throw new TuyaApiError(`Tuya report log ${requestedCode}[${index}] is not an object`);
+    throw new InvalidSourceDataError(
+      `Tuya report log ${requestedCode}[${index}] is not an object`,
+    );
   }
   if (
     typeof value.code !== "string" ||
@@ -248,7 +254,9 @@ function parseLogEntry(value: unknown, requestedCode: string, index: number): Tu
     !Number.isFinite(value.event_time) ||
     typeof value.value !== "string"
   ) {
-    throw new TuyaApiError(`Tuya report log ${requestedCode}[${index}] has invalid fields`);
+    throw new InvalidSourceDataError(
+      `Tuya report log ${requestedCode}[${index}] has invalid fields`,
+    );
   }
   return {
     code: value.code,

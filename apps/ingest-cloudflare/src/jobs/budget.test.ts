@@ -1,37 +1,44 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   budgetedFetch,
-  JOB_SUBREQUEST_LIMIT,
-  PLATFORM_SUBREQUEST_LIMIT,
+  EXTERNAL_SUBREQUEST_LIMIT,
+  INTERNAL_SUBREQUEST_LIMIT,
   SubrequestBudget,
   SubrequestBudgetExceededError,
 } from "./budget.js";
 
 describe("SubrequestBudget", () => {
-  it("throws on the 46th spend", () => {
+  it("refuses the 46th external spend without counting it", () => {
     const budget = new SubrequestBudget();
-    for (let index = 0; index < JOB_SUBREQUEST_LIMIT; index += 1) {
-      budget.spend(`request:${index}`);
+    for (let index = 0; index < EXTERNAL_SUBREQUEST_LIMIT; index += 1) {
+      budget.external(`request:${index}`);
     }
 
-    expect(() => budget.spend("request:46")).toThrow(
-      SubrequestBudgetExceededError,
-    );
-    expect(budget.used).toBe(JOB_SUBREQUEST_LIMIT);
+    try {
+      budget.external("request:46");
+      throw new Error("expected budget to reject");
+    } catch (error: unknown) {
+      expect(error).toBeInstanceOf(SubrequestBudgetExceededError);
+      expect(error).toMatchObject({
+        pool: "external",
+        used: EXTERNAL_SUBREQUEST_LIMIT,
+        limit: EXTERNAL_SUBREQUEST_LIMIT,
+        label: "request:46",
+      });
+    }
+    expect(budget.used).toEqual({ external: EXTERNAL_SUBREQUEST_LIMIT, internal: 0 });
   });
 
-  it("lets reserve spends through after the job limit up to the platform limit", () => {
+  it("keeps internal and external pools independent", () => {
     const budget = new SubrequestBudget();
-    for (let index = 0; index < JOB_SUBREQUEST_LIMIT; index += 1) {
-      budget.spend(`request:${index}`);
+    for (let index = 0; index < INTERNAL_SUBREQUEST_LIMIT; index += 1) {
+      budget.internal(`internal:${index}`);
     }
-    expect(() => budget.spend("request:46")).toThrow(SubrequestBudgetExceededError);
-
-    for (let index = JOB_SUBREQUEST_LIMIT; index < PLATFORM_SUBREQUEST_LIMIT; index += 1) {
-      budget.spendReserve(`reserve:${index}`);
-    }
-    expect(budget.used).toBe(PLATFORM_SUBREQUEST_LIMIT);
-    expect(() => budget.spendReserve("reserve:51")).toThrow(SubrequestBudgetExceededError);
+    budget.external("external:0");
+    expect(budget.used).toEqual({ external: 1, internal: INTERNAL_SUBREQUEST_LIMIT });
+    expect(() => budget.internal("internal:overflow")).toThrow(
+      SubrequestBudgetExceededError,
+    );
   });
 
   it("counts budgeted fetches by host and path", async () => {
@@ -44,6 +51,6 @@ describe("SubrequestBudget", () => {
     );
 
     expect(fetchImpl).toHaveBeenCalledOnce();
-    expect(budget.used).toBe(1);
+    expect(budget.used).toEqual({ external: 1, internal: 0 });
   });
 });

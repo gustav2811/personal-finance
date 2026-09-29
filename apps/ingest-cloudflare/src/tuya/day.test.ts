@@ -3,6 +3,7 @@ import {
   TUYA_CODES,
   assertTuyaDayClosed,
   aggregateTuyaKwh,
+  buildTuyaConsumptionBatch,
   serializeTuyaLogs,
   tuyaDayWindow,
   tuyaPlanDates,
@@ -40,6 +41,17 @@ describe("Tuya aggregation", () => {
         { code: "add_ele", event_time: 2, value: "375" },
       ]),
     ).toBe(0.5);
+  });
+
+  it("uses a deterministic ingestion run key", () => {
+    const batch = buildTuyaConsumptionBatch({
+      deviceId: "device",
+      date: "2026-09-28",
+      logsByCode: logs(),
+      startedAt: "2026-09-29T07:00:00.000Z",
+      finishedAt: "2026-09-29T07:01:00.000Z",
+    });
+    expect(batch.ingestion_run.run_key).toBe("tuya:device:2026-09-28");
   });
 });
 
