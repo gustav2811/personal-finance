@@ -391,3 +391,50 @@ export function buildWeekdays(days: Map<string, DayTotals>, month: string): Week
     weekend: index >= 5,
   }))
 }
+
+export type DeviceOption = { target: string; name: string }
+
+export function buildDeviceOptions(readings: ReadingRead[], devices: DeviceRead[]): DeviceOption[] {
+  const deviceNames = new Map(devices.map((device) => [device.id, device.name]))
+  const names = new Map<string, string>()
+  for (const reading of readings) {
+    if (reading.measurement_target === HOME_TARGET || toKwh(reading) === null) continue
+    const name = reading.device_id ? deviceNames.get(reading.device_id) : undefined
+    names.set(reading.measurement_target, name ?? reading.measurement_target)
+  }
+  const options = [...names.entries()]
+    .sort(([, first], [, second]) => first.localeCompare(second))
+    .map(([target, name]) => ({ name, target }))
+  return [{ name: "Whole home", target: HOME_TARGET }, ...options]
+}
+
+export type DeviceDayPoint = { day: number; current: number | null; previous: number | null }
+
+// Daily kWh for one measurement target, this month against last, on day of month.
+export function buildDeviceDaily(
+  readings: ReadingRead[],
+  target: string,
+  currentMonth: string,
+): DeviceDayPoint[] {
+  const previousMonth = shiftMonth(currentMonth, -1)
+  const byDate = new Map<string, number>()
+  for (const reading of readings) {
+    if (reading.measurement_target !== target) continue
+    const kwh = toKwh(reading)
+    if (kwh === null) continue
+    const key = localDateKey(reading.period_start)
+    byDate.set(key, (byDate.get(key) ?? 0) + kwh)
+  }
+
+  const dayKey = (month: string, day: number) => `${month}-${String(day).padStart(2, "0")}`
+  const span = Math.max(daysInMonth(currentMonth), daysInMonth(previousMonth))
+  const points: DeviceDayPoint[] = []
+  for (let day = 1; day <= span; day += 1) {
+    points.push({
+      current: byDate.get(dayKey(currentMonth, day)) ?? null,
+      day,
+      previous: byDate.get(dayKey(previousMonth, day)) ?? null,
+    })
+  }
+  return points
+}

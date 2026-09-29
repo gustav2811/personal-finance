@@ -2,16 +2,27 @@
 
 import { useMemo, useState } from "react"
 import { Section } from "@/components/patterns/section"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { DeviceLineChart } from "@/domain/consumption/device-line-chart"
 import { DeviceShareChart } from "@/domain/consumption/device-share-chart"
 import {
   buildDays,
+  buildDeviceDaily,
+  buildDeviceOptions,
   buildDeviceShare,
   buildMonths,
   buildMtd,
   buildRateSteps,
   buildWeekdays,
   earliestMonth,
+  HOME_TARGET,
   historyMonths,
   monthKey,
 } from "@/domain/consumption/energy-model"
@@ -45,6 +56,7 @@ function EnergyBody({
 }) {
   const currentMonth = monthKey(localDateKey(data.fetchedAt))
   const [selectedMonth, setSelectedMonth] = useState(currentMonth)
+  const [target, setTarget] = useState(HOME_TARGET)
 
   const days = useMemo(
     () => buildDays(data.readings, data.ledgerEntries),
@@ -66,6 +78,14 @@ function EnergyBody({
   const share = useMemo(
     () => buildDeviceShare(data.readings, data.devices, months),
     [data.readings, data.devices, months],
+  )
+  const deviceOptions = useMemo(
+    () => buildDeviceOptions(data.readings, data.devices),
+    [data.readings, data.devices],
+  )
+  const deviceDaily = useMemo(
+    () => buildDeviceDaily(data.readings, target, currentMonth),
+    [data.readings, target, currentMonth],
   )
   const weekdays = useMemo(() => buildWeekdays(days, currentMonth), [days, currentMonth])
 
@@ -164,6 +184,22 @@ function EnergyBody({
             {gap.name}: {gap.days} of {gap.of} days in {gap.label}
           </p>
         ))}
+      </Section>
+
+      <Section title="By device">
+        <Select onValueChange={setTarget} value={target}>
+          <SelectTrigger className="w-56">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {deviceOptions.map((option) => (
+              <SelectItem key={option.target} value={option.target}>
+                {option.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <DeviceLineChart points={deviceDaily} />
       </Section>
 
       <Section title="Weekdays">
