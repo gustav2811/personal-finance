@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/combobox"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { shortDate } from "@/lib/format/date"
+import { rankCategories, useCategoryRanking } from "./category-suggest"
 import { setTransactionTreatment } from "./mutations"
 import type { CategoryOption, TransactionFeedItem, TransactionInspection } from "./model"
 import { getTransaction } from "./queries"
@@ -50,6 +51,10 @@ export function Inspector({
   const categoryItems = selectedCategory && !categories.some((entry) => entry.id === selectedCategory.id)
     ? [selectedCategory, ...categories]
     : categories
+  const [categoryInput, setCategoryInput] = useState("")
+  const categoryQuery = selectedCategory && categoryInput === categoryLabel(selectedCategory) ? "" : categoryInput
+  const { loading: ranking, ranking: categoryRanking } = useCategoryRanking(categoryQuery)
+  const { items: matchedCategories, probabilityById } = rankCategories(categoryItems, categoryQuery, categoryRanking)
   const treatmentKey = [
     item.id,
     item.revision.confirmedTreatmentId ?? "",
@@ -161,11 +166,12 @@ export function Inspector({
         <div className="grid grid-cols-[8rem_minmax(0,1fr)] items-center gap-3 px-3 py-2" data-category-for={item.id}>
           <span className="text-muted-foreground">Category</span>
           <Combobox
+            autoHighlight
+            filteredItems={matchedCategories}
             items={categoryItems}
-            itemToStringLabel={(category) =>
-              category.group ? `${category.name} · ${category.group}` : category.name
-            }
+            itemToStringLabel={categoryLabel}
             itemToStringValue={(category) => category.id}
+            onInputValueChange={setCategoryInput}
             onValueChange={(category) => {
               if (category) onClassify(category)
             }}
@@ -173,18 +179,28 @@ export function Inspector({
           >
             <ComboboxInput aria-label="Category" disabled={pending} placeholder="Uncategorised" showClear={false} />
             <ComboboxContent>
-              <ComboboxEmpty>No category</ComboboxEmpty>
+              <ComboboxEmpty>{ranking ? "Matching…" : "No category"}</ComboboxEmpty>
               <ComboboxList>
-                {(category: CategoryOption) => (
-                  <ComboboxItem key={category.id} value={category}>
-                    <span className="min-w-0">
-                      <span className="block truncate">{category.name}</span>
-                      {category.group ? (
-                        <span className="type-caption block truncate text-muted-foreground">{category.group}</span>
-                      ) : null}
-                    </span>
-                  </ComboboxItem>
-                )}
+                {(category: CategoryOption) => {
+                  const probability = probabilityById.get(category.id)
+                  return (
+                    <ComboboxItem key={category.id} value={category}>
+                      <span className="flex min-w-0 flex-1 items-baseline gap-2">
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate">{category.name}</span>
+                          {category.group ? (
+                            <span className="type-caption block truncate text-muted-foreground">{category.group}</span>
+                          ) : null}
+                        </span>
+                        {probability != null && probability >= 0.01 ? (
+                          <span className="type-caption shrink-0 text-muted-foreground tabular-nums">
+                            {Math.round(probability * 100)}%
+                          </span>
+                        ) : null}
+                      </span>
+                    </ComboboxItem>
+                  )
+                }}
               </ComboboxList>
             </ComboboxContent>
           </Combobox>
@@ -279,6 +295,10 @@ export function Inspector({
       </div>
     </div>
   )
+}
+
+function categoryLabel(category: CategoryOption): string {
+  return category.group ? `${category.name} · ${category.group}` : category.name
 }
 
 function categoryValue(categories: CategoryOption[], item: TransactionFeedItem): CategoryOption | null {
