@@ -8,10 +8,6 @@ import { Empty, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 export type MonthBar = { label: string; month: string; value: number }
 export type BarMarker = { label: string; text: string }
 
-const barConfig = {
-  value: { color: "var(--chart-1)", label: "Value" },
-} satisfies ChartConfig
-
 type TickProps = { payload?: { value: string }; x?: number; y?: number }
 
 function MonthTick({ payload, selectedLabel, x, y }: TickProps & { selectedLabel: string }) {
@@ -34,6 +30,7 @@ function MonthTick({ payload, selectedLabel, x, y }: TickProps & { selectedLabel
 // A tariff step gets a tinted column, after Smart Charts 8.
 export function MonthBars({
   bars,
+  color,
   emptyLabel,
   format,
   markers,
@@ -41,6 +38,7 @@ export function MonthBars({
   selected,
 }: {
   bars: MonthBar[]
+  color: string
   emptyLabel: string
   format: (value: number) => string
   markers: BarMarker[]
@@ -50,6 +48,7 @@ export function MonthBars({
   const id = useId().replace(/:/g, "")
   const fillId = `pill-${id}`
   const rateId = `rate-${id}`
+  const barConfig = { value: { color, label: "Value" } } satisfies ChartConfig
 
   if (bars.length === 0) {
     return (
@@ -77,8 +76,8 @@ export function MonthBars({
               <stop offset="100%" style={{ stopColor: "var(--color-value)", stopOpacity: 0.55 }} />
             </linearGradient>
             <linearGradient id={rateId} x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" style={{ stopColor: "var(--color-value)", stopOpacity: 0.25 }} />
-              <stop offset="100%" style={{ stopColor: "var(--color-value)", stopOpacity: 0 }} />
+              <stop offset="0%" style={{ stopColor: "var(--info)", stopOpacity: 0.3 }} />
+              <stop offset="100%" style={{ stopColor: "var(--info)", stopOpacity: 0 }} />
             </linearGradient>
           </defs>
           <XAxis

@@ -6,8 +6,8 @@ import type { WalletFees } from "@/domain/consumption/energy-model"
 import { formatMoney } from "@/lib/format/money"
 
 const feesConfig = {
-  daily: { color: "var(--chart-1)", label: "Daily fees" },
-  eft: { color: "var(--chart-3)", label: "EFT fees" },
+  daily: { color: "var(--warning)", label: "Daily fees" },
+  eft: { color: "var(--chart-2)", label: "EFT fees" },
   track: { color: "var(--muted)", label: "Track" },
 } satisfies ChartConfig
 
@@ -59,12 +59,12 @@ export function WalletFeesChart({ fees }: { fees: WalletFees }) {
       </div>
       <dl className="flex justify-center gap-6 text-sm">
         <div className="flex items-center gap-2">
-          <span className="size-2.5 rounded-full" style={{ background: "var(--chart-1)" }} />
+          <span className="size-2.5 rounded-full" style={{ background: "var(--warning)" }} />
           <dt className="text-muted-foreground">Daily</dt>
           <dd className="type-numeric font-medium">{formatMoney(fees.daily, 2)}</dd>
         </div>
         <div className="flex items-center gap-2">
-          <span className="size-2.5 rounded-full" style={{ background: "var(--chart-3)" }} />
+          <span className="size-2.5 rounded-full" style={{ background: "var(--chart-2)" }} />
           <dt className="text-muted-foreground">EFT</dt>
           <dd className="type-numeric font-medium">{formatMoney(fees.eft, 2)}</dd>
         </div>

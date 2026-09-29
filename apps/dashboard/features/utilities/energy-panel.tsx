@@ -38,11 +38,11 @@ import { formatMoney, formatNumber } from "@/lib/format/money"
 
 type Layer = "last" | "payments" | "fees" | "rates"
 
-const LAYERS: Array<{ label: string; value: Layer }> = [
-  { label: "Last month", value: "last" },
-  { label: "Payments", value: "payments" },
-  { label: "Wallet fees", value: "fees" },
-  { label: "Rate changes", value: "rates" },
+const LAYERS: Array<{ dot: string; label: string; value: Layer }> = [
+  { dot: "bg-muted-foreground", label: "Last month", value: "last" },
+  { dot: "bg-success", label: "Payments", value: "payments" },
+  { dot: "bg-warning", label: "Wallet fees", value: "fees" },
+  { dot: "bg-info", label: "Rate changes", value: "rates" },
 ]
 
 function EnergyBody({
@@ -110,11 +110,13 @@ function EnergyBody({
         {summary ? (
           <>
             <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
-              <p className="type-numeric text-5xl font-semibold tracking-tight">
+              <p className="type-numeric flex items-center gap-3 text-5xl font-semibold tracking-tight">
+                <span aria-hidden className="size-3 rounded-full bg-chart-1" />
                 {formatNumber(summary.kwh)}
                 <span className="ml-2 text-2xl font-medium text-muted-foreground">kWh</span>
               </p>
-              <p className="type-numeric text-3xl font-semibold tracking-tight">
+              <p className="type-numeric flex items-center gap-3 text-3xl font-semibold tracking-tight">
+                <span aria-hidden className="size-2.5 rounded-full bg-chart-2" />
                 {formatMoney(summary.rand)}
               </p>
             </div>
@@ -161,60 +163,64 @@ function EnergyBody({
         </dl>
       ) : null}
 
-      <Section title="Usage">
-        <MonthBars
-          bars={monthly.map((point) => ({ label: point.label, month: point.month, value: point.kwh }))}
+      <div className="grid gap-x-6 gap-y-8 lg:grid-cols-2 [&>section]:min-w-0">
+        <Section title="Usage">
+          <MonthBars
+            bars={monthly.map((point) => ({ label: point.label, month: point.month, value: point.kwh }))}
+            color="var(--chart-1)"
           emptyLabel="No electricity readings"
-          format={(value) => `${formatNumber(value, 0)} kWh`}
-          markers={markers}
-          onSelect={setSelectedMonth}
-          selected={selectedMonth}
-        />
-      </Section>
+            format={(value) => `${formatNumber(value, 0)} kWh`}
+            markers={markers}
+            onSelect={setSelectedMonth}
+            selected={selectedMonth}
+          />
+        </Section>
 
-      <Section title="Cost">
-        <MonthBars
-          bars={monthly.map((point) => ({ label: point.label, month: point.month, value: point.cost }))}
+        <Section title="Cost">
+          <MonthBars
+            bars={monthly.map((point) => ({ label: point.label, month: point.month, value: point.cost }))}
+            color="var(--chart-2)"
           emptyLabel="No electricity charges"
-          format={(value) => formatMoney(value)}
-          markers={markers}
-          onSelect={setSelectedMonth}
-          selected={selectedMonth}
-        />
-      </Section>
+            format={(value) => formatMoney(value)}
+            markers={markers}
+            onSelect={setSelectedMonth}
+            selected={selectedMonth}
+          />
+        </Section>
 
-      <Section title="Wallet fees">
-        <WalletFeesChart fees={walletFees} />
-      </Section>
+        <Section title="Devices">
+          <DeviceShareChart share={share} />
+          {share.gaps.slice(-2).map((gap) => (
+            <p className="type-caption" key={`${gap.name}-${gap.label}`}>
+              {gap.name}: {gap.days} of {gap.of} days in {gap.label}
+            </p>
+          ))}
+        </Section>
 
-      <Section title="Devices">
-        <DeviceShareChart share={share} />
-        {share.gaps.slice(-2).map((gap) => (
-          <p className="type-caption" key={`${gap.name}-${gap.label}`}>
-            {gap.name}: {gap.days} of {gap.of} days in {gap.label}
-          </p>
-        ))}
-      </Section>
+        <Section title="By device">
+          <Select onValueChange={setTarget} value={target}>
+            <SelectTrigger className="w-56">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {deviceOptions.map((option) => (
+                <SelectItem key={option.target} value={option.target}>
+                  {option.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <DeviceLineChart points={deviceDaily} />
+        </Section>
 
-      <Section title="By device">
-        <Select onValueChange={setTarget} value={target}>
-          <SelectTrigger className="w-56">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {deviceOptions.map((option) => (
-              <SelectItem key={option.target} value={option.target}>
-                {option.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <DeviceLineChart points={deviceDaily} />
-      </Section>
+        <Section title="Wallet fees">
+          <WalletFeesChart fees={walletFees} />
+        </Section>
 
-      <Section title="Weekdays">
-        <WeekdayChart points={weekdays} />
-      </Section>
+        <Section title="Weekdays">
+          <WeekdayChart points={weekdays} />
+        </Section>
+      </div>
     </div>
   )
 }
@@ -247,6 +253,7 @@ export function EnergyPanel({ data, window }: { data: EnergyData; window: Histor
         >
           {LAYERS.map((layer) => (
             <ToggleGroupItem key={layer.value} value={layer.value}>
+              <span aria-hidden className={`size-2 rounded-full ${layer.dot}`} />
               {layer.label}
             </ToggleGroupItem>
           ))}

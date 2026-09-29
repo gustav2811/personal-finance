@@ -14,8 +14,9 @@ import { Empty, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { REST_KEY, type DeviceShare } from "@/domain/consumption/energy-model"
 import { formatNumber } from "@/lib/format/money"
 
-// Device colours walk the palette from chart-2 so new devices need no code change.
-const PALETTE = ["--chart-2", "--chart-3", "--chart-4", "--chart-5", "--chart-1"] as const
+// Devices walk the cool end of the palette so pink stays whole-home usage and violet stays
+// money. New devices need no code change.
+const PALETTE = ["--chart-3", "--chart-5", "--chart-4", "--chart-2", "--chart-1"] as const
 
 export function DeviceShareChart({ share }: { share: DeviceShare }) {
   const id = useId().replace(/:/g, "")

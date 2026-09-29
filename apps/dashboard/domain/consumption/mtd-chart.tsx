@@ -8,12 +8,16 @@ import { formatMoney, formatNumber } from "@/lib/format/money"
 
 export type MtdMetric = "kwh" | "rand"
 
-const mtdConfig = {
-  current: { color: "var(--chart-1)", label: "This month" },
-  previous: { color: "var(--muted-foreground)", label: "Last month" },
-  deposits: { color: "var(--chart-3)", label: "Payments in" },
-  fees: { color: "var(--chart-4)", label: "Wallet fees" },
-} satisfies ChartConfig
+// Usage in kWh is pink and money in rand is violet, matching the bars. Payments in are
+// success and wallet fees are warning.
+function mtdConfig(metric: MtdMetric) {
+  return {
+    current: { color: metric === "kwh" ? "var(--chart-1)" : "var(--chart-2)", label: "This month" },
+    previous: { color: "var(--muted-foreground)", label: "Last month" },
+    deposits: { color: "var(--success)", label: "Payments in" },
+    fees: { color: "var(--warning)", label: "Wallet fees" },
+  } satisfies ChartConfig
+}
 
 type Row = {
   day: number
@@ -90,7 +94,7 @@ export function MtdChart({
   const format = (value: number) => (metric === "kwh" ? formatNumber(value, 0) : formatMoney(value))
 
   return (
-    <ChartContainer className="aspect-auto h-72 w-full" config={mtdConfig}>
+    <ChartContainer className="aspect-auto h-72 w-full" config={mtdConfig(metric)}>
       <ComposedChart data={rows} margin={{ left: 8, right: 8, top: 8 }}>
         <defs>
           <linearGradient id="mtd-cursor" x1="0" x2="0" y1="0" y2="1">
