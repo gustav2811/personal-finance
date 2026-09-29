@@ -1,5 +1,14 @@
 import { logSummary, runConsumptionSync } from "./ismrt/run.js";
 import {
+  handleTuyaDay,
+  isTuyaDayMessage,
+  planTuyaDays,
+  routeQueueMessage,
+  type ConsumerQueueMessage,
+  type TuyaEnv,
+} from "./tuya/run.js";
+import { TuyaSubscriptionExpiredError } from "./tuya/client.js";
+import {
   attachmentToPayload,
   ChunkIncomplete,
   countDlqSince,
@@ -29,6 +38,10 @@ export interface ConsumerEnv {
   ISMRT_USERNAME?: string;
   ISMRT_PASSWORD?: string;
   ISMRT_LOOKBACK_DAYS?: string;
+  TUYA_QUEUE: Queue<Extract<ConsumerQueueMessage, { type: "tuya-day" }>>;
+  TUYA_DEVICE_ID: string;
+  TUYA_ACCESS_ID: string;
+  TUYA_ACCESS_SECRET: string;
 }
 
 function getConsumerConfig(env: ConsumerEnv): IngestCoreConfig {
@@ -91,6 +104,23 @@ function createCfLogger(bindings: Record<string, unknown>): ProcessJobLogger {
 }
 
 async function processQueueMessage(
+  body: ConsumerQueueMessage,
+  env: ConsumerEnv,
+): Promise<void> {
+  const routed = routeQueueMessage(body);
+  switch (routed.type) {
+    case "tuya-day":
+      await handleTuyaDay(routed.message, env satisfies TuyaEnv);
+      return;
+    case "email-ingest":
+      await processEmailIngestMessage(routed.message, env);
+      return;
+    default:
+      return assertNever(routed);
+  }
+}
+
+async function processEmailIngestMessage(
   body: IngestQueueMessageV1,
   env: ConsumerEnv,
 ): Promise<void> {
@@ -237,11 +267,23 @@ export default {
     _ctx: ExecutionContext,
   ): Promise<void> {
     await reportDlq(env);
+    try {
+      await planTuyaDays(env satisfies TuyaEnv, new Date(event.scheduledTime));
+    } catch (err: unknown) {
+      console.log(
+        JSON.stringify({
+          level: "error",
+          msg: "tuya_planning_failed",
+          component: "ingest-consumer",
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
+    }
     await syncIsmrt(event, env);
   },
 
   async queue(
-    batch: MessageBatch<IngestQueueMessageV1>,
+    batch: MessageBatch<ConsumerQueueMessage>,
     env: ConsumerEnv,
     _ctx: ExecutionContext,
   ): Promise<void> {
@@ -252,6 +294,7 @@ export default {
       } catch (err) {
         const b = message.body;
         const isChunk = err instanceof ChunkIncomplete;
+        const tuya = isTuyaDayMessage(b);
         console.log(
           JSON.stringify({
             level: isChunk ? "info" : "error",
@@ -260,11 +303,21 @@ export default {
               : "queue_message_failed",
             component: "ingest-consumer",
             err: err instanceof Error ? err.message : String(err),
-            job_id: b.job_id,
-            ...(b.email_r2_key !== undefined
-              ? { email_r2_key: b.email_r2_key }
-              : {}),
-            attachment_r2_keys: b.attachments.map((a) => a.r2_key),
+            error_type:
+              err instanceof TuyaSubscriptionExpiredError
+                ? "tuya_subscription_expired"
+                : err instanceof Error
+                  ? err.name
+                  : "unknown",
+            ...(tuya
+              ? { device_id: b.deviceId, date: b.date }
+              : {
+                  job_id: b.job_id,
+                  ...(b.email_r2_key !== undefined
+                    ? { email_r2_key: b.email_r2_key }
+                    : {}),
+                  attachment_r2_keys: b.attachments.map((a) => a.r2_key),
+                }),
           }),
         );
         message.retry();
@@ -272,3 +325,7 @@ export default {
     }
   },
 };
+
+function assertNever(value: never): never {
+  throw new Error(`Unhandled queue message type: ${JSON.stringify(value)}`);
+}
