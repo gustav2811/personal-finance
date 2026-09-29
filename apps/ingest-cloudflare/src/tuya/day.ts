@@ -87,8 +87,6 @@ export async function writeTuyaRawFiles(
     const entries = logsByCode[code];
     counts[code] = entries.length;
     const key = tuyaRawKey(deviceId, date, code);
-    if (await bucket.head(key)) continue;
-
     const compressed = await gzipText(serializeTuyaLogs(entries));
     await bucket.put(key, compressed, {
       httpMetadata: {
