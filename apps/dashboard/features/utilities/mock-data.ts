@@ -11,7 +11,7 @@ const DEVICES: DeviceRead[] = [
   device("wallet", "ISMRT wallet", "wallet", "wallet", "ismrt"),
   device("meter", "ISMRT meter", "utility_meter", "electricity", "ismrt"),
   device("water", "ISMRT water billing", "utility_stream", "water", "ismrt"),
-  device("espresso", "BNETA espresso smart plug", "smart_plug", "electricity", "tuya"),
+  device("espresso", "Lelit Bianca", "smart_plug", "electricity", "tuya"),
   device("geyser", "Geyser controller", "smart_plug", "electricity", "tuya"),
   device("pool", "Pool pump", "smart_plug", "electricity", "tuya"),
 ]
