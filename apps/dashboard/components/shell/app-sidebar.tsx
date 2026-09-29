@@ -38,7 +38,7 @@ const HOUSEHOLD: NavItem[] = [
   { href: "/transactions", icon: List, label: "Transactions" },
 ]
 
-const HOME: NavItem[] = [{ href: "/energy", icon: Zap, label: "Energy" }]
+const HOME: NavItem[] = [{ href: "/utilities", icon: Zap, label: "Utilities" }]
 
 const RECORD: NavItem[] = [{ href: "/sources", icon: Radio, label: "Sources" }]
 

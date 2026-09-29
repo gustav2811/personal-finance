@@ -46,6 +46,7 @@ export type LedgerRead = Pick<
   | "amount"
   | "currency"
   | "quantity"
+  | "rate"
   | "occurred_at"
   | "posted_at"
   | "description"

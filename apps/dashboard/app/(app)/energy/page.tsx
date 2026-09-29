@@ -1,5 +1,5 @@
-import { EnergyView } from "@/features/energy/energy-view"
+import { redirect } from "next/navigation"
 
 export default function EnergyPage() {
-  return <EnergyView />
+  redirect("/utilities")
 }

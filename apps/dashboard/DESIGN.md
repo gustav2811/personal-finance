@@ -9,10 +9,10 @@ The companion Figma file is the [shadcn/ui design system](https://www.figma.com/
 ```text
 components/ui/          shadcn registry source only
 components/shell/       app shell, sidebar, auth, providers, theme
-components/patterns/    domain-neutral: PageHeader, Section, DateField, RangeControl, DataGate
+components/patterns/    domain-neutral: PageHeader, Section, DateField, RangeControl, HistoryControl, DataGate
 domain/consumption/     energy and money charts, source list, series helpers
 features/overview/      page, queries.ts
-features/energy/
+features/utilities/    electricity and water page, queries.ts, dev mock fixture
 features/money/
 features/sources/
 features/transactions/  ledger feed, inline category, inspector
@@ -104,7 +104,7 @@ Household
   Money           /money
   Transactions    /transactions
 Home
-  Energy          /energy
+  Utilities       /utilities
 Record
   Sources         /sources
 ```
