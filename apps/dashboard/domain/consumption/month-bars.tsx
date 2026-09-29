@@ -83,7 +83,8 @@ export function MonthBars({
           <XAxis
             axisLine={false}
             dataKey="label"
-            interval={0}
+            interval={bars.length > 7 ? "preserveEnd" : 0}
+            minTickGap={4}
             tick={<MonthTick selectedLabel={active.label} />}
             tickLine={false}
           />

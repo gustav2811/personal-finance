@@ -3,6 +3,7 @@
 import { useId } from "react"
 import { Bar, BarChart, ReferenceArea, XAxis, YAxis } from "recharts"
 import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/chart"
+import { Empty, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import type { WeekdayPoint } from "@/domain/consumption/energy-model"
 import { formatNumber } from "@/lib/format/money"
 
@@ -36,14 +37,22 @@ export function WeekdayChart({ points }: { points: WeekdayPoint[] }) {
     null,
   )
 
+  if (!peak || peak.kwh === null) {
+    return (
+      <Empty className="min-h-48 border">
+        <EmptyHeader>
+          <EmptyTitle>No closed days this month</EmptyTitle>
+        </EmptyHeader>
+      </Empty>
+    )
+  }
+
   return (
     <div className="space-y-2">
-      {peak && peak.kwh !== null ? (
-        <p className="type-numeric text-sm">
-          <span className="text-muted-foreground">{peak.label}</span>{" "}
-          <span className="font-medium">{formatNumber(peak.kwh)} kWh</span>
-        </p>
-      ) : null}
+      <p className="type-numeric text-sm">
+        <span className="text-muted-foreground">{peak.label}</span>{" "}
+        <span className="font-medium">{formatNumber(peak.kwh)} kWh</span>
+      </p>
       <ChartContainer className="aspect-auto h-48 w-full" config={weekdayConfig}>
         <BarChart data={points} margin={{ left: 8, right: 8, top: 8 }}>
           <defs>
@@ -56,20 +65,18 @@ export function WeekdayChart({ points }: { points: WeekdayPoint[] }) {
             axisLine={false}
             dataKey="label"
             interval={0}
-            tick={<DayTick peak={peak?.label ?? ""} />}
+            tick={<DayTick peak={peak.label} />}
             tickLine={false}
           />
           <YAxis domain={[0, "dataMax"]} hide />
-          {peak ? (
-            <ReferenceArea
-              fill="var(--muted)"
-              fillOpacity={0.6}
-              ifOverflow="visible"
-              radius={14}
-              x1={peak.label}
-              x2={peak.label}
-            />
-          ) : null}
+          <ReferenceArea
+            fill="var(--muted)"
+            fillOpacity={0.6}
+            ifOverflow="visible"
+            radius={14}
+            x1={peak.label}
+            x2={peak.label}
+          />
           <ChartTooltip
             content={({ active, payload }) => {
               const item = payload?.[0]?.payload as WeekdayPoint | undefined
