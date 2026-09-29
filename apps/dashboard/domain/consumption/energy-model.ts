@@ -167,19 +167,26 @@ export function buildMtd(
     if ((days.get(dayKey(currentMonth, day))?.kwh ?? 0) > 0) lastClosedDay = day
   }
 
+  // kwh and rand are running totals for the month. Payments and fees stay per day.
   const points: MtdPoint[] = []
+  const running = { kwh: 0, rand: 0, lastKwh: 0, lastRand: 0 }
   for (let day = 1; day <= span; day += 1) {
     const current = day <= daysInMonth(currentMonth) ? days.get(dayKey(currentMonth, day)) : undefined
-    const previous = day <= daysInMonth(previousMonth) ? days.get(dayKey(previousMonth, day)) : undefined
+    const hasPrevious = day <= daysInMonth(previousMonth)
+    const previous = hasPrevious ? days.get(dayKey(previousMonth, day)) : undefined
     const closed = day <= lastClosedDay
+    running.kwh += current?.kwh ?? 0
+    running.rand += current?.rand ?? 0
+    running.lastKwh += previous?.kwh ?? 0
+    running.lastRand += previous?.rand ?? 0
     points.push({
       day,
       deposits: current ? positive(current.deposits) : null,
       fees: current ? positive(current.fees) : null,
-      kwh: closed && current ? current.kwh : null,
-      lastKwh: previous ? previous.kwh : null,
-      lastRand: previous ? previous.rand : null,
-      rand: closed && current ? current.rand : null,
+      kwh: closed ? running.kwh : null,
+      lastKwh: hasPrevious ? running.lastKwh : null,
+      lastRand: hasPrevious ? running.lastRand : null,
+      rand: closed ? running.rand : null,
     })
   }
 

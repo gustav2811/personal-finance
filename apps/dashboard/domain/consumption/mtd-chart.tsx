@@ -93,9 +93,13 @@ export function MtdChart({
     <ChartContainer className="aspect-auto h-72 w-full" config={mtdConfig}>
       <ComposedChart data={rows} margin={{ left: 8, right: 8, top: 8 }}>
         <defs>
+          <linearGradient id="mtd-cursor" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" style={{ stopColor: "var(--color-current)", stopOpacity: 0.22 }} />
+            <stop offset="100%" style={{ stopColor: "var(--color-current)", stopOpacity: 0 }} />
+          </linearGradient>
           <linearGradient id="mtd-fill" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="var(--color-current)" stopOpacity={0.35} />
-            <stop offset="100%" stopColor="var(--color-current)" stopOpacity={0} />
+            <stop offset="0%" style={{ stopColor: "var(--color-current)", stopOpacity: 0.35 }} />
+            <stop offset="100%" style={{ stopColor: "var(--color-current)", stopOpacity: 0 }} />
           </linearGradient>
         </defs>
         <CartesianGrid vertical={false} />
@@ -122,7 +126,7 @@ export function MtdChart({
             const row = payload?.[0]?.payload as Row | undefined
             return active && row ? <TooltipBody row={row} /> : null
           }}
-          cursor={{ fill: "var(--muted)", opacity: 0.4 }}
+          cursor={{ fill: "url(#mtd-cursor)", radius: 10 }}
         />
         {showLast ? (
           <Line
@@ -137,12 +141,12 @@ export function MtdChart({
           />
         ) : null}
         <Area
-          activeDot={{ r: 4 }}
+          activeDot={{ fill: "var(--background)", r: 5, stroke: "var(--color-current)", strokeWidth: 3 }}
           dataKey="current"
           dot={false}
           fill="url(#mtd-fill)"
           stroke="var(--color-current)"
-          strokeWidth={2}
+          strokeWidth={3}
           type="monotone"
           yAxisId="usage"
         />
