@@ -10,3 +10,10 @@
 - [Database invariants](finance-data/invariants.md)
 - [Agentic classification workflow](finance-data/agent-workflow.md)
 
+## Household Budgeting
+
+- [Design overview](household-budget/README.md)
+- [Evidence and household fit](household-budget/evidence.md)
+- [Budget behaviour](household-budget/behaviour.md)
+- [Data and delivery](household-budget/data-and-delivery.md)
+- [Dashboard experience](household-budget/experience.md)
