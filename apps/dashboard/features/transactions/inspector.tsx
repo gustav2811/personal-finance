@@ -14,17 +14,16 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { shortDate } from "@/lib/format/date"
 import { rankCategories, useCategoryRanking } from "./category-suggest"
-import { setTransactionTreatment } from "./mutations"
 import type { CategoryOption, TransactionFeedItem, TransactionInspection } from "./model"
 import { getTransaction } from "./queries"
-import { commandId, formatAmount, moneyDirection, subject } from "./copy"
+import { formatAmount, moneyDirection, subject } from "./copy"
 
 export function Inspector({
   categories,
   categoryError,
   item,
   onClassify,
-  onTreatmentSaved,
+  onConfirm,
   onUndo,
   pending,
   undo,
@@ -33,7 +32,11 @@ export function Inspector({
   categoryError: string | null
   item: TransactionFeedItem
   onClassify: (category: CategoryOption) => void
-  onTreatmentSaved: (item: TransactionFeedItem) => void
+  onConfirm: (input: {
+    isTransfer: boolean
+    excludeFromSpend: boolean
+    nature: string | null
+  }) => Promise<string | null>
   onUndo: () => void
   pending: boolean
   undo: boolean
@@ -44,6 +47,7 @@ export function Inspector({
   )
   const [nature, setNature] = useState(item.treatment.nature ?? "")
   const [treatmentError, setTreatmentError] = useState<string | null>(null)
+  const [treatmentSaved, setTreatmentSaved] = useState(false)
   const [savingTreatment, setSavingTreatment] = useState(false)
   const [inspection, setInspection] = useState<TransactionInspection | null>(null)
   const direction = moneyDirection(item.amount)
@@ -72,6 +76,10 @@ export function Inspector({
   }, [treatmentKey, item.treatment.excludeFromSpend, item.treatment.isTransfer, item.treatment.nature])
 
   useEffect(() => {
+    setTreatmentSaved(false)
+  }, [item.id])
+
+  useEffect(() => {
     let cancelled = false
     setInspection(null)
     void getTransaction(item.id)
@@ -91,17 +99,13 @@ export function Inspector({
     setSavingTreatment(true)
     setTreatmentError(null)
     try {
-      const result = await setTransactionTreatment({
+      const error = await onConfirm({
         excludeFromSpend,
-        expectedConfirmedTreatmentId: item.revision.confirmedTreatmentId,
-        expectedProposedTreatmentId: item.revision.proposedTreatmentId,
         isTransfer,
         nature: nature.trim() || null,
-        reviewCommandId: commandId(),
-        transactionId: item.id,
       })
-      onTreatmentSaved(result.item)
-      setTreatmentError(result.conflict ? "Treatment changed. Showing the current decision." : null)
+      setTreatmentError(error)
+      setTreatmentSaved(error == null)
     } catch (error) {
       setTreatmentError(error instanceof Error ? error.message : "Treatment could not be saved.")
     } finally {
@@ -276,6 +280,10 @@ export function Inspector({
         {treatmentError ? (
           <p className="type-caption text-destructive" role="status">
             {treatmentError}
+          </p>
+        ) : treatmentSaved ? (
+          <p className="type-caption" role="status">
+            Saved
           </p>
         ) : null}
         {item.event ? null : (
