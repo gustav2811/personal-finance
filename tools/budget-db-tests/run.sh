@@ -100,3 +100,5 @@ for test_file in "${tests[@]}"; do
   fi
   rm -f "$test_output"
 done
+
+"$repo_root/tools/budget-db-tests/concurrency.sh" "$container_id"
