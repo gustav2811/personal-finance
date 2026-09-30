@@ -17,3 +17,5 @@
 - [Budget behaviour](household-budget/behaviour.md)
 - [Data and delivery](household-budget/data-and-delivery.md)
 - [Dashboard experience](household-budget/experience.md)
+- [Backend build plan](household-budget/backend-build-plan.md)
+- [Backend implementation contract](household-budget/backend-contract.md)

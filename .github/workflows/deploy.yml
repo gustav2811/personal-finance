@@ -4,6 +4,10 @@ on:
   push:
     branches: [master]
 
+permissions:
+  contents: read
+  pull-requests: read
+
 concurrency:
   group: deploy-ingest-cloudflare-${{ github.ref }}
   cancel-in-progress: false
@@ -15,7 +19,6 @@ jobs:
       ingest: ${{ steps.filter.outputs.ingest }}
       categoriser: ${{ steps.filter.outputs.categoriser }}
       migrations: ${{ steps.filter.outputs.migrations }}
-      workflow: ${{ steps.filter.outputs.workflow }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -34,8 +37,33 @@ jobs:
               - 'yarn.lock'
             migrations:
               - 'supabase/migrations/**'
-            workflow:
-              - '.github/workflows/deploy.yml'
+
+  provenance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Verify merged PR provenance
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_API_URL: ${{ github.api_url }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: node tools/budget-db-tests/check-pr-provenance.mjs
+
+  database-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Run disposable database tests
+        run: bash tools/budget-db-tests/run.sh
+      - name: Test deployment provenance guard
+        run: node --test tools/budget-db-tests/check-pr-provenance.test.mjs
 
   verify:
     runs-on: ubuntu-latest
@@ -57,14 +85,14 @@ jobs:
           yarn workspace @investments/source-rpc test
 
   migrate:
-    needs: [changes, verify]
-    if: ${{ !failure() && !cancelled() && (needs.changes.outputs.migrations == 'true' || needs.changes.outputs.workflow == 'true') }}
+    needs: [changes, verify, provenance, database-tests]
+    if: ${{ always() && !failure() && !cancelled() && needs.verify.result == 'success' && needs.provenance.result == 'success' && needs.database-tests.result == 'success' && needs.changes.outputs.migrations == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.118.0
       - name: Link Supabase project
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -77,8 +105,8 @@ jobs:
         run: supabase db push -p "$SUPABASE_DB_PASSWORD"
 
   infra:
-    needs: [changes, verify, migrate]
-    if: ${{ !failure() && !cancelled() && (needs.changes.outputs.ingest == 'true' || needs.changes.outputs.workflow == 'true') }}
+    needs: [changes, verify, provenance, database-tests, migrate]
+    if: ${{ always() && !failure() && !cancelled() && needs.verify.result == 'success' && needs.provenance.result == 'success' && needs.database-tests.result == 'success' && (needs.migrate.result == 'success' || needs.migrate.result == 'skipped') && needs.changes.outputs.ingest == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -93,8 +121,8 @@ jobs:
         run: node scripts/ensure-queues.mjs
 
   deploy-ingest:
-    needs: [changes, verify, migrate, infra]
-    if: ${{ !failure() && !cancelled() && (needs.changes.outputs.ingest == 'true' || needs.changes.outputs.workflow == 'true') }}
+    needs: [changes, verify, provenance, database-tests, migrate, infra]
+    if: ${{ always() && !failure() && !cancelled() && needs.verify.result == 'success' && needs.provenance.result == 'success' && needs.database-tests.result == 'success' && (needs.migrate.result == 'success' || needs.migrate.result == 'skipped') && needs.infra.result == 'success' && needs.changes.outputs.ingest == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -112,8 +140,8 @@ jobs:
         run: yarn deploy:ingest
 
   deploy-consumer:
-    needs: [changes, verify, migrate, infra]
-    if: ${{ !failure() && !cancelled() && (needs.changes.outputs.ingest == 'true' || needs.changes.outputs.workflow == 'true') }}
+    needs: [changes, verify, provenance, database-tests, migrate, infra]
+    if: ${{ always() && !failure() && !cancelled() && needs.verify.result == 'success' && needs.provenance.result == 'success' && needs.database-tests.result == 'success' && (needs.migrate.result == 'success' || needs.migrate.result == 'skipped') && needs.infra.result == 'success' && needs.changes.outputs.ingest == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -131,8 +159,8 @@ jobs:
         run: yarn deploy:consumer
 
   deploy-categoriser:
-    needs: [changes, verify, migrate]
-    if: ${{ !failure() && !cancelled() && (needs.changes.outputs.categoriser == 'true' || needs.changes.outputs.workflow == 'true') }}
+    needs: [changes, verify, provenance, database-tests, migrate]
+    if: ${{ always() && !failure() && !cancelled() && needs.verify.result == 'success' && needs.provenance.result == 'success' && needs.database-tests.result == 'success' && (needs.migrate.result == 'success' || needs.migrate.result == 'skipped') && needs.changes.outputs.categoriser == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
