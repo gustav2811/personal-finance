@@ -7,7 +7,7 @@ with pgTAP.
 
 The runtime is deliberately isolated from Supabase CLI state and production
 credentials. It uses the pinned PostgreSQL 17.6 image digest
-`public.ecr.aws/supabase/postgres@sha256:ca7871b587ca2c401ac0f325df6249c9aa0d25647ded34631158efc51176767f`
+`docker.io/supabase/postgres@sha256:ca7871b587ca2c401ac0f325df6249c9aa0d25647ded34631158efc51176767f`
 image (PostgreSQL 17.6) and the repository's pinned Supabase CLI compatibility
 target, `2.118.0`. The runner does not read or accept a remote database URL,
 does not mount a volume, and stops only the container it created.

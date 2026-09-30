@@ -3,6 +3,11 @@
 Prepared 2026-09-30. Status: implementation plan; no budgeting code, new schema,
 production migration, deployment or financial activation performed.
 
+Execution update: the first PR contains local database replay and security tests.
+Per the household's 2026-09-30 instruction, keep `pr.yml` and `deploy.yml` unchanged;
+database tests run locally. Pause after preparing each PR and await the user's
+instruction before starting the next stage. No new deployment/provenance gate.
+
 ## Objective and authority
 
 Deliver the household-budget database, transactional commands and member-facing
@@ -45,10 +50,10 @@ Read-only inspection on 2026-09-30 established:
 - Consumption devices and ledger entries have UUID IDs but no household column.
   Financial-event legs currently reference bank transactions only.
 - PR CI runs a linked migration dry-run. Deployment runs on pushes to `master`
-  and applies migrations before Workers. It does not itself prove PR provenance.
+  and applies migrations before Workers. Preserve this existing release process.
 - No checked-in `supabase/config.toml` exists. Migration history assumes the
   original public finance tables already exist. The installed shell has no
-  Supabase CLI on PATH. Establish a pinned local/CI runtime in PR 0.
+  Supabase CLI on PATH. Establish a pinned local test runtime in PR 0.
 - Existing `supabase/tests/household_isolation.sql` reports success by deliberate
   exceptions. It is not a conventional passing pgTAP suite; preserve its coverage
   while converting it into an automated runner with real pass/fail semantics.
@@ -134,7 +139,7 @@ only tasks whose files and contracts are independent.
 
 | PR | Deliverable | Entry dependency | Exit gate |
 | --- | --- | --- | --- |
-| 0 | Replayable DB, fixture harness, PR/deploy gates; accepted design included | Current checkout | Clean replay and meaningful DB CI; direct-push deployment rejected |
+| 0 | Replayable DB and local fixture harness; accepted design included | Current checkout | Clean replay and meaningful local database assertions |
 | 1 | Nine business tables, command receipts, drafts/publication, account configuration/reconciliation | PR 0 | Tenant constraints, immutability, stale-edit and replay tests pass |
 | 2 | Fund commands, reviewed bank allocations and first working read slice | PR 1 | Shared payer, accumulation, split/refund, card and concurrent assignment fixtures pass |
 | 3 | Source drift, pending identity/exposure and completeness engine | PR 2 | No double deductions; stale/unknown facts prevent confident funding |
@@ -153,12 +158,11 @@ predecessor is merged, successful and schema history checked.
 
 ## Work packets
 
-### A — reproducible database and delivery gates (LUNA)
+### A — reproducible local database verification (LUNA)
 
 **Own:** `supabase/config.toml`, `supabase/tests/bootstrap/`, a dedicated
-`supabase/tests/database/` pgTAP suite, `tools/budget-db-tests/`, and the DB sections
-of `.github/workflows/pr.yml` / `.github/workflows/deploy.yml`. Primary owns
-integration with existing workflow jobs and final provenance/security decisions.
+`supabase/tests/database/` pgTAP suite and `tools/budget-db-tests/`.
+Leave `.github/workflows/pr.yml` and `.github/workflows/deploy.yml` unchanged.
 
 **Objective:** a fresh disposable database can reproduce the existing finance
 schema and run assertion tests without production credentials or financial data.
@@ -167,26 +171,21 @@ schema and run assertion tests without production credentials or financial data.
   accounts/transactions/snapshots dependencies, verified against live DDL. Apply
   it locally before replaying chronological migrations; keep it outside production
   migration paths. Never renumber or edit already-applied migration files.
-- Configure PostgreSQL 17 parity and pin the Supabase CLI version. Discover CLI
-  commands through help. Database test job must run for migration, test, bootstrap,
-  config, runner and relevant workflow changes, including test-only PRs.
+- Configure PostgreSQL 17 parity and pin the runtime image. Discover CLI commands
+  through help. Run the local suite for migration, command and query changes.
 - Convert isolation coverage into pgTAP: two households, both member identities,
   outsider, anonymous and service-role rejection on member-only commands. Use
   synthetic emails and stable fixture UUIDs, transaction rollback for SQL tests.
 - Rebuild from scratch, lint finance/public/consumption, run tests and exercise
   upgrade from the baseline. Add a separate multi-connection concurrency runner.
-- PR jobs use no production write credentials for local replay. Retain the linked
-  dry-run as a release preflight; it is not the correctness test.
-- Deploy guard verifies the exact deployed SHA is the merge commit of a merged PR
-  targeting master using the GitHub API. Failure/no matching PR stops all migration
-  and deployment jobs. Gate migration on DB tests as well as existing verify jobs.
-- Keep existing Worker verification. Workflow-only database changes should not
-  cause blanket Worker redeployments; use explicit changed paths/job conditions.
+- Local replay uses no production credentials. Retain the existing linked PR
+  dry-run and production deployment pipeline without changing their workflows.
+- Record local database verification in each PR description. All migration and
+  deployment changes still go through reviewed PRs using the existing process.
 
-**Acceptance:** clean replay succeeds twice, a deliberate SQL assertion failure
-fails CI, a test-only change selects DB tests, a direct master push cannot deploy,
-and a migration failure prevents downstream deploy jobs. Preserve no real fixture
-data in Git. This packet creates no production budgeting migration.
+**Acceptance:** clean replay succeeds twice and a deliberate SQL assertion failure
+makes the local runner exit nonzero. Preserve no real fixture data in Git.
+This packet creates no production budgeting migration or workflow change.
 
 ### B — schema and tenant constraints (LUNA)
 
@@ -471,7 +470,8 @@ files through the pinned CLI and gives each builder one reserved filename.
    Primary integrates, obtains independent correctness/security review and prepares
    PR 5. Reviewer findings return to primary before any builder scope change.
 
-No overlapping migration or workflow ownership. Synthetic test setup helpers are
+Pause after each prepared PR; start the next stage only when the user requests it.
+No overlapping migration ownership. Synthetic test setup helpers are
 shared only after the owner integrates them. Parallel builders do not create user
 sidebar chats. A reviewer is scheduled after builders complete to stay within
 the available concurrency slots and avoid review of a moving implementation.
@@ -506,8 +506,8 @@ imports inside structural schema migrations. No Google Sheet or FinWise mutation
 is required. Until that gate passes, status remains needs_reconciliation, with
 no seeded amount presented as the household's real spending availability.
 
-Backend completion means the accepted behaviour and query contracts pass local/CI
-tests and their PR releases succeed. Report financial cutover separately. Frontend
+Backend completion means the accepted behaviour and query contracts pass local
+database tests, existing CI checks and their PR releases succeed. Report financial cutover separately. Frontend
 implementation, payroll ledger, FX engine, statement-driven card forecast, spouse
 debts, general matching DSL, purchase journals and formal financial close remain
 outside this build.
