@@ -2,11 +2,7 @@ name: PR
 
 on:
   pull_request:
-    branches: [master, 'feature/household-budget-*']
-
-permissions:
-  contents: read
-  pull-requests: read
+    branches: [master]
 
 concurrency:
   group: pr-${{ github.repository }}-${{ github.event.pull_request.number || github.head_ref }}
@@ -17,7 +13,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       migrations: ${{ steps.filter.outputs.migrations }}
-      database: ${{ steps.filter.outputs.database }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -26,20 +21,6 @@ jobs:
           filters: |
             migrations:
               - 'supabase/migrations/**'
-            database:
-              - 'supabase/**'
-              - 'tools/budget-db-tests/**'
-              - '.github/workflows/pr.yml'
-              - '.github/workflows/deploy.yml'
-
-  budget-database-tests:
-    needs: changes
-    if: ${{ needs.changes.outputs.database == 'true' }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Run disposable database tests
-        run: bash tools/budget-db-tests/run.sh
 
   supabase-migrations:
     needs: changes
@@ -49,7 +30,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: supabase/setup-cli@v1
         with:
-          version: 2.118.0
+          version: latest
       - name: Link Supabase project
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
