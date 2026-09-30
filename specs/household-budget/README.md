@@ -34,6 +34,10 @@ the connected-account ingestion system.
 3. [Data and delivery](data-and-delivery.md): schema extension, commands,
    invariants, acceptance cases, and rollout.
 4. [Dashboard experience](experience.md): the screens and decisions they support.
+5. [Backend build plan](backend-build-plan.md): PR sequence, builder objectives,
+   database/query scope and validation gates. Dashboard implementation is deferred.
+6. [Backend implementation contract](backend-contract.md): concrete database,
+   command and query contracts owned by the coordinating agent.
 
 ## Design decisions
 
