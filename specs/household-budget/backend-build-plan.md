@@ -1,12 +1,18 @@
 # Backend build plan
 
-Prepared 2026-09-30. Status: implementation plan; no budgeting code, new schema,
-production migration, deployment or financial activation performed.
+Prepared 2026-09-30. Status: local verification foundation prepared in PR #36;
+additive budget schema is prepared as a stacked follow-up. No production
+migration, deployment or financial activation performed.
 
 Execution update: the first PR contains local database replay and security tests.
 Per the household's 2026-09-30 instruction, keep `pr.yml` and `deploy.yml` unchanged;
 database tests run locally. Pause after preparing each PR and await the user's
 instruction before starting the next stage. No new deployment/provenance gate.
+
+The first schema follow-up contains packet B only: tables, tenant constraints,
+immutable-history guards and local tests. Split the original PR 1 into schema
+(1a) and plan/configuration/reconciliation commands (1b) to keep review bounded.
+The command packet begins only after the user requests the next PR.
 
 ## Objective and authority
 
@@ -140,8 +146,9 @@ only tasks whose files and contracts are independent.
 | PR | Deliverable | Entry dependency | Exit gate |
 | --- | --- | --- | --- |
 | 0 | Replayable DB and local fixture harness; accepted design included | Current checkout | Clean replay and meaningful local database assertions |
-| 1 | Nine business tables, command receipts, drafts/publication, account configuration/reconciliation | PR 0 | Tenant constraints, immutability, stale-edit and replay tests pass |
-| 2 | Fund commands, reviewed bank allocations and first working read slice | PR 1 | Shared payer, accumulation, split/refund, card and concurrent assignment fixtures pass |
+| 1a | Nine business tables, command receipts and database history guards | PR 0 | Tenant constraints, immutable history and local schema tests pass |
+| 1b | Draft/publication and account configuration/reconciliation commands | PR 1a | Stale-edit, command replay and reconciliation tests pass |
+| 2 | Fund commands, reviewed bank allocations and first working read slice | PR 1b | Shared payer, accumulation, split/refund, card and concurrent assignment fixtures pass |
 | 3 | Source drift, pending identity/exposure and completeness engine | PR 2 | No double deductions; stale/unknown facts prevent confident funding |
 | 4 | Atomic restricted claims and household-safe utility recognition | PR 3 | Mortgage/notice/wallet examples and linked correction tests pass |
 | 5 | Complete dashboard query contracts and cutover runbook | PR 4 | All specification acceptance cases mapped to passing tests; query/security review complete |
@@ -187,7 +194,7 @@ schema and run assertion tests without production credentials or financial data.
 makes the local runner exit nonzero. Preserve no real fixture data in Git.
 This packet creates no production budgeting migration or workflow change.
 
-### B — schema and tenant constraints (LUNA)
+### B — schema and tenant constraints (TERRA)
 
 **Own:** one parent-reserved migration for the nine business tables and receipts,
 `supabase/tests/database/budget_schema.test.sql`, and schema contract documentation.
@@ -455,9 +462,9 @@ files through the pinned CLI and gives each builder one reserved filename.
 
 1. Primary freezes live legacy DDL/bootstrap and release contract. LUNA A builds
    packet A; primary integrates/reviews and prepares PR 0 with the accepted design.
-2. Primary freezes full schema/command manifest. LUNA A builds B. LUNA B can build
-   independent pgTAP fixture/assertion helpers from that manifest. After B is
-   integrated locally, TERRA builds C. Integrate and review PR 1.
+2. Primary freezes full schema/command manifest. TERRA builds B; LUNA builds
+   independent pgTAP assertions from that manifest. Integrate and review schema
+   PR 1a, then pause. After the user requests continuation, TERRA builds C in PR 1b.
 3. Primary freezes allocation/calculation/command helper interfaces. LUNA A builds
    E, LUNA B builds F; TERRA builds D against the frozen F signature. Primary
    coordinates any shared helper edits. Integrate all three and test PR 2.

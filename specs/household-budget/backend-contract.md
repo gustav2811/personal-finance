@@ -60,6 +60,9 @@ created_at timestamptz. Unique(household_id,version_number) for published number
 Published requires number/time/nonempty reason. Published headers cannot update
 or delete. Published versions are full snapshots. Draft parent is nullable on first
 publication; parent must be published and older than the new publication.
+Drafts have no publication number or timestamp; published numbers are positive.
+Line mutations lock their parent version before checking publication state so a
+concurrent publication cannot admit a late edit.
 
 ### budget_lines
 
@@ -88,6 +91,8 @@ status IN(current,needs_review), separately for transaction and utility. Unique
 source/revision. Immutable except status transition current->needs_review/superseded
 or needs_review->superseded; superseded terminal. Components/sets never delete.
 Utility inserts denied until owned-device/entry constraints exist in PR4.
+The first source revision is 1 with no predecessor; later revisions require an
+explicit supersedes_id pointing to an earlier revision of that same source.
 
 ### budget_allocations
 
@@ -103,6 +108,9 @@ refund with original link or explicit opening-period refund reason. Original ref
 must target same purpose and outflow allocation. No fund delta for other kinds.
 Zero amounts permitted only for zero-effect kinds. Components immutable. Enforce
 aggregate split sum=header amount at transaction end with deferred constraint trigger.
+Require at least one component, including when the source amount is zero. Complete
+the command receipt after inserting components; a completed receipt closes its
+set against additional component inserts.
 Mixed signs require nonempty evidence.receipt_reference at command validation.
 Supersession links must refer to earlier revision of same source; no cycles.
 
@@ -117,6 +125,11 @@ Opening/assign null->fund; release fund->null; reallocate distinct fund->fund.
 Unique(household_id,funding_occurrence_key) WHERE key IS NOT NULL AND correction_role
 IS NULL. Correction unique original/reversal so same original cannot reverse twice.
 Rows append-only. A correction receipt can contain two linked rows.
+Correction reference and role must be supplied together. A correction refers to
+an original movement, never another correction. A reversal preserves the amount
+and effective date and swaps endpoints; a replacement requires that original's
+reversal in the same command. Each original permits at most one reversal and one
+replacement.
 
 ### budget_account_settings
 
