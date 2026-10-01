@@ -87,13 +87,13 @@ SQL
 for test_file in "${tests[@]}"; do
   printf 'Testing %s\n' "${test_file#"$repo_root/"}"
   test_output="$(mktemp -t budget-db-test.XXXXXX)"
-  if ! psql < "$test_file" > "$test_output"; then
+  if ! psql < "$test_file" > "$test_output" 2>&1; then
     cat "$test_output"
     rm -f "$test_output"
     exit 1
   fi
   cat "$test_output"
-  if grep -Eq '^(not ok|Bail out!)|# Looks like you failed' "$test_output"; then
+  if grep -Eq '(^|[[:space:]])not ok [0-9]+|Bail out!|# Looks like' "$test_output"; then
     rm -f "$test_output"
     printf '%s\n' "pgTAP assertions failed" >&2
     exit 1
@@ -102,3 +102,4 @@ for test_file in "${tests[@]}"; do
 done
 
 "$repo_root/tools/budget-db-tests/concurrency.sh" "$container_id"
+"$repo_root/tools/budget-db-tests/funding-concurrency.sh" "$container_id"

@@ -1,8 +1,9 @@
 # Backend build plan
 
 Prepared 2026-09-30. Status: local verification foundation prepared in PR #36;
-additive budget schema prepared in stacked PR #37; command API prepared as the
-next stacked follow-up. No production migration, deployment or financial
+additive budget schema prepared in stacked PR #37; command API prepared in #38;
+funding, bank allocations and initial reads are prepared as the stacked stage 2 follow-up.
+No production migration, deployment or financial
 activation performed.
 
 Execution update: the first PR contains local database replay and security tests.
@@ -16,8 +17,17 @@ immutable-history guards and local tests. Split the original PR 1 into schema
 The user authorized the command packet on 2026-09-30. Its six RPCs cover fund
 creation/rename, draft replacement/publication, account settings and audited
 reconciliation. The precise manifest is [command API execution contract](command-api-contract.md).
-Funding, reviewed allocations and member read queries remain subsequent packets.
-Pause after the command PR; await the user's instruction before packet D/E.
+The user authorized stage 2 on 2026-10-01: funding, reviewed bank allocations and
+initial member reads, stacked on #38. Its precise manifest is the
+[funding API execution contract](funding-api-contract.md). Pause after preparing
+this PR; source exposure, restricted claims and remaining queries need separate
+instructions before their stages start.
+
+Stage 2 verification on 2026-10-01 passed a fresh migration replay, all 872
+pgTAP assertions across 11 suites and five overlapping command races. The
+funding, allocation and read migrations also received an independent correctness
+and security review. Local verification leaves the existing release workflows
+unchanged.
 
 ## Objective and authority
 
