@@ -13,6 +13,10 @@ publication races. The first session is synchronized at the `pg_stat_activity`
 requires the competing session to wait on a lock at the same time; all fixture
 rows are synthetic and disappear with the runner's disposable container.
 
+The runner then invokes `funding-concurrency.sh`, which adds the two stage 2
+funding races: a last-50000 assignment race with an exact `budget_insufficient`
+loser and a duplicate occurrence-key race with an exact `budget_conflict` loser.
+
 The runtime is deliberately isolated from Supabase CLI state and production
 credentials. It uses the pinned PostgreSQL 17.6 image digest
 `docker.io/supabase/postgres@sha256:ca7871b587ca2c401ac0f325df6249c9aa0d25647ded34631158efc51176767f`
