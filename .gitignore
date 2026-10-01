@@ -53,6 +53,7 @@ data/
 __pycache__/
 *.pyc
 *.tsbuildinfo
+/supabase/.temp/
 
 # Dashboard build and review artifacts
 /apps/dashboard/.next/
