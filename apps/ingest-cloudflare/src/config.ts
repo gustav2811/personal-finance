@@ -1,7 +1,5 @@
-import {
-  parseBankZeroAccountMapJson,
-  type IngestCoreConfig,
-} from "@investments/ingest-core";
+import { type IngestCoreConfig } from "@investments/ingest-core";
+import { bankZeroAccountMap } from "./bank-zero-accounts.js";
 
 export interface ConsumerEnv {
   INGEST_BUCKET: R2Bucket;
@@ -11,7 +9,6 @@ export interface ConsumerEnv {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_KEY: string;
   BANK_ZERO_ACCOUNT_ID: string;
-  BANK_ZERO_ACCOUNT_MAP: string;
   UPLOAD_TO_FINWISE: string;
   CATEGORISATION_ENABLED?: string;
   GEMINI_API_KEY?: string;
@@ -39,9 +36,7 @@ export function getConsumerConfig(env: ConsumerEnv): IngestCoreConfig {
     supabaseUrl: env.SUPABASE_URL,
     supabaseServiceRoleKey: env.SUPABASE_SERVICE_KEY,
     bankZeroAccountId: env.BANK_ZERO_ACCOUNT_ID ?? "",
-    bankZeroAccountMap: parseBankZeroAccountMapJson(
-      env.BANK_ZERO_ACCOUNT_MAP ?? "[]",
-    ),
+    bankZeroAccountMap,
     uploadToFinwise:
       env.UPLOAD_TO_FINWISE === "true" || env.UPLOAD_TO_FINWISE === "1",
     categorisationEnabled:

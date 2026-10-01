@@ -31,7 +31,6 @@ describe("scheduled job router", () => {
       SUPABASE_URL: "",
       SUPABASE_SERVICE_KEY: "",
       BANK_ZERO_ACCOUNT_ID: "",
-      BANK_ZERO_ACCOUNT_MAP: "",
       UPLOAD_TO_FINWISE: "",
       TUYA_DEVICE_ID: "device",
       TUYA_ACCESS_ID: "access-id",

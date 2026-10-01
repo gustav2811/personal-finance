@@ -34,7 +34,6 @@ function createEnv(bucket: R2Bucket): ConsumerEnv {
     SUPABASE_URL: "https://supabase.example",
     SUPABASE_SERVICE_KEY: "service-key",
     BANK_ZERO_ACCOUNT_ID: "account",
-    BANK_ZERO_ACCOUNT_MAP: "[]",
     UPLOAD_TO_FINWISE: "false",
     TUYA_DEVICE_ID: "device",
     TUYA_ACCESS_ID: "access-id",
