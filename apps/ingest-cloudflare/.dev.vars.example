@@ -14,9 +14,5 @@ ISMRT_PASSWORD=
 # Optional for local consumer (override wrangler.consumer.toml [vars]):
 # SUPABASE_URL=
 
-# Bank Zero: prefer BANK_ZERO_ACCOUNT_MAP — JSON array (same shape as repo account.map.json)
-# (pattern → accountId, optional accountNumber). One line; single-quoted value is easiest:
-# BANK_ZERO_ACCOUNT_MAP='[{"pattern":"Emergency Savings","accountId":"00000000-0000-0000-0000-000000000001"}]'
-#
-# Optional fallback when no map row matches (or if you use an empty map):
+# Optional fallback when no row in src/bank-zero-accounts.ts matches:
 # BANK_ZERO_ACCOUNT_ID=

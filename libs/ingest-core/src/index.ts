@@ -1,5 +1,4 @@
 export type { IngestCoreConfig, BankZeroAccountMapping } from "./config.js";
-export { parseBankZeroAccountMapJson } from "./config.js";
 export type { IngestJobPayload, IngestJobAttachment } from "./job-payload.js";
 export {
   attachmentToPayload,

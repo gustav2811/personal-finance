@@ -88,7 +88,7 @@ Wrangler loads **`apps/ingest-cloudflare/.dev.vars`** when you run commands from
    yarn dev:consumer
    ```
 
-`[vars]` in `wrangler.consumer.toml` (e.g. `SUPABASE_URL`, `BANK_ZERO_ACCOUNT_MAP`, `BANK_ZERO_ACCOUNT_ID`) apply in dev too. For **Bank Zero**, set **`BANK_ZERO_ACCOUNT_MAP`** to a JSON array (`pattern`, `accountId`, optional `accountNumber`). Override in the dashboard or in **`apps/ingest-cloudflare/.dev.vars`** (see `.dev.vars.example`). See [Workers local development](https://developers.cloudflare.com/workers/development-testing/local-development/).
+`[vars]` in `wrangler.consumer.toml` (for example `SUPABASE_URL` and `BANK_ZERO_ACCOUNT_ID`) apply in dev too. Bank Zero statement routing is the committed list in `apps/ingest-cloudflare/src/bank-zero-accounts.ts`. `BANK_ZERO_ACCOUNT_ID` is only the fallback when no pattern matches. See [Workers local development](https://developers.cloudflare.com/workers/development-testing/local-development/).
 
 ---
 
@@ -111,7 +111,7 @@ You are **not** creating a new project with `npm create cloudflare`; you are upl
 
 If this Worker was last changed in the **Cloudflare dashboard**, Wrangler compares **remote vs local** and prints a diff. Extra dashboard-only vars show with **`-`** even when **`keep_vars = true`**. That check **does not** understand `keep_vars`: it only looks at the TOML vs downloaded config.
 
-**With `keep_vars = true`, answering `Y` is safe** — the real deploy sends `keep_bindings` for plain-text/json vars, so **`SUPABASE_URL` and `BANK_ZERO_ACCOUNT_MAP` are not removed.** The message is misleading.
+**With `keep_vars = true`, answering `Y` is safe.** The real deploy sends `keep_bindings` for plain-text/json vars, so **`SUPABASE_URL` is not removed.** The message is misleading.
 
 After a successful deploy **via Wrangler**, Cloudflare usually stops treating the script as “last edited in dashboard,” so this prompt **often goes away** until you edit that Worker in the UI again.
 
@@ -131,7 +131,7 @@ Set via Wrangler (run from `apps/ingest-cloudflare`):
 | Consumer | `yarn wrangler secret put ISMRT_USERNAME -c wrangler.consumer.toml` | ISMRT login. Omit to skip the daily consumption pull |
 | Consumer | `yarn wrangler secret put ISMRT_PASSWORD -c wrangler.consumer.toml` | ISMRT password |
 
-**`SUPABASE_URL`**, **`BANK_ZERO_ACCOUNT_MAP`**, and optional **`BANK_ZERO_ACCOUNT_ID`** are **not** in the committed `wrangler.consumer.toml` so you can keep them only in the **Cloudflare dashboard** (or `.dev.vars` locally). Set them under **Workers → `investments-ingest-consumer` → Settings → Variables**. The TOML only sets **`FINWISE_BASE_URL`** and **`UPLOAD_TO_FINWISE`**, and **`keep_vars = true`** ensures dashboard vars survive deploy (see warning section above).
+**`SUPABASE_URL`** and optional **`BANK_ZERO_ACCOUNT_ID`** are **not** in the committed `wrangler.consumer.toml`. Keep them in the **Cloudflare dashboard** (or `.dev.vars` locally) under **Workers → `investments-ingest-consumer` → Settings → Variables**. Bank Zero account rows live in `apps/ingest-cloudflare/src/bank-zero-accounts.ts`. The TOML only sets **`FINWISE_BASE_URL`** and **`UPLOAD_TO_FINWISE`**, and **`keep_vars = true`** ensures dashboard vars survive deploy (see warning section above).
 
 ---
 
