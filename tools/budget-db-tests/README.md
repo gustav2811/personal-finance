@@ -5,6 +5,14 @@ schema-only legacy public-table bootstrap, replays every checked-in migration
 in timestamp order, and runs every `supabase/tests/database/*.test.sql` file
 with pgTAP.
 
+After pgTAP, the runner invokes `concurrency.sh` with the created container ID.
+It uses two real in-container PostgreSQL sessions under `authenticated` JWT
+context and checks same-command replay, stale draft revision, and stale
+publication races. The first session is synchronized at the `pg_stat_activity`
+`PgSleep` state while it retains the household transaction lock. The runner also
+requires the competing session to wait on a lock at the same time; all fixture
+rows are synthetic and disappear with the runner's disposable container.
+
 The runtime is deliberately isolated from Supabase CLI state and production
 credentials. It uses the pinned PostgreSQL 17.6 image digest
 `docker.io/supabase/postgres@sha256:ca7871b587ca2c401ac0f325df6249c9aa0d25647ded34631158efc51176767f`

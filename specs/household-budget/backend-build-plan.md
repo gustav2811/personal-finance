@@ -1,8 +1,9 @@
 # Backend build plan
 
 Prepared 2026-09-30. Status: local verification foundation prepared in PR #36;
-additive budget schema is prepared as a stacked follow-up. No production
-migration, deployment or financial activation performed.
+additive budget schema prepared in stacked PR #37; command API prepared as the
+next stacked follow-up. No production migration, deployment or financial
+activation performed.
 
 Execution update: the first PR contains local database replay and security tests.
 Per the household's 2026-09-30 instruction, keep `pr.yml` and `deploy.yml` unchanged;
@@ -12,7 +13,11 @@ instruction before starting the next stage. No new deployment/provenance gate.
 The first schema follow-up contains packet B only: tables, tenant constraints,
 immutable-history guards and local tests. Split the original PR 1 into schema
 (1a) and plan/configuration/reconciliation commands (1b) to keep review bounded.
-The command packet begins only after the user requests the next PR.
+The user authorized the command packet on 2026-09-30. Its six RPCs cover fund
+creation/rename, draft replacement/publication, account settings and audited
+reconciliation. The precise manifest is [command API execution contract](command-api-contract.md).
+Funding, reviewed allocations and member read queries remain subsequent packets.
+Pause after the command PR; await the user's instruction before packet D/E.
 
 ## Objective and authority
 
@@ -223,8 +228,12 @@ source references remain disabled until packet H supplies proven household scope
 
 ### C — plans, configuration and reconciliation commands (TERRA)
 
-**Own:** a separate parent-reserved command migration and
-`budget_plan_commands.test.sql` / `budget_reconciliation.test.sql`.
+**Own:** three parent-reserved migrations (command foundation, plans and
+reconciliation), with matching `budget_command_foundation.test.sql`,
+`budget_plan_commands.test.sql` and `budget_reconciliation_commands.test.sql`.
+The foundation provides fund creation/rename/retirement and account configuration
+needed by the other commands; implementation signatures are frozen in the
+[command API contract](command-api-contract.md).
 
 **Objective:** implement the following member commands with receipts and stale-state
 checks: `budget_save_draft_v1`, `budget_publish_v1`,
@@ -253,9 +262,10 @@ payload mismatch and mutated observation invalidation. No funding RPC in this PR
 
 **Own:** fund command migration and `budget_fund_commands.test.sql`.
 
-**Objective:** implement `budget_create_fund_v1`, `budget_retire_fund_v1`,
-`budget_move_funds_v1` and `budget_correct_movement_v1` under the common receipt/
-lock contract. Fund rename preserves historical labels.
+**Objective:** implement `budget_move_funds_v1` and `budget_correct_movement_v1`
+under the common receipt/lock contract. Reuse PR 1b's `budget_create_fund_v1` and
+`budget_update_fund_v1` for creation, rename and retirement; introduce no duplicate
+fund lifecycle API. Fund rename preserves historical labels.
 
 - Opening/assign/release/reallocate use the positive amount and endpoints defined
   by the design. Require expected plan/reconciliation and a current resource

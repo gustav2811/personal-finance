@@ -1,6 +1,7 @@
 # Household budgeting
 
-Status: proposed design, not implemented or financially reconciled.
+Status: design accepted; backend foundation, schema and command API prepared in
+stacked PRs. No production migration or financial activation performed.
 Date: 2026-09-29. Repository baseline: `master` at `9b61775`.
 
 Revised after the household accepted the complexity review: nine proposed tables
@@ -38,6 +39,8 @@ the connected-account ingestion system.
    database/query scope and validation gates. Dashboard implementation is deferred.
 6. [Backend implementation contract](backend-contract.md): concrete database,
    command and query contracts owned by the coordinating agent.
+7. [Command API execution contract](command-api-contract.md): exact payload
+   normalization, receipt, publication and reconciliation rules for PR 1b.
 
 ## Design decisions
 
@@ -72,7 +75,7 @@ Budget history is immutable; historical actuals use latest reviewed facts with
 an audit trail. Formal close/restatement, multiple goals inside a fund, reimbursement
 links and statement-level card workflows are deferred.
 
-The research and design are complete enough to review. The open facts in
+The research and design are complete enough to build. The open facts in
 [evidence](evidence.md#facts-to-resolve-at-cutover) prevent activation of a
-trustworthy opening budget, not further design work. No production data, Google
-Sheet, FinWise budget, classifier mode, or application code was changed.
+trustworthy opening budget. The backend PRs use synthetic local fixtures; no
+production data, Google Sheet, FinWise budget or classifier mode was changed.
