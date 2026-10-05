@@ -9,6 +9,8 @@ export interface DlqEntry {
   bank: string;
   error: string;
   payload: Record<string, unknown>;
+  /** Requeue-safe source pointers. Inline email bodies are deliberately excluded. */
+  replay_payload?: Record<string, unknown>;
 }
 
 let supabase: SupabaseClient | null = null;
@@ -31,6 +33,7 @@ export async function sendToDlq(
     bank: entry.bank,
     error: entry.error,
     payload: entry.payload,
+    replay_payload: entry.replay_payload ?? null,
   });
 }
 
@@ -46,11 +49,38 @@ export async function countDlqSince(
   const { count, error } = await client
     .from(DLQ_TABLE)
     .select("*", { count: "exact", head: true })
+    .eq("status", "open")
     .gte("created_at", since.toISOString());
   if (error) {
     return { count: 0, error: error.message };
   }
   return { count: count ?? 0, error: null };
+}
+
+export type DlqGroup = { bank: string; error: string; count: number };
+
+/** Small operational summary for the daily report; only unresolved work is actionable. */
+export async function listOpenDlqGroupsSince(
+  config: IngestCoreConfig,
+  since: Date,
+): Promise<{ groups: DlqGroup[]; error: string | null }> {
+  const client = getSupabase(config);
+  const { data, error } = await client
+    .from(DLQ_TABLE)
+    .select("bank,error")
+    .eq("status", "open")
+    .gte("created_at", since.toISOString());
+  if (error) return { groups: [], error: error.message };
+  const counts = new Map<string, DlqGroup>();
+  for (const row of data ?? []) {
+    const bank = String((row as { bank?: unknown }).bank ?? "unknown");
+    const errorText = String((row as { error?: unknown }).error ?? "unknown");
+    const key = `${bank}\u0000${errorText}`;
+    const group = counts.get(key) ?? { bank, error: errorText, count: 0 };
+    group.count += 1;
+    counts.set(key, group);
+  }
+  return { groups: [...counts.values()].sort((a, b) => b.count - a.count), error: null };
 }
 
 const PROCESSED_TABLE = "processed_transactions";
