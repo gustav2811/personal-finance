@@ -10,6 +10,8 @@ export {
   sendToDlq,
   createProcessedStore,
   countDlqSince,
+  listOpenDlqGroupsSince,
+  type DlqGroup,
   type DlqEntry,
 } from "./lib/dlq.js";
 export {

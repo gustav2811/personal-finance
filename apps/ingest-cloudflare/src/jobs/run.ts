@@ -1,5 +1,6 @@
 import {
   countDlqSince,
+  listOpenDlqGroupsSince,
   type IngestCoreConfig,
 } from "@investments/ingest-core";
 import { type ConsumerEnv, getConsumerConfig } from "../config.js";
@@ -63,6 +64,7 @@ export async function runJob(
 export type DlqReport = {
   count: number;
   error: string | null;
+  groups: Array<{ bank: string; error: string; count: number }>;
 };
 
 export async function countDlqForHealth(
@@ -74,7 +76,10 @@ export async function countDlqForHealth(
   if (!config.supabaseUrl.trim() || !config.supabaseServiceRoleKey.trim()) {
     throw new Error("missing Supabase credentials for health check");
   }
-  return countDlq(config, budget, now);
+  const since = new Date(now.getTime() - DLQ_REPORT_WINDOW_DAYS * MS_PER_DAY);
+  budget.external("supabase:dlq");
+  const { count, error } = await countDlqSince(config, since);
+  return { count, error, groups: [] };
 }
 
 async function reportDlq(
@@ -96,7 +101,7 @@ async function reportDlq(
     );
     return;
   }
-  const { count, error } = await countDlq(config, budget, new Date());
+  const { count, error, groups } = await summarizeDlq(config, budget, new Date());
   console.log(
     JSON.stringify({
       level: error ? "warn" : "info",
@@ -105,20 +110,26 @@ async function reportDlq(
       job_id: jobId,
       window_days: DLQ_REPORT_WINDOW_DAYS,
       dlq_count: count,
+      dlq_groups: groups,
       subrequests_used: budget.used,
       ...(error ? { err: error } : {}),
     }),
   );
 }
 
-async function countDlq(
+async function summarizeDlq(
   config: IngestCoreConfig,
   budget: SubrequestBudget,
   now: Date,
 ): Promise<DlqReport> {
   const since = new Date(now.getTime() - DLQ_REPORT_WINDOW_DAYS * MS_PER_DAY);
   budget.external("supabase:dlq");
-  return countDlqSince(config, since);
+  budget.external("supabase:dlq-groups");
+  const [{ count, error }, grouped] = await Promise.all([
+    countDlqSince(config, since),
+    listOpenDlqGroupsSince(config, since),
+  ]);
+  return { count, error: error ?? grouped.error, groups: grouped.groups };
 }
 
 async function syncIsmrt(

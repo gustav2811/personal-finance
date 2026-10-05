@@ -23,10 +23,15 @@ export interface ProcessJobLogger {
   info: (o: unknown, msg?: string) => void;
 }
 
+export type ProcessIngestJobOptions = {
+  replayPayload?: Record<string, unknown>;
+};
+
 export async function processIngestJob(
   config: IngestCoreConfig,
   payload: IngestJobPayload,
   logger: ProcessJobLogger,
+  options: ProcessIngestJobOptions = {},
 ): Promise<void> {
   const log = logger.child({
     job_id: payload.job_id,
@@ -55,6 +60,7 @@ export async function processIngestJob(
         subject: payload.subject,
         attachments_count: payload.attachments.length,
       },
+      replay_payload: options.replayPayload,
     });
     return;
   }
@@ -79,6 +85,7 @@ export async function processIngestJob(
         to: payload.to,
         filename: attachment.filename,
       },
+      replay_payload: options.replayPayload,
     });
     return;
   }
@@ -92,6 +99,7 @@ export async function processIngestJob(
       bank: bankCode,
       error: `No parser registered for bank: ${bankCode}`,
       payload: { from: payload.from, filename: attachment.filename },
+      replay_payload: options.replayPayload,
     });
     return;
   }
@@ -113,6 +121,7 @@ export async function processIngestJob(
       bank: bankCode,
       error: `No account_id configured for bank: ${bankCode}`,
       payload: { from: payload.from, filename: attachment.filename },
+      replay_payload: options.replayPayload,
     });
     return;
   }
@@ -147,6 +156,7 @@ export async function processIngestJob(
         from: payload.from,
         filename: attachment.filename,
       },
+      replay_payload: options.replayPayload,
     });
     throw err;
   }
@@ -236,6 +246,7 @@ export async function processIngestJob(
         transactions_count: valid.length,
         failed: result.failed,
       },
+      replay_payload: options.replayPayload,
     });
   }
 }

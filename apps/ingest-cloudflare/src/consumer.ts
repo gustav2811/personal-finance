@@ -112,7 +112,20 @@ async function processEmailIngestMessage(
     job_id: body.job_id,
   });
 
-  await processIngestJob(config, payload, logger);
+  await processIngestJob(config, payload, logger, {
+    replayPayload: dlqReplayPayload(body),
+  });
+}
+
+/** Keep only durable R2 pointers and metadata needed to reconstruct a queue message. */
+function dlqReplayPayload(body: IngestQueueMessageV1): Record<string, unknown> {
+  return {
+    v: body.v,
+    job_id: body.job_id,
+    fields: body.fields,
+    attachments: body.attachments,
+    ...(body.email_r2_key ? { email_r2_key: body.email_r2_key } : {}),
+  };
 }
 
 /** Queue-only worker; browsers and uptime checks hit workers.dev — respond quietly (no thrown errors in logs). */
