@@ -2,7 +2,8 @@
 
 Prepared 2026-09-30. Status: local verification foundation prepared in PR #36;
 additive budget schema prepared in stacked PR #37; command API prepared in #38;
-funding, bank allocations and initial reads are prepared as the stacked stage 2 follow-up.
+funding, bank allocations and initial reads are prepared in stacked PR #41;
+source drift, pending exposure and completeness are prepared in the stage 3 follow-up.
 No production migration, deployment or financial
 activation performed.
 
@@ -22,6 +23,20 @@ initial member reads, stacked on #38. Its precise manifest is the
 [funding API execution contract](funding-api-contract.md). Pause after preparing
 this PR; source exposure, restricted claims and remaining queries need separate
 instructions before their stages start.
+
+The user authorized stage 3 on 2026-10-01, stacked on #41. Its executable
+manifest is the [source-state execution contract](source-state-api-contract.md).
+Pause after preparing that PR; restricted claims/utility recognition and the final
+query/runbook stage still require separate instructions.
+
+Stage 3 verification on 2026-10-05 passed a fresh disposable migration replay,
+all 1,007 pgTAP assertions across 14 suites, and nine overlapping command/source
+races. Independent correctness/security review closed without outstanding P1/P2
+findings. SQL function lint found no errors; warnings include existing validation
+helper volatility annotations and implicit JSON-key casts. The public read
+acceptance covers known/unknown pending purpose, balance inclusion, posting,
+confirmed purchase mirrors, conservative reviewed-source drift, and tenant access.
+The stage 3 PR is stacked on #41; execution pauses before stage 4.
 
 Stage 2 verification on 2026-10-01 passed a fresh migration replay, all 872
 pgTAP assertions across 11 suites and five overlapping command races. The

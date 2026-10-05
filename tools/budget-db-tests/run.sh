@@ -103,3 +103,4 @@ done
 
 "$repo_root/tools/budget-db-tests/concurrency.sh" "$container_id"
 "$repo_root/tools/budget-db-tests/funding-concurrency.sh" "$container_id"
+"$repo_root/tools/budget-db-tests/source-concurrency.sh" "$container_id"
