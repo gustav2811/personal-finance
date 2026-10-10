@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "types": "tsc --noEmit"
+    "types": "tsc --noEmit",
+    "test": "tsx --test domain/budget/*.spec.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
@@ -34,6 +35,7 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.5",
     "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }
 }
