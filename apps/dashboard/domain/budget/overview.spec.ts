@@ -88,6 +88,8 @@ describe("projectBudget", () => {
     assert.equal(view.reasons.includes("Opening balances have not been reconciled."), true)
     assert.equal(JSON.stringify(view).includes("800000"), false)
     assert.equal(JSON.stringify(view).includes("R8 000"), false)
+    assert.equal(view.purposes[0]?.available, copy.needsReconciliation)
+    assert.equal(JSON.stringify(view.purposes[0]?.available).includes("R1 400"), false)
   })
 
   it("does not call a forecast or a target available money", () => {

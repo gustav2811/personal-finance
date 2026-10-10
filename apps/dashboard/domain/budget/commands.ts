@@ -117,7 +117,7 @@ export type DraftLineInput = {
 
 export function buildDraftPayload(input: {
   draftId?: string
-  expectedDraftRevision?: string
+  expectedDraftRevision?: string | number
   parentVersionId?: string
   startsOnCycle: string
   reason: string
@@ -162,7 +162,8 @@ export function buildDraftPayload(input: {
   })
   return {
     draft_id: input.draftId ?? null,
-    expected_draft_revision: input.expectedDraftRevision ?? null,
+    expected_draft_revision:
+      input.expectedDraftRevision === undefined ? null : jsonInteger(input.expectedDraftRevision),
     parent_version_id: input.parentVersionId ?? null,
     starts_on_cycle: input.startsOnCycle,
     reason: input.reason.trim(),
@@ -172,18 +173,26 @@ export function buildDraftPayload(input: {
   }
 }
 
+function jsonInteger(value: string | number): number {
+  const text = String(value)
+  if (!/^(0|[1-9]\d*)$/.test(text)) throw new Error("budget_invalid: revision")
+  const number = Number(text)
+  if (!Number.isSafeInteger(number)) throw new Error("budget_invalid: revision")
+  return number
+}
+
 export function buildPublishPayload(input: {
   draftId: string
-  expectedDraftRevision: string
+  expectedDraftRevision: string | number
   expectedParentVersionId?: string
-  expectedLatestVersionNumber: string
+  expectedLatestVersionNumber: string | number
   reason: string
-}): Record<string, string> {
+}): Record<string, string | number> {
   if (input.reason.trim().length === 0) throw new Error("budget_invalid: reason")
-  const payload: Record<string, string> = {
+  const payload: Record<string, string | number> = {
     draft_id: input.draftId,
-    expected_draft_revision: input.expectedDraftRevision,
-    expected_latest_version_number: input.expectedLatestVersionNumber,
+    expected_draft_revision: jsonInteger(input.expectedDraftRevision),
+    expected_latest_version_number: jsonInteger(input.expectedLatestVersionNumber),
     reason: input.reason.trim(),
   }
   if (input.expectedParentVersionId) payload.expected_parent_version_id = input.expectedParentVersionId

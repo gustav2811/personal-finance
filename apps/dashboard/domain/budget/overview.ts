@@ -208,7 +208,11 @@ function rowFor(fund: Fund, line: Line | undefined, original: Line | undefined, 
     plan: formatCents(line?.contributionCents ?? null),
     assigned: formatCents(fund.assignedCents),
     spent: spent === null ? copy.withheld : formatCents(spent),
-    available: deficit ? `${copy.deficit}. ${formatCents(availableCents)}` : formatCents(availableCents),
+    available: provisional
+      ? copy.needsReconciliation
+      : deficit
+        ? `${copy.deficit}. ${formatCents(availableCents)}`
+        : formatCents(availableCents),
     nextNeed: nextNeed(line, fund),
     disclosure: sentences,
     deficit,

@@ -26,6 +26,7 @@ import {
 } from "@/domain/budget/review"
 import { readArray, readRecord, readString } from "@/domain/budget/wire"
 import { getBrowserClient } from "@/lib/supabase/browser"
+import { readMemberDirectory } from "./members"
 import { readOverview, readReviewQueue, writeBudgetRpc } from "./rpc"
 
 const TOUCH = "pointer-coarse:h-9 pointer-coarse:px-3"
@@ -69,15 +70,6 @@ async function readCategories(): Promise<CategoryOption[]> {
   )
 }
 
-async function readMembers(): Promise<MemberRef[]> {
-  const { data, error } = await getBrowserClient()
-    .schema("finance")
-    .from("household_members")
-    .select("id, email")
-  if (error || !data) throw new Error(copy.couldNotRead)
-  return data.flatMap((row) => (row.id ? [{ id: row.id, email: row.email }] : []))
-}
-
 async function readQueuePages(): Promise<{ items: unknown[]; reasons: unknown; partial: boolean }> {
   const items: unknown[] = []
   let reasons: unknown = []
@@ -115,7 +107,7 @@ export function ReviewView() {
 
   useEffect(() => {
     let cancelled = false
-    void Promise.all([readQueuePages(), readOverview(currentCycle().start), readCategories(), readMembers()])
+    void Promise.all([readQueuePages(), readOverview(currentCycle().start), readCategories(), readMemberDirectory()])
       .then(([pages, overview, categories, members]) => {
         if (cancelled) return
         setReady({

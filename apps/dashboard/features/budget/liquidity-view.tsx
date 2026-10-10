@@ -16,17 +16,8 @@ import { copy } from "@/domain/budget/copy"
 import { formatDayMonth } from "@/domain/budget/cycle"
 import { projectLiquidity, type LiquidityAmount, type LiquidityProjection } from "@/domain/budget/liquidity"
 import type { MemberRef } from "@/domain/budget/members"
-import { getBrowserClient } from "@/lib/supabase/browser"
+import { readMemberDirectory } from "./members"
 import { readLiquidity } from "./rpc"
-
-async function readMembers(): Promise<MemberRef[]> {
-  const { data, error } = await getBrowserClient()
-    .schema("finance")
-    .from("household_members")
-    .select("id, email")
-  if (error || !data) return []
-  return data.flatMap((row) => (row.id ? [{ id: row.id, email: row.email }] : []))
-}
 
 function shownAmount(amount: string | null): string {
   return amount ?? copy.needsReconciliation
@@ -54,7 +45,7 @@ export function LiquidityView() {
 
   useEffect(() => {
     let cancelled = false
-    void Promise.all([readLiquidity(), readMembers()])
+    void Promise.all([readLiquidity(), readMemberDirectory()])
       .then(([nextWire, nextMembers]) => {
         if (!cancelled) {
           setWire(nextWire)

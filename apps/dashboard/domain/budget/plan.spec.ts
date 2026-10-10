@@ -170,8 +170,9 @@ describe("published plan", () => {
       expectedLatestVersionNumber: "3",
       reason: "reviewed",
     })
-    assert.equal(payload.expected_draft_revision, "2")
-    assert.equal(typeof payload.expected_draft_revision, "string")
+    assert.equal(payload.expected_draft_revision, 2)
+    assert.equal(typeof payload.expected_draft_revision, "number")
+    assert.equal(typeof payload.expected_latest_version_number, "number")
   })
 
   it("uses this cycle or the following cycle and does not block a larger contribution", () => {

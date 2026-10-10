@@ -16,19 +16,10 @@ import { currentCycle } from "@/domain/budget/cycle"
 import { projectFund, type FundMoney, type FundView as FundDetail } from "@/domain/budget/fund"
 import type { MemberRef } from "@/domain/budget/members"
 import { TargetBar } from "@/domain/budget/target-bar"
-import { getBrowserClient } from "@/lib/supabase/browser"
+import { readMemberDirectory } from "./members"
 import { readFund } from "./rpc"
 
 const FUND_HISTORY_FROM = "2020-01-01"
-
-async function readMembers(): Promise<MemberRef[]> {
-  const { data, error } = await getBrowserClient()
-    .schema("finance")
-    .from("household_members")
-    .select("id, email")
-  if (error || !data) return []
-  return data.flatMap((row) => (row.id ? [{ id: row.id, email: row.email }] : []))
-}
 
 function Fact({ fact }: { fact: FundMoney }) {
   const deficit = fact.amount.startsWith(copy.deficit)
@@ -136,7 +127,7 @@ export function FundView({ fundId }: { fundId: string }) {
   useEffect(() => {
     let cancelled = false
     const cycle = currentCycle()
-    void Promise.all([readFund(fundId, FUND_HISTORY_FROM, cycle.endExclusive, null), readMembers()])
+    void Promise.all([readFund(fundId, FUND_HISTORY_FROM, cycle.endExclusive, null), readMemberDirectory()])
       .then(([nextWire, nextMembers]) => {
         if (cancelled) return
         setWire(nextWire)

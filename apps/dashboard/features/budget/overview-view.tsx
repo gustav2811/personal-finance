@@ -252,6 +252,7 @@ function BudgetBody({
                 ))}
               </ul>
             )}
+            <p className="type-caption text-muted-foreground">{view.liquidity.caption}</p>
             {view.cardDebt ? (
               <p className="type-caption text-muted-foreground">
                 {copy.cardDebt}: {view.cardDebt}. {copy.cardDebtDetail}

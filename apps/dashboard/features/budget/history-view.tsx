@@ -27,7 +27,7 @@ import { chartRows, projectHistory, type HistoryProjection, type HistoryRow } fr
 import { memberName, type MemberRef } from "@/domain/budget/members"
 import type { BeneficiaryFilter } from "@/domain/budget/overview"
 import { readArray, readRecord, readString } from "@/domain/budget/wire"
-import { getBrowserClient } from "@/lib/supabase/browser"
+import { readMemberDirectory } from "./members"
 import { readActuals, readVersion, readVersions } from "./rpc"
 
 const PLAN_CHANGE = "A plan change is not a corrected transaction."
@@ -112,15 +112,6 @@ async function loadComparison(versionId: string): Promise<Loaded> {
   return { version, parent, actuals }
 }
 
-async function readMembers(): Promise<MemberRef[]> {
-  const { data, error } = await getBrowserClient()
-    .schema("finance")
-    .from("household_members")
-    .select("id, email")
-  if (error || !data) return []
-  return data.flatMap((row) => (row.id ? [{ id: row.id, email: row.email }] : []))
-}
-
 function HistoryTable({ rows }: { rows: HistoryRow[] }) {
   if (rows.length === 0) {
     return <p className="type-body text-muted-foreground">Nothing in this view.</p>
@@ -162,7 +153,7 @@ export function HistoryView() {
 
   useEffect(() => {
     let cancelled = false
-    void Promise.all([loadVersionHeaders(), readMembers()])
+    void Promise.all([loadVersionHeaders(), readMemberDirectory()])
       .then(([headers, people]) => {
         if (cancelled) return
         setVersions(headers)
