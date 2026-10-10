@@ -18,6 +18,11 @@ export type PlanLine = {
   plannedPayerMemberId: string | null
   targetCents: string | null
   dueOn: string | null
+  recurrence: "cycle" | "annual" | "once"
+  rolloverPolicy: "carry" | "release_explicit"
+  categoryId: string | null
+  categoryNameSnapshot: string | null
+  groupNameSnapshot: string | null
 }
 
 export type VersionHeader = {
@@ -50,6 +55,8 @@ export type DraftReceipt = {
 const KINDS = ["consumption", "contribution", "debt_commitment"] as const
 const BEHAVIOURS = ["cycle_allowance", "accumulating", "target_by_date", "reserve_target"] as const
 const SCOPES = ["shared", "member"] as const
+const RECURRENCE = ["cycle", "annual", "once"] as const
+const ROLLOVER = ["carry", "release_explicit"] as const
 
 function unreadable(): Error {
   return new Error(copy.couldNotRead)
@@ -148,6 +155,11 @@ function lineOf(value: unknown): PlanLine {
     plannedPayerMemberId,
     targetCents,
     dueOn,
+    recurrence: requireEnum(record.recurrence, RECURRENCE),
+    rolloverPolicy: requireEnum(record.rollover_policy, ROLLOVER),
+    categoryId: readString(record, "category_id"),
+    categoryNameSnapshot: readString(record, "category_name_snapshot"),
+    groupNameSnapshot: readString(record, "group_name_snapshot"),
   }
 }
 
@@ -290,6 +302,11 @@ export function toDraftLines(lines: readonly PlanLine[]): DraftLineInput[] {
     plannedPayerMemberId: line.plannedPayerMemberId ?? undefined,
     targetCents: line.targetCents ?? undefined,
     dueOn: line.dueOn ?? undefined,
+    recurrence: line.recurrence,
+    rolloverPolicy: line.rolloverPolicy,
+    categoryId: line.categoryId ?? undefined,
+    categoryNameSnapshot: line.categoryNameSnapshot ?? undefined,
+    groupNameSnapshot: line.groupNameSnapshot ?? undefined,
   }))
 }
 

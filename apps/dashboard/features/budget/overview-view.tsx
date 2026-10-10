@@ -17,6 +17,7 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { copy } from "@/domain/budget/copy"
 import { projectBudget, type BeneficiaryFilter, type BudgetOverview, type PurposeRow } from "@/domain/budget/overview"
+import { MoveMoneyDialog } from "./move-dialog"
 import { getBudgetSource, type BudgetSource } from "./queries"
 
 const TOUCH = "pointer-coarse:h-9 pointer-coarse:px-3"
@@ -85,6 +86,7 @@ export function BudgetView() {
   const [source, setSource] = useState<BudgetSource | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [filter, setFilter] = useState<BeneficiaryFilter>({ kind: "household" })
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -98,7 +100,7 @@ export function BudgetView() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [reloadKey])
 
   const view = source ? projectBudget({ ...source, filter }) : null
   const filterValue = filter.kind === "member" ? filter.memberId : filter.kind
@@ -107,9 +109,20 @@ export function BudgetView() {
     <div className="@container/budget space-y-10">
       <PageHeader
         actions={
-          <Button asChild size="sm" variant="outline">
-            <Link href="/budget/review">{copy.reviewPurchases}</Link>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild size="sm" variant="outline">
+              <Link href="/budget/review">{copy.reviewPurchases}</Link>
+            </Button>
+            <Button asChild size="sm" variant="outline">
+              <Link href="/budget/plan">{copy.editPlan}</Link>
+            </Button>
+            <Button asChild size="sm" variant="outline">
+              <Link href="/budget/history">History</Link>
+            </Button>
+            <Button asChild size="sm" variant="outline">
+              <Link href="/budget/liquidity">{copy.liquidity}</Link>
+            </Button>
+          </div>
         }
         description={copy.pageDescription}
         title={copy.pageTitle}
@@ -121,7 +134,14 @@ export function BudgetView() {
         </Alert>
       ) : null}
       {!view && !error ? <p className="type-body text-muted-foreground">Reading the budget.</p> : null}
-      {view ? <BudgetBody filterValue={filterValue} onFilter={setFilter} view={view} /> : null}
+      {view ? (
+        <BudgetBody
+          filterValue={filterValue}
+          onFilter={setFilter}
+          onSaved={() => setReloadKey((key) => key + 1)}
+          view={view}
+        />
+      ) : null}
     </div>
   )
 }
@@ -129,10 +149,12 @@ export function BudgetView() {
 function BudgetBody({
   filterValue,
   onFilter,
+  onSaved,
   view,
 }: {
   filterValue: string
   onFilter: (filter: BeneficiaryFilter) => void
+  onSaved: () => void
   view: BudgetOverview
 }) {
   return (
@@ -169,6 +191,18 @@ function BudgetBody({
           ))}
         </ToggleGroup>
       </div>
+      <MoveMoneyDialog
+        canAssign={view.canAssign}
+        funds={[...view.purposes, ...view.commitments, ...view.retired].map((row) => ({
+          id: row.fundId,
+          name: row.name,
+          balanceLabel: row.available,
+        }))}
+        onSaved={onSaved}
+        reconciliationFingerprint={view.reconciliationFingerprint}
+        reconciliationId={view.reconciliationId}
+        versionId={view.versionId}
+      />
 
       {view.complete ? null : (
         <Alert>

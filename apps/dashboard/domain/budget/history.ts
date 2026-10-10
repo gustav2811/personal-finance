@@ -113,7 +113,8 @@ function consumptionByFund(entries: unknown[]): Map<string, string> {
   const totals = new Map<string, bigint>()
   for (const entry of entries) {
     const record = readRecord(entry)
-    if (!record || readString(record, "effect_kind") !== "consumption") continue
+    const effect = record ? readString(record, "effect_kind") : null
+    if (!record || (effect !== "consumption" && effect !== "refund")) continue
     const fundId = readString(record, "fund_id")
     const amount = parseKnownCents(record.amount_cents)
     if (!fundId || !amount) continue

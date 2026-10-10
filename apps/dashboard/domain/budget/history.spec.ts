@@ -65,6 +65,20 @@ describe("projectHistory", () => {
     assert.equal(row.revised.text, formatCents("400000"))
     assert.equal(row.spent.label, copy.spent)
     assert.equal(row.spent.text, formatCents("0"))
+    const withRefund = projectHistory({
+      version: version([line({ contribution_cents: "50000" })]),
+      parent: version([line({ contribution_cents: "50000" })]),
+      actuals: {
+        next_cursor: null,
+        entries: [
+          { fund_id: GROCERIES, effect_kind: "consumption", amount_cents: "-120000" },
+          { fund_id: GROCERIES, effect_kind: "refund", amount_cents: "20000" },
+          { fund_id: GROCERIES, effect_kind: "contribution", amount_cents: "-999" },
+        ],
+        household_totals: { by_group: { consumption: "-100000" } },
+      },
+    })
+    assert.equal(withRefund.rows[0]?.spent.text, formatCents("-100000"))
     assert.equal(row.spent.text === row.revised.text, false)
     assert.equal(JSON.stringify(row.spent).includes("400000"), false)
     assert.equal(JSON.stringify(row.spent).includes("R4 000"), false)

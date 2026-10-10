@@ -108,6 +108,11 @@ export type DraftLineInput = {
   plannedPayerMemberId?: string
   targetCents?: string
   dueOn?: string
+  recurrence: "cycle" | "annual" | "once"
+  rolloverPolicy: "carry" | "release_explicit"
+  categoryId?: string
+  categoryNameSnapshot?: string
+  groupNameSnapshot?: string
 }
 
 export function buildDraftPayload(input: {
@@ -130,6 +135,12 @@ export function buildDraftPayload(input: {
     if (line.fundingBehaviour === "target_by_date" && (!line.targetCents || !line.dueOn)) {
       throw new Error("budget_invalid: target")
     }
+    if (line.recurrence !== "cycle" && line.recurrence !== "annual" && line.recurrence !== "once") {
+      throw new Error("budget_invalid: recurrence")
+    }
+    if (line.rolloverPolicy !== "carry" && line.rolloverPolicy !== "release_explicit") {
+      throw new Error("budget_invalid: rollover")
+    }
     return {
       stable_line_id: line.stableLineId,
       fund_id: line.fundId,
@@ -142,6 +153,11 @@ export function buildDraftPayload(input: {
       planned_payer_member_id: line.plannedPayerMemberId ?? null,
       target_cents: line.targetCents ?? null,
       due_on: line.dueOn ?? null,
+      recurrence: line.recurrence,
+      rollover_policy: line.rolloverPolicy,
+      category_id: line.categoryId ?? null,
+      category_name_snapshot: line.categoryNameSnapshot ?? null,
+      group_name_snapshot: line.groupNameSnapshot ?? null,
     }
   })
   return {

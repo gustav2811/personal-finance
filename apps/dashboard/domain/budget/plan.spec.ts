@@ -28,6 +28,11 @@ function line(contributionCents: string, stableLineId = "line-1"): PlanLine {
     plannedPayerMemberId: null,
     targetCents: null,
     dueOn: null,
+    recurrence: "cycle",
+    rolloverPolicy: "carry",
+    categoryId: null,
+    categoryNameSnapshot: null,
+    groupNameSnapshot: null,
   }
 }
 
@@ -44,6 +49,8 @@ function wireLine(contributionCents = "60000") {
     planned_payer_member_id: null,
     target_cents: null,
     due_on: null,
+    recurrence: "annual",
+    rollover_policy: "release_explicit",
   }
 }
 
@@ -90,6 +97,8 @@ describe("buildDraftPayload", () => {
               contributionCents: "60000",
               fundingBehaviour: "cycle_allowance",
               beneficiaryScope: "shared",
+              recurrence: "cycle",
+              rolloverPolicy: "carry",
             },
           ],
         }),
@@ -123,6 +132,29 @@ describe("published plan", () => {
     }
     const published = readPublishedPlan(payload)
     assert.equal(published.versionNumber, "3")
+    assert.equal(published.lines[0]?.recurrence, "annual")
+    assert.equal(published.lines[0]?.rolloverPolicy, "release_explicit")
+    const draft = buildDraftPayload({
+      startsOnCycle: published.startsOnCycle,
+      reason: "reviewed",
+      parentVersionId: published.versionId,
+      lines: [
+        {
+          stableLineId: published.lines[0].stableLineId,
+          fundId: published.lines[0].fundId,
+          name: published.lines[0].name,
+          kind: published.lines[0].kind,
+          contributionCents: published.lines[0].contributionCents,
+          fundingBehaviour: published.lines[0].fundingBehaviour,
+          beneficiaryScope: published.lines[0].beneficiaryScope,
+          recurrence: published.lines[0].recurrence,
+          rolloverPolicy: published.lines[0].rolloverPolicy,
+        },
+      ],
+    })
+    const saved = (draft.lines as Array<Record<string, string>>)[0]
+    assert.equal(saved?.recurrence, "annual")
+    assert.equal(saved?.rollover_policy, "release_explicit")
     const clone = cloneLines(published.lines)
     clone[0].contributionCents = "1"
     assert.equal(published.lines[0]?.contributionCents, "60000")

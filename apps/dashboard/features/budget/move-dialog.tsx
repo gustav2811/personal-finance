@@ -23,7 +23,7 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { buildMoveFundsPayload, newCommandId, type MoveKind } from "@/domain/budget/commands"
 import { copy } from "@/domain/budget/copy"
-import { moveConfirmCopy, randsToCents } from "@/domain/budget/move"
+import { moveConfirmCopy, moveKindLabel, randsToCents } from "@/domain/budget/move"
 import { localDateKey } from "@/lib/format/date"
 import { writeBudgetRpc } from "./rpc"
 
@@ -253,7 +253,7 @@ export function MoveMoneyDialog({
             >
               {KINDS.map((entry) => (
                 <ToggleGroupItem className={`flex-1 ${TOUCH}`} key={entry} value={entry}>
-                  {entry}
+                  {moveKindLabel(entry)}
                 </ToggleGroupItem>
               ))}
             </ToggleGroup>

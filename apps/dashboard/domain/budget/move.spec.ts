@@ -29,7 +29,7 @@ describe("moveConfirmCopy", () => {
     })
     const text = sentences.join("\n")
     assert.deepEqual(sentences, [
-      "reallocate",
+      copy.moveBetweenPurposes,
       "Entertainment",
       "Gifts",
       "R300",
@@ -51,7 +51,7 @@ describe("moveConfirmCopy", () => {
       })
       const text = sentences.join("\n")
       assert.equal(sentences.includes(copy.planUnchanged), true)
-      assert.equal(sentences.includes(kind), true)
+      assert.equal(sentences.includes(kind), false)
       assert.equal(sentences.includes("R9 999 999,99"), true)
       for (const phrase of FORBIDDEN) {
         assert.equal(text.includes(phrase), false)

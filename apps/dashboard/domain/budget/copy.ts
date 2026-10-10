@@ -46,6 +46,8 @@ export const copy = {
   planUnchanged: "This does not change the plan.",
   cannotCreateMoney: "This cannot assign money the reconciliation does not back.",
   moveBetweenPurposes: "Move money between purposes",
+  assignFromUnassigned: "Assign from unassigned",
+  releaseToUnassigned: "Release to unassigned",
   moveCash: "Move cash to the paying account",
   moveCashDetail: "A transfer between accounts. Not a change to a purpose, and not sent from here.",
   editPlan: "Edit next version",

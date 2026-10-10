@@ -9,9 +9,24 @@ export type MoveConfirmInput = {
   amountCents: string
 }
 
+export function moveKindLabel(kind: MoveKind): string {
+  switch (kind) {
+    case "assign":
+      return copy.assignFromUnassigned
+    case "release":
+      return copy.releaseToUnassigned
+    case "reallocate":
+      return copy.moveBetweenPurposes
+    default: {
+      const neverKind: never = kind
+      return neverKind
+    }
+  }
+}
+
 export function moveConfirmCopy(input: MoveConfirmInput): readonly string[] {
   return [
-    input.kind,
+    moveKindLabel(input.kind),
     input.fromName,
     input.toName,
     formatCents(input.amountCents),
