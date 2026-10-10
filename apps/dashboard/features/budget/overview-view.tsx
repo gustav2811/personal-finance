@@ -56,7 +56,11 @@ function PurposeTable({ rows }: { rows: PurposeRow[] }) {
             <TableRow key={row.fundId}>
               <TableCell>
                 <div className="space-y-1">
-                  <p>{row.name}</p>
+                  <p>
+                    <Link className="underline-offset-4 hover:underline" href={`/budget/funds/${row.fundId}`}>
+                      {row.name}
+                    </Link>
+                  </p>
                   <details>
                     <summary className="type-caption cursor-pointer text-muted-foreground">Details</summary>
                     <ul className="type-caption mt-1 space-y-1 text-muted-foreground">
