@@ -181,10 +181,16 @@ declare
 begin
   for v_balance in select * from finance.budget_fund_balances(p_household,p_as_of) loop
     v_delta := coalesce((p_delta->>v_balance.fund_id::text)::numeric,0);
-    v_previous_positive := v_previous_positive + greatest(v_balance.balance_cents::numeric,0);
-    v_previous_net := v_previous_net + v_balance.balance_cents::numeric;
-    v_final_positive := v_final_positive + greatest(v_balance.balance_cents::numeric + v_delta,0);
-    v_final_net := v_final_net + v_balance.balance_cents::numeric + v_delta;
+    -- PR4 adds restricted_cents to the balance row.  Read it through JSON so
+    -- this migration also replays against the earlier PR3 row shape.
+    v_previous_positive := v_previous_positive + greatest(v_balance.balance_cents::numeric
+      - coalesce((to_jsonb(v_balance)->>'restricted_cents')::numeric,0),0);
+    v_previous_net := v_previous_net + v_balance.balance_cents::numeric
+      - coalesce((to_jsonb(v_balance)->>'restricted_cents')::numeric,0);
+    v_final_positive := v_final_positive + greatest(v_balance.balance_cents::numeric + v_delta
+      - coalesce((to_jsonb(v_balance)->>'restricted_cents')::numeric,0),0);
+    v_final_net := v_final_net + v_balance.balance_cents::numeric + v_delta
+      - coalesce((to_jsonb(v_balance)->>'restricted_cents')::numeric,0);
   end loop;
   -- Deltas may name a fund with no balance row only if it is not household-owned;
   -- ownership is checked before this helper runs.
@@ -275,7 +281,9 @@ begin
     select balance_cents into v_source_balance from finance.budget_fund_balances(v_household,v_today) where fund_id=v_from;
     if coalesce(v_source_balance,0) < v_amount then perform finance.budget_fail('budget_insufficient','source fund balance'); end if;
   else
-    select (v_resources->>'net_liquid_cents')::numeric - coalesce(sum(balance_cents),0)::numeric into v_available from finance.budget_fund_balances(v_household,v_today);
+    select (v_resources->>'net_liquid_cents')::numeric - coalesce(sum(balance_cents::numeric
+      - coalesce((to_jsonb(b)->>'restricted_cents')::numeric,0)),0)::numeric
+      into v_available from finance.budget_fund_balances(v_household,v_today) b;
     if greatest(v_available,0) < v_amount then perform finance.budget_fail('budget_insufficient','backed unassigned resources'); end if;
   end if;
   if v_from is not null then v_delta := v_delta || jsonb_build_object(v_from::text,(-v_amount)::text); end if;
