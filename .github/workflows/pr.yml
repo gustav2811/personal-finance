@@ -39,7 +39,7 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-        run: supabase db push --dry-run -p "$SUPABASE_DB_PASSWORD"
+        run: supabase db push --dry-run --include-all -p "$SUPABASE_DB_PASSWORD"
 
   budget-database-tests:
     runs-on: ubuntu-latest
