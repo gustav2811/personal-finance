@@ -53,6 +53,7 @@ import type {
   TransactionFeedItem,
   TransactionFilters,
 } from "./model"
+import { TransactionBudget } from "@/features/budget/transaction-budget"
 import { Inspector } from "./inspector"
 import {
   commandId,
@@ -102,7 +103,7 @@ function rememberCategory(id: string) {
   }
 }
 
-export function TransactionsView() {
+export function TransactionsView({ initialTransactionId = null }: { initialTransactionId?: string | null }) {
   const { signIn } = useHousehold()
   const requestRef = useRef(0)
   const [items, setItems] = useState<TransactionFeedItem[]>([])
@@ -122,7 +123,7 @@ export function TransactionsView() {
   const [fromDate, setFromDate] = useState("")
   const [toDate, setToDate] = useState("")
   const [direction, setDirection] = useState<"all" | "debit" | "credit">("all")
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(initialTransactionId)
   const [overlays, setOverlays] = useState<Record<string, RowOverlay>>({})
   const [signInHint, setSignInHint] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
@@ -430,6 +431,7 @@ export function TransactionsView() {
       }}
       pending={Boolean(selectedOverlay?.pending)}
       undo={Boolean(selectedOverlay?.undo)}
+      budget={<TransactionBudget transactionId={selected.id} />}
     />
   ) : null
 

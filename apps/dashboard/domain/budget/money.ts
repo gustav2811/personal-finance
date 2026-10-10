@@ -29,6 +29,16 @@ function grouped(whole: string): string {
   return whole.replace(/\B(?=(\d{3})+(?!\d))/g, " ")
 }
 
+export function centsToRandsInput(cents: string): string {
+  if (!isCents(cents)) return cents
+  const negative = isNegativeCents(cents)
+  const digits = negative ? cents.slice(1) : cents
+  const padded = digits.padStart(3, "0")
+  const whole = padded.slice(0, -2).replace(/^0+(?=\d)/, "") || "0"
+  const frac = padded.slice(-2)
+  return negative ? `-${whole}.${frac}` : `${whole}.${frac}`
+}
+
 export function formatCents(cents: string | null): string {
   if (cents === null || !isCents(cents)) return "—"
   const negative = isNegativeCents(cents)

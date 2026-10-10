@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import Link from "next/link"
 import { PageHeader } from "@/components/patterns/page-header"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
@@ -13,11 +14,12 @@ import {
 } from "@/components/ui/table"
 import { copy } from "@/domain/budget/copy"
 import { currentCycle } from "@/domain/budget/cycle"
+import { readCutover } from "@/domain/budget/cutover"
 import { projectFund, type FundMoney, type FundView as FundDetail } from "@/domain/budget/fund"
 import type { MemberRef } from "@/domain/budget/members"
 import { TargetBar } from "@/domain/budget/target-bar"
 import { readMemberDirectory } from "./members"
-import { readFund } from "./rpc"
+import { readCutover as readCutoverRpc, readFund } from "./rpc"
 
 const FUND_HISTORY_FROM = "2020-01-01"
 
@@ -79,14 +81,41 @@ function FundBody({ view }: { view: FundDetail }) {
       </dl>
 
       {view.target ? (
-        <TargetBar
-          funded={view.target.funded}
-          fundedCents={view.target.fundedCents}
-          fundedLabel={view.target.funded === view.available.amount ? copy.available : ""}
-          suggestion={view.suggestion !== null}
-          target={view.target.target}
-          targetCents={view.target.targetCents}
-        />
+        <div className="space-y-2">
+          <TargetBar
+            funded={view.target.funded}
+            fundedCents={view.target.fundedCents}
+            fundedLabel={view.target.funded === view.available.amount ? copy.available : ""}
+            suggestion={view.suggestion !== null}
+            target={view.target.target}
+            targetCents={view.target.targetCents}
+          />
+          {view.dueOn ? <p className="type-caption text-muted-foreground">{copy.nextNeed}: {view.dueOn}</p> : null}
+        </div>
+      ) : null}
+      {view.holdings.length > 0 ? (
+        <div className="space-y-1">
+          <p className="type-label text-muted-foreground">{copy.restricted}</p>
+          <ul className="space-y-1">
+            {view.holdings.map((holding) => (
+              <li key={`${holding.accountId}-${holding.asOf}`}>
+                {holding.amount} in {holding.accountName}. As of {holding.asOf}. {copy.fundedNotAccessible}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {view.timeline.length > 0 ? (
+        <div className="space-y-1">
+          <p className="type-label text-muted-foreground">{copy.assigned}</p>
+          <ul className="space-y-1">
+            {view.timeline.map((point, index) => (
+              <li className="type-caption" key={`${point.when}-${index}`}>
+                {point.when}: contribution {point.contribution}, spending {point.spending}
+              </li>
+            ))}
+          </ul>
+        </div>
       ) : null}
 
       {view.listNote ? <p className="type-caption text-muted-foreground">{view.listNote}</p> : null}
@@ -105,7 +134,17 @@ function FundBody({ view }: { view: FundDetail }) {
             <TableBody>
               {view.entries.map((entry, index) => (
                 <TableRow key={`${entry.when}-${entry.amount}-${entry.sentence}-${index}`}>
-                  <TableCell>{entry.sentence}</TableCell>
+                  <TableCell>
+                    <div className="space-y-1">
+                      <p>{entry.sentence}</p>
+                      {entry.sourceTransactionId ? (
+                        <Link className="type-caption underline-offset-4 hover:underline" href={`/transactions?transaction=${entry.sourceTransactionId}`}>
+                          Source
+                        </Link>
+                      ) : null}
+                      {entry.correctionOf ? <p className="type-caption text-muted-foreground">{copy.correctedSpend}</p> : null}
+                    </div>
+                  </TableCell>
                   <TableCell>{entry.when}</TableCell>
                   <TableCell className="type-numeric text-right">{entry.amount}</TableCell>
                 </TableRow>
@@ -121,17 +160,26 @@ function FundBody({ view }: { view: FundDetail }) {
 export function FundView({ fundId }: { fundId: string }) {
   const [wire, setWire] = useState<unknown>(null)
   const [members, setMembers] = useState<MemberRef[]>([])
+  const [context, setContext] = useState<{
+    earmarks: Array<{ fundId: string; accountId: string; amountCents: string; effectiveOn: string }>
+    accountNames: Map<string, string>
+  }>({ earmarks: [], accountNames: new Map() })
   const [error, setError] = useState<string | null>(null)
   const [ready, setReady] = useState(false)
 
   useEffect(() => {
     let cancelled = false
     const cycle = currentCycle()
-    void Promise.all([readFund(fundId, FUND_HISTORY_FROM, cycle.endExclusive, null), readMemberDirectory()])
-      .then(([nextWire, nextMembers]) => {
+    void Promise.all([readFund(fundId, FUND_HISTORY_FROM, cycle.endExclusive, null), readMemberDirectory(), readCutoverRpc()])
+      .then(([nextWire, nextMembers, cutoverWire]) => {
         if (cancelled) return
+        const cutover = readCutover(cutoverWire)
         setWire(nextWire)
         setMembers(nextMembers)
+        setContext({
+          earmarks: cutover.earmarks,
+          accountNames: new Map(cutover.accounts.map((account) => [account.id, account.name])),
+        })
         setReady(true)
       })
       .catch((caught: unknown) => {
@@ -142,7 +190,7 @@ export function FundView({ fundId }: { fundId: string }) {
     }
   }, [fundId])
 
-  const view = ready ? projectFund(wire, members) : null
+  const view = ready ? projectFund(wire, members, { fundId, ...context }) : null
   const title = view?.name ?? "Purpose"
 
   return (

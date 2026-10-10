@@ -66,6 +66,21 @@ export function cycleLabel(start: string, endExclusive: string): string {
   return `${formatDayMonth(start)} – ${formatDayMonth(dayBefore(endExclusive))}`
 }
 
+export function calendarMonthKey(cycleStart: string): string {
+  const lastDay = dayBefore(addMonths(cycleStart, 1))
+  return lastDay.slice(0, 7)
+}
+
+export function calendarMonthLabel(cycleStart: string): string {
+  const lastDay = dayBefore(addMonths(cycleStart, 1))
+  const [year, month, day] = lastDay.split("-").map(Number) as [number, number, number]
+  return new Intl.DateTimeFormat("en-ZA", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(year, month - 1, day)))
+}
+
 export function formatAsOf(timestamp: string): string {
   const date = new Date(timestamp)
   if (Number.isNaN(date.getTime())) return "unknown"

@@ -24,6 +24,21 @@ export function moveKindLabel(kind: MoveKind): string {
   }
 }
 
+export function moveReason(kind: MoveKind): string {
+  switch (kind) {
+    case "assign":
+      return copy.assignReason
+    case "release":
+      return copy.releaseReason
+    case "reallocate":
+      return copy.reallocateReason
+    default: {
+      const neverKind: never = kind
+      return neverKind
+    }
+  }
+}
+
 export function moveConfirmCopy(input: MoveConfirmInput): readonly string[] {
   return [
     moveKindLabel(input.kind),

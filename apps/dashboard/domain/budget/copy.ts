@@ -48,6 +48,9 @@ export const copy = {
   moveBetweenPurposes: "Move money between purposes",
   assignFromUnassigned: "Assign from unassigned",
   releaseToUnassigned: "Release to unassigned",
+  assignReason: "Assign money to a purpose",
+  releaseReason: "Release money from a purpose",
+  reallocateReason: "Move money between purposes",
   moveCash: "Move cash to the paying account",
   moveCashDetail: "A transfer between accounts. Not a change to a purpose, and not sent from here.",
   editPlan: "Edit next version",
@@ -65,6 +68,21 @@ export const copy = {
   beneficiary: "Beneficiary",
   plannedPayer: "Planned payer",
   actualPayer: "Paid by",
+  expectedPayment: "Expected payment",
+  rollover: "Rollover",
+  reconcile: "Reconcile",
+  whoPaid: "Who paid",
+  notPersonalOverspending: "Who paid is not personal overspending.",
+  backing: "Not the account that pays the bill.",
+  expectedPayments: "Expected payments",
+  alreadyApproved: "Already approved. Do not ask again.",
+  mixedNeedsSplit: "A mixed purchase needs a split. One consumption line would be the wrong economics.",
+  driftedNeedsSplit: "This source changed. Do not replace it with one consumption line.",
+  refundNeedsLink: "A refund has to name the original purpose.",
+  increasedPlan: "We increased the plan.",
+  decreasedPlan: "We decreased the plan.",
+  correctedSpend: "A corrected transaction changed the spend.",
+  planChangeIsNotCorrection: "A plan change is not a corrected transaction.",
   restricted: "Restricted",
   somethingUnresolved: "Something required for a trustworthy total is unresolved.",
   numbersChanged: "The numbers changed. Look again before saving.",
@@ -76,6 +94,14 @@ export const copy = {
 
 export function sharedExpensePaidBy(name: string): string {
   return `Shared expense · Paid by ${name}`
+}
+
+export function planChangedSentence(name: string, direction: "increased" | "decreased"): string {
+  return direction === "increased" ? `We increased the ${name} plan.` : `We decreased the ${name} plan.`
+}
+
+export function paidBySentence(name: string): string {
+  return `Paid by ${name}. ${copy.notPersonalOverspending}`
 }
 
 export function personalExpense(beneficiary: string, payer: string | null): string {

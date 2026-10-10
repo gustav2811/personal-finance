@@ -63,6 +63,10 @@ export function readReviewQueue(cursor: string | null): Promise<unknown> {
   return readBudgetRpc("budget_get_review_queue_v1", { p_cursor: cursor, p_limit: 50 })
 }
 
+export function readCutover(): Promise<unknown> {
+  return readBudgetRpc("budget_get_cutover_v1", {})
+}
+
 export async function writeBudgetRpc(name: string, commandId: string, payload: Record<string, unknown>): Promise<unknown> {
   const { data, error } = await clientRpc(name, { p_command_id: commandId, p_payload: payload })
   if (error) throw friendlyBudgetError(error.message)

@@ -4,35 +4,23 @@ import { useEffect, useState } from "react"
 import { PageHeader } from "@/components/patterns/page-header"
 import { Section } from "@/components/patterns/section"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Button } from "@/components/ui/button"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { buildReviewPayload, newCommandId } from "@/domain/budget/commands"
 import { copy } from "@/domain/budget/copy"
 import { currentCycle, formatDayMonth } from "@/domain/budget/cycle"
-import { memberName, type MemberRef } from "@/domain/budget/members"
+import type { MemberRef } from "@/domain/budget/members"
 import {
+  oneFormPerSource,
   projectReviewQueue,
   reviewFunds,
   type ReviewFund,
-  type ReviewItem,
   type ReviewQueue,
 } from "@/domain/budget/review"
 import { readArray, readRecord, readString } from "@/domain/budget/wire"
-import { getBrowserClient } from "@/lib/supabase/browser"
+import { readCutover as parseCutover } from "@/domain/budget/cutover"
 import { readMemberDirectory } from "./members"
-import { readOverview, readReviewQueue, writeBudgetRpc } from "./rpc"
+import { PurchaseReview } from "./purchase-review"
+import { readCutover, readOverview, readReviewQueue } from "./rpc"
 
-const TOUCH = "pointer-coarse:h-9 pointer-coarse:px-3"
 const PAGE_CAP = 20
-
-type WhoseExpense = { kind: "shared" } | { kind: "member"; memberId: string }
 
 type CategoryOption = {
   id: string
@@ -60,14 +48,10 @@ function thrownMessage(caught: unknown, fallback: string): string {
 }
 
 async function readCategories(): Promise<CategoryOption[]> {
-  const { data, error } = await getBrowserClient()
-    .schema("finance")
-    .from("categories")
-    .select("id, name, archived_at")
-  if (error || !data) throw new Error(copy.couldNotRead)
-  return data.flatMap((row) =>
-    row.archived_at === null && row.name.length > 0 ? [{ id: row.id, name: row.name }] : [],
-  )
+  return parseCutover(await readCutover()).categories.map((category) => ({
+    id: category.id,
+    name: category.name,
+  }))
 }
 
 async function readQueuePages(): Promise<{ items: unknown[]; reasons: unknown; partial: boolean }> {
@@ -187,7 +171,7 @@ function ReviewList({
       ) : null}
       {queue.items.length === 0 ? null : (
         <ul className="divide-y rounded-lg border">
-          {queue.items.map((item) => (
+          {oneFormPerSource(queue.items).map((item) => (
             <li className="space-y-3 px-4 py-3" key={item.reviewKey}>
               <div className="flex items-baseline justify-between gap-4">
                 <div className="min-w-0 space-y-1">
@@ -210,13 +194,18 @@ function ReviewList({
                   <AlertDescription>{item.unresolved}</AlertDescription>
                 </Alert>
               ) : null}
-              {item.submittable ? (
-                <ReviewDecision
+              {item.submittable && item.sourceAmountCents && item.fingerprint && item.sourceTransactionId ? (
+                <PurchaseReview
+                  amountCents={item.sourceAmountCents}
                   categories={categories}
+                  drifted={item.drifted}
+                  fingerprint={item.fingerprint}
                   funds={funds}
-                  item={item}
                   members={members}
                   onSaved={onSaved}
+                  setId={item.setId}
+                  siblingCount={item.siblingCount}
+                  sourceTransactionId={item.sourceTransactionId}
                 />
               ) : null}
             </li>
@@ -224,170 +213,5 @@ function ReviewList({
         </ul>
       )}
     </Section>
-  )
-}
-
-function ReviewDecision({
-  categories,
-  funds,
-  item,
-  members,
-  onSaved,
-}: {
-  categories: CategoryOption[]
-  funds: ReviewFund[]
-  item: ReviewItem
-  members: MemberRef[]
-  onSaved: () => Promise<void>
-}) {
-  const [whose, setWhose] = useState<WhoseExpense | null>(null)
-  const [fundId, setFundId] = useState<string | null>(null)
-  const [categoryId, setCategoryId] = useState<string | null>(null)
-  const [transfer, setTransfer] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
-  const whoseValue = whose?.kind === "member" ? whose.memberId : whose?.kind
-  const canSave = Boolean(
-    whose && categoryId && item.amountCents && item.fingerprint && item.sourceTransactionId && (transfer || fundId),
-  )
-
-  async function save() {
-    if (!whose || !categoryId || !item.amountCents || !item.fingerprint || !item.sourceTransactionId) return
-    if (!transfer && !fundId) return
-    setSaving(true)
-    setError(null)
-    try {
-      await writeBudgetRpc(
-        "budget_review_allocation_v1",
-        newCommandId(),
-        buildReviewPayload({
-          transactionId: item.sourceTransactionId,
-          expectedSourceFingerprint: item.fingerprint,
-          expectedCurrentSetId: item.setId ?? undefined,
-          components: [
-            {
-              amountCents: item.amountCents,
-              beneficiaryScope: whose.kind,
-              beneficiaryMemberId: whose.kind === "member" ? whose.memberId : undefined,
-              effectKind: transfer ? "movement" : "consumption",
-              fundId: transfer ? undefined : fundId ?? undefined,
-              categoryId,
-            },
-          ],
-          decisionUpdate: {
-            categoryId,
-            isTransfer: transfer,
-            excludeFromSpend: transfer,
-          },
-        }),
-      )
-      await onSaved()
-    } catch (caught: unknown) {
-      setError(thrownMessage(caught, copy.couldNotSave))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="space-y-1">
-          <p className="type-label text-muted-foreground">{copy.purchase}</p>
-          <ToggleGroup
-            aria-label={copy.purchase}
-            onValueChange={(next) => {
-              if (next === "purchase" || next === "transfer") setTransfer(next === "transfer")
-            }}
-            size="sm"
-            spacing={0}
-            type="single"
-            value={transfer ? "transfer" : "purchase"}
-            variant="outline"
-          >
-            <ToggleGroupItem className={TOUCH} value="purchase">
-              {copy.purchase}
-            </ToggleGroupItem>
-            <ToggleGroupItem className={TOUCH} value="transfer">
-              {copy.transferNotPurchase}
-            </ToggleGroupItem>
-          </ToggleGroup>
-        </div>
-        <div className="space-y-1">
-          <p className="type-label text-muted-foreground">{copy.whoseExpense}</p>
-          <ToggleGroup
-            aria-label={copy.whoseExpense}
-            onValueChange={(next) => {
-              if (next === "shared") setWhose({ kind: "shared" })
-              else if (next) setWhose({ kind: "member", memberId: next })
-            }}
-            size="sm"
-            spacing={0}
-            type="single"
-            value={whoseValue}
-            variant="outline"
-          >
-            <ToggleGroupItem className={TOUCH} value="shared">
-              {copy.shared}
-            </ToggleGroupItem>
-            {members.map((member) => (
-              <ToggleGroupItem className={TOUCH} key={member.id} value={member.id}>
-                {memberName(members, member.id)}
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
-        </div>
-        {transfer ? null : (
-        <div className="space-y-1">
-          <p className="type-label text-muted-foreground">{copy.purposes}</p>
-          <Select
-            onValueChange={(next) => {
-              if (next) setFundId(next)
-            }}
-            value={fundId ?? undefined}
-          >
-            <SelectTrigger aria-label={copy.purposes} className="pointer-coarse:h-9">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {funds.map((fund) => (
-                <SelectItem key={fund.id} value={fund.id}>
-                  {fund.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        )}
-        <div className="space-y-1">
-          <p className="type-label text-muted-foreground">Category</p>
-          <Select
-            onValueChange={(next) => {
-              if (next) setCategoryId(next)
-            }}
-            value={categoryId ?? undefined}
-          >
-            <SelectTrigger aria-label="Category" className="pointer-coarse:h-9">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {categories.map((category) => (
-                <SelectItem key={category.id} value={category.id}>
-                  {category.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <Button className="pointer-coarse:h-9" disabled={!canSave || saving} onClick={() => void save()} type="button">
-          Save
-        </Button>
-      </div>
-      {error ? (
-        <Alert>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
-    </div>
   )
 }

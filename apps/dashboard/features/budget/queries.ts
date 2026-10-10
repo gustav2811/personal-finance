@@ -1,4 +1,4 @@
-import { currentCycle } from "@/domain/budget/cycle"
+import { addMonths, currentCycle } from "@/domain/budget/cycle"
 import type { MemberRef } from "@/domain/budget/members"
 import { readMemberDirectory } from "./members"
 import { readActuals, readLiquidity, readOverview } from "./rpc"
@@ -10,11 +10,11 @@ export type BudgetSource = {
   members: MemberRef[]
 }
 
-export async function getBudgetSource(): Promise<BudgetSource> {
-  const cycle = currentCycle()
+export async function getBudgetSource(cycleStart = currentCycle().start): Promise<BudgetSource> {
+  const endExclusive = addMonths(cycleStart, 1)
   const [overview, actuals, liquidity, members] = await Promise.all([
-    readOverview(cycle.start),
-    readActuals({ from: cycle.start, to: cycle.endExclusive }),
+    readOverview(cycleStart),
+    readActuals({ from: cycleStart, to: endExclusive }),
     readLiquidity(),
     readMemberDirectory(),
   ])

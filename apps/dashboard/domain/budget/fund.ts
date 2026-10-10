@@ -14,6 +14,22 @@ export type FundEntry = {
   when: string
   amount: string
   sentence: string
+  sourceTransactionId: string | null
+  correctionOf: string | null
+  kind: string | null
+}
+
+export type RestrictedHolding = {
+  accountId: string
+  accountName: string
+  amount: string
+  asOf: string
+}
+
+export type FundTimelinePoint = {
+  when: string
+  contribution: string
+  spending: string
 }
 
 export type FundTarget = {
@@ -33,6 +49,9 @@ export type FundView = {
   suggestion: FundMoney | null
   notices: string[]
   target: FundTarget | null
+  dueOn: string | null
+  holdings: RestrictedHolding[]
+  timeline: FundTimelinePoint[]
   reasons: string[]
   entries: FundEntry[]
   listNote: string | null
@@ -115,6 +134,9 @@ function entryOf(value: unknown, members: readonly MemberRef[]): FundEntry | nul
     when: whenOf(record),
     amount: formatCents(centsAt(record, "signed_amount_cents") ?? centsAt(record, "amount_cents")),
     sentence: UUID.test(sentence) ? "" : sentence,
+    sourceTransactionId: readString(record, "source_transaction_id"),
+    correctionOf: readString(record, "correction_of") ?? readString(record, "supersedes_id"),
+    kind: readString(record, "effect_kind") ?? readString(record, "entry_type"),
   }
 }
 
@@ -129,7 +151,50 @@ function scheduleNotice(behaviour: string | null): string | null {
   return null
 }
 
-export function projectFund(wire: unknown, members: readonly MemberRef[]): FundView {
+export type FundContext = {
+  fundId?: string
+  earmarks?: readonly {
+    fundId: string
+    accountId: string
+    amountCents: string
+    effectiveOn: string
+  }[]
+  accountNames?: ReadonlyMap<string, string>
+}
+
+function holdingsOf(wire: Record<string, unknown>, context: FundContext | undefined, asOf: string): RestrictedHolding[] {
+  const fundId = context?.fundId ?? textAt(readRecord(wire.fund), "fund_id")
+  if (!fundId || !context?.earmarks) return []
+  return context.earmarks.flatMap((earmark) => {
+    if (earmark.fundId !== fundId) return []
+    return [
+      {
+        accountId: earmark.accountId,
+        accountName: context.accountNames?.get(earmark.accountId) ?? copy.restricted,
+        amount: formatCents(earmark.amountCents),
+        asOf: earmark.effectiveOn || asOf,
+      },
+    ]
+  })
+}
+
+function timelineOf(entries: readonly FundEntry[], behaviour: string | null): FundTimelinePoint[] {
+  if (behaviour !== "accumulating") return []
+  return entries.flatMap((entry) => {
+    const spending = entry.kind === "consumption" || entry.kind === "purchase" || entry.kind === "refund"
+    const contribution = entry.kind === "contribution" || entry.kind === "movement" || entry.kind === "assignment"
+    if (!spending && !contribution) return []
+    return [
+      {
+        when: entry.when,
+        contribution: contribution ? entry.amount : copy.withheld,
+        spending: spending ? entry.amount : copy.withheld,
+      },
+    ]
+  })
+}
+
+export function projectFund(wire: unknown, members: readonly MemberRef[], context?: FundContext): FundView {
   const record = readRecord(wire) ?? {}
   const fund = readRecord(record.fund)
   const balances = readRecord(record.balances)
@@ -178,6 +243,8 @@ export function projectFund(wire: unknown, members: readonly MemberRef[]): FundV
     const row = entryOf(entry, members)
     return row ? [row] : []
   })
+  const dueOn = textAt(target, "due_on") ?? textAt(fund, "due_on")
+  const asOf = textAt(record, "as_of") ?? ""
 
   return {
     name: fundName(fund),
@@ -203,6 +270,9 @@ export function projectFund(wire: unknown, members: readonly MemberRef[]): FundV
     suggestion,
     notices,
     target: targetView,
+    dueOn,
+    holdings: holdingsOf(record, context, asOf),
+    timeline: timelineOf(entries, behaviour),
     reasons: reasonLabels(record.reasons),
     entries,
     listNote: readString(record, "next_cursor") ? copy.partialList : null,

@@ -12,6 +12,7 @@ import {
   readDraftReceipt,
   readPublishedPlan,
   readVersionPage,
+  toDraftLines,
   type PlanLine,
 } from "./plan"
 
@@ -33,6 +34,9 @@ function line(contributionCents: string, stableLineId = "line-1"): PlanLine {
     categoryId: null,
     categoryNameSnapshot: null,
     groupNameSnapshot: null,
+    expectedPaymentOn: null,
+    expectedPaymentAccountId: null,
+    matchCategoryId: null,
   }
 }
 
@@ -173,6 +177,37 @@ describe("published plan", () => {
     assert.equal(payload.expected_draft_revision, 2)
     assert.equal(typeof payload.expected_draft_revision, "number")
     assert.equal(typeof payload.expected_latest_version_number, "number")
+  })
+
+  it("does not drop a bill date when the draft is saved again", () => {
+    const published = readPublishedPlan({
+      version: {
+        version_id: "published-3",
+        state: "published",
+        version_number: 1,
+        starts_on_cycle: "2026-09-23",
+        lines: [{ ...wireLine(), expected_payment_on: "2026-10-05", expected_payment_account_id: "00000000-0000-4000-8000-000000000109", match_category_id: "00000000-0000-4000-8000-00000000010a" }],
+        income_assumptions: [
+          {
+            member_id: "00000000-0000-4000-8000-000000000011",
+            expected_net_cents: "100000",
+            expected_on: "2026-10-25",
+            provenance: "payslip",
+          },
+        ],
+      },
+    })
+    const payload = buildDraftPayload({
+      startsOnCycle: published.startsOnCycle,
+      reason: "edit the amount",
+      lines: toDraftLines(published.lines),
+      incomeAssumptions: published.incomeAssumptions,
+    })
+    const saved = (payload.lines as Array<Record<string, string | null>>)[0]
+    assert.equal(saved?.expected_payment_on, "2026-10-05")
+    assert.equal(saved?.expected_payment_account_id, "00000000-0000-4000-8000-000000000109")
+    assert.equal(saved?.match_category_id, "00000000-0000-4000-8000-00000000010a")
+    assert.equal((payload.income_assumptions as Array<Record<string, string>>)[0]?.expected_on, "2026-10-25")
   })
 
   it("uses this cycle or the following cycle and does not block a larger contribution", () => {

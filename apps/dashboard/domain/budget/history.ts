@@ -1,4 +1,4 @@
-import { copy } from "./copy"
+import { copy, planChangedSentence } from "./copy"
 import type { BeneficiaryFilter } from "./overview"
 import { formatCents, isCents } from "./money"
 import { readArray, readRecord, readString } from "./wire"
@@ -9,12 +9,20 @@ export type HistoryAmount = {
   cents: string | null
 }
 
+export type CorrectionTrail = {
+  sourceTransactionId: string | null
+  supersedesId: string
+  fundId: string | null
+}
+
 export type HistoryRow = {
   fundId: string
   name: string
   original: HistoryAmount
   revised: HistoryAmount
   spent: HistoryAmount
+  planChange: string | null
+  correction: string | null
 }
 
 export type HistoryProjection = {
@@ -24,6 +32,9 @@ export type HistoryProjection = {
   householdTotalDetail: string
   listPartial: boolean
   partialList: string | null
+  corrections: CorrectionTrail[]
+  planChangeNote: string
+  correctionNote: string
 }
 
 export type HistoryInput = {
@@ -123,6 +134,27 @@ function consumptionByFund(entries: unknown[]): Map<string, string> {
   return new Map([...totals].map(([fundId, total]) => [fundId, total.toString()]))
 }
 
+function planChangeSentence(name: string, original: string | null, revised: string | null): string | null {
+  if (original === null || revised === null || original === revised) return null
+  const direction = BigInt(revised) > BigInt(original) ? "increased" : "decreased"
+  return planChangedSentence(name, direction)
+}
+
+function correctionsOf(entries: unknown[]): CorrectionTrail[] {
+  return entries.flatMap((entry) => {
+    const record = readRecord(entry)
+    const supersedesId = record ? readString(record, "supersedes_id") : null
+    if (!record || !supersedesId) return []
+    return [
+      {
+        sourceTransactionId: readString(record, "source_transaction_id"),
+        supersedesId,
+        fundId: readString(record, "fund_id"),
+      },
+    ]
+  })
+}
+
 function householdConsumption(actuals: Record<string, unknown>): string | null {
   const totals = readRecord(actuals.household_totals)
   const byGroup = totals ? readRecord(totals.by_group) : null
@@ -164,7 +196,10 @@ export function projectHistory(input: HistoryInput): HistoryProjection {
   ]
   const actuals = readRecord(input.actuals) ?? {}
   const partial = listPartial(actuals)
-  const spentByFund = partial ? null : consumptionByFund(readArray(actuals.entries))
+  const entries = readArray(actuals.entries)
+  const spentByFund = partial ? null : consumptionByFund(entries)
+  const corrections = correctionsOf(entries)
+  const correctedFunds = new Set(corrections.flatMap((trail) => (trail.fundId ? [trail.fundId] : [])))
   const filter = input.filter ?? { kind: "household" as const }
   const rows = [...new Set(order)].flatMap((fundId) => {
     const revised = revisedByFund.get(fundId)
@@ -180,6 +215,8 @@ export function projectHistory(input: HistoryInput): HistoryProjection {
         original: labelled(copy.originalPlan, original?.contributionCents ?? null),
         revised: labelled(copy.revisedPlan, revised?.contributionCents ?? null),
         spent: labelled(copy.spent, spentCents),
+        planChange: planChangeSentence(revised?.name ?? original?.name ?? "Purpose", original?.contributionCents ?? null, revised?.contributionCents ?? null),
+        correction: correctedFunds.has(fundId) ? copy.correctedSpend : null,
       },
     ]
   })
@@ -191,6 +228,9 @@ export function projectHistory(input: HistoryInput): HistoryProjection {
     householdTotalDetail: copy.householdTotalDetail,
     listPartial: partial,
     partialList: partial ? copy.partialList : null,
+    corrections,
+    planChangeNote: copy.planChangeIsNotCorrection,
+    correctionNote: copy.correctedSpend,
   }
 }
 

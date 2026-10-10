@@ -27,6 +27,7 @@ export function Inspector({
   onUndo,
   pending,
   undo,
+  budget,
 }: {
   categories: CategoryOption[]
   categoryError: string | null
@@ -40,6 +41,7 @@ export function Inspector({
   onUndo: () => void
   pending: boolean
   undo: boolean
+  budget?: ReactNode
 }) {
   const [isTransfer, setIsTransfer] = useState<boolean | null>(item.treatment.isTransfer)
   const [excludeFromSpend, setExcludeFromSpend] = useState<boolean | null>(
@@ -301,6 +303,7 @@ export function Inspector({
           </Button>
         )}
       </div>
+      {budget}
     </div>
   )
 }

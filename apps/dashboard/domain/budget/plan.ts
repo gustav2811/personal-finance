@@ -1,4 +1,4 @@
-import type { DraftLineInput } from "./commands"
+import type { DraftLineInput, IncomeAssumptionInput, SourceReferenceInput } from "./commands"
 import { copy } from "./copy"
 import { addMonths, assertIsoDate } from "./cycle"
 import { formatCents, isCents, parseCents } from "./money"
@@ -23,6 +23,9 @@ export type PlanLine = {
   categoryId: string | null
   categoryNameSnapshot: string | null
   groupNameSnapshot: string | null
+  expectedPaymentOn: string | null
+  expectedPaymentAccountId: string | null
+  matchCategoryId: string | null
 }
 
 export type VersionHeader = {
@@ -36,6 +39,8 @@ export type PublishedPlan = {
   versionNumber: string
   startsOnCycle: string
   lines: PlanLine[]
+  incomeAssumptions: IncomeAssumptionInput[]
+  sourceReferences: SourceReferenceInput[]
 }
 
 export type PlanDiff = {
@@ -160,7 +165,34 @@ function lineOf(value: unknown): PlanLine {
     categoryId: readString(record, "category_id"),
     categoryNameSnapshot: readString(record, "category_name_snapshot"),
     groupNameSnapshot: readString(record, "group_name_snapshot"),
+    expectedPaymentOn: optionalDate(record.expected_payment_on),
+    expectedPaymentAccountId: readString(record, "expected_payment_account_id"),
+    matchCategoryId: readString(record, "match_category_id"),
   }
+}
+
+function incomeOf(value: unknown): IncomeAssumptionInput {
+  const record = readRecord(value)
+  if (!record) throw unreadable()
+  const memberId = readString(record, "member_id")
+  const expectedOn = readString(record, "expected_on")
+  const provenance = readString(record, "provenance")
+  if (!memberId || !expectedOn || !provenance) throw unreadable()
+  return {
+    memberId,
+    expectedNetCents: requireCents(record.expected_net_cents),
+    expectedOn: requireDate(expectedOn),
+    provenance,
+  }
+}
+
+function sourceOf(value: unknown): SourceReferenceInput {
+  const record = readRecord(value)
+  if (!record) throw unreadable()
+  const source = readString(record, "source")
+  const reference = readString(record, "reference")
+  if (!source || !reference) throw unreadable()
+  return { source, reference }
 }
 
 export function readVersionPage(payload: unknown): { versions: VersionHeader[]; nextCursor: string | null } {
@@ -208,6 +240,8 @@ export function readPublishedPlan(payload: unknown): PublishedPlan {
     versionNumber: requireCount(version.version_number),
     startsOnCycle: requireDate(startsOnCycle),
     lines,
+    incomeAssumptions: Array.isArray(version.income_assumptions) ? version.income_assumptions.map(incomeOf) : [],
+    sourceReferences: Array.isArray(version.source_references) ? version.source_references.map(sourceOf) : [],
   }
 }
 
@@ -237,15 +271,35 @@ export function chosenStartsOn(startsOnCycle: string, choice: CycleChoice): stri
   }
 }
 
+function agreementNote(before: PlanLine | undefined, after: PlanLine | undefined): string {
+  if (!before || !after) return ""
+  const changes: string[] = []
+  if (before.beneficiaryScope !== after.beneficiaryScope || before.beneficiaryMemberId !== after.beneficiaryMemberId) {
+    changes.push(copy.beneficiary)
+  }
+  if (before.plannedPayerMemberId !== after.plannedPayerMemberId) changes.push(copy.plannedPayer)
+  if (before.dueOn !== after.dueOn || before.targetCents !== after.targetCents) changes.push(copy.nextNeed)
+  if (before.categoryId !== after.categoryId || before.matchCategoryId !== after.matchCategoryId) {
+    changes.push("Category")
+  }
+  if (before.expectedPaymentOn !== after.expectedPaymentOn || before.expectedPaymentAccountId !== after.expectedPaymentAccountId) {
+    changes.push(copy.expectedPayment)
+  }
+  if (before.rolloverPolicy !== after.rolloverPolicy) changes.push(copy.rollover)
+  if (changes.length === 0) return ""
+  return ` ${changes.join(", ")} changed.`
+}
+
 function contributionDiff(
   stableLineId: string,
   name: string,
   originalCents: string | null,
   revisedCents: string | null,
+  agreement = "",
 ): PlanDiff {
   const original = formatCents(originalCents)
   const revised = formatCents(revisedCents)
-  const unchanged = originalCents !== null && originalCents === revisedCents
+  const unchanged = originalCents !== null && originalCents === revisedCents && agreement.length === 0
   const amounts = `${copy.originalPlan} ${original}. ${copy.revisedPlan} ${revised}.`
   return {
     stableLineId,
@@ -253,18 +307,26 @@ function contributionDiff(
     original,
     revised,
     unchanged,
-    text: unchanged ? `${name}. ${amounts} ${copy.planUnchanged}` : `${name}. ${amounts}`,
+    text: unchanged ? `${name}. ${amounts} ${copy.planUnchanged}` : `${name}. ${amounts}${agreement}`,
   }
 }
 
 export function planDiff(before: readonly PlanLine[], after: readonly PlanLine[]): PlanDiff[] {
-  const revisedById = new Map(after.map((line) => [line.stableLineId, line.contributionCents]))
+  const revisedById = new Map(after.map((line) => [line.stableLineId, line]))
   const seen = new Set<string>()
   const rows: PlanDiff[] = []
   for (const line of before) {
     seen.add(line.stableLineId)
-    const revisedCents = revisedById.get(line.stableLineId) ?? null
-    rows.push(contributionDiff(line.stableLineId, line.name, line.contributionCents, revisedCents))
+    const revised = revisedById.get(line.stableLineId)
+    rows.push(
+      contributionDiff(
+        line.stableLineId,
+        revised?.name ?? line.name,
+        line.contributionCents,
+        revised?.contributionCents ?? null,
+        agreementNote(line, revised),
+      ),
+    )
   }
   for (const line of after) {
     if (seen.has(line.stableLineId)) continue
@@ -307,7 +369,39 @@ export function toDraftLines(lines: readonly PlanLine[]): DraftLineInput[] {
     categoryId: line.categoryId ?? undefined,
     categoryNameSnapshot: line.categoryNameSnapshot ?? undefined,
     groupNameSnapshot: line.groupNameSnapshot ?? undefined,
+    expectedPaymentOn: line.expectedPaymentOn ?? undefined,
+    expectedPaymentAccountId: line.expectedPaymentAccountId ?? undefined,
+    matchCategoryId: line.matchCategoryId ?? undefined,
   }))
+}
+
+export function blankLine(input: { fundId: string; name: string; stableLineId: string }): PlanLine {
+  return {
+    stableLineId: input.stableLineId,
+    fundId: input.fundId,
+    name: input.name,
+    kind: "consumption",
+    contributionCents: "0",
+    fundingBehaviour: "cycle_allowance",
+    beneficiaryScope: "shared",
+    beneficiaryMemberId: null,
+    plannedPayerMemberId: null,
+    targetCents: null,
+    dueOn: null,
+    recurrence: "cycle",
+    rolloverPolicy: "carry",
+    categoryId: null,
+    categoryNameSnapshot: null,
+    groupNameSnapshot: null,
+    expectedPaymentOn: null,
+    expectedPaymentAccountId: null,
+    matchCategoryId: null,
+  }
+}
+
+export function replaceLine(lines: readonly PlanLine[], stableLineId: string, patch: Partial<PlanLine>): PlanLine[] {
+  if (!lines.some((line) => line.stableLineId === stableLineId)) throw new Error(copy.couldNotSave)
+  return lines.map((line) => (line.stableLineId === stableLineId ? { ...line, ...patch, stableLineId: line.stableLineId, fundId: line.fundId } : line))
 }
 
 export function readDraftReceipt(payload: unknown): DraftReceipt {

@@ -27,6 +27,9 @@ export type ReviewItem = {
   payerSentence: string | null
   fingerprint: string | null
   setId: string | null
+  sourceAmountCents: string | null
+  drifted: boolean
+  siblingCount: number
   submittable: boolean
   unresolved: string | null
 }
@@ -83,6 +86,8 @@ function itemOf(value: unknown, index: number, members: readonly MemberRef[]): R
   const reviewKey =
     present(readString(record, "review_key")) ?? sourceTransactionId ?? utilityEntryId ?? `item:${index}`
   const bankSource = sourceTransactionId !== null && utilityEntryId === null
+  const drifted = kindIsDrifted(readString(record, "kind"), sentences(record.reasons))
+  const sourceAmount = sourceAmountCents(record, amountCents)
   return {
     reviewKey,
     kind: readString(record, "kind") ?? "",
@@ -97,9 +102,26 @@ function itemOf(value: unknown, index: number, members: readonly MemberRef[]): R
     payerSentence: paidBy ? `${copy.actualPayer} ${paidBy}` : null,
     fingerprint,
     setId: provenance ? present(readString(provenance, "set_id")) : null,
-    submittable: bankSource && fingerprint !== null,
-    unresolved: fingerprint === null ? copy.somethingUnresolved : null,
+    sourceAmountCents: sourceAmount,
+    drifted,
+    siblingCount: 1,
+    submittable: bankSource && fingerprint !== null && sourceAmount !== null,
+    unresolved: fingerprint === null || sourceAmount === null ? copy.somethingUnresolved : null,
   }
+}
+
+function kindIsDrifted(kind: string | null, reasons: readonly ReviewReason[]): boolean {
+  return isDriftedReview({ kind: kind ?? "", reasons })
+}
+
+export function oneFormPerSource(items: readonly ReviewItem[]): ReviewItem[] {
+  const seen = new Set<string>()
+  return items.filter((item) => {
+    const key = item.sourceTransactionId ?? item.utilityEntryId ?? item.reviewKey
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }
 
 function byImpact(left: ReviewItem, right: ReviewItem): number {
@@ -107,6 +129,22 @@ function byImpact(left: ReviewItem, right: ReviewItem): number {
   if (left.impactCents === null) return 1
   if (right.impactCents === null) return -1
   return compareCents(left.impactCents, right.impactCents)
+}
+
+export function isDriftedReview(item: { kind: string; reasons: readonly { code: string }[] }): boolean {
+  if (item.kind === "source_drift") return true
+  return item.reasons.some((reason) => reason.code === "source_fingerprint_drift")
+}
+
+export function sourceAmountCents(record: Record<string, unknown> | null, fallback: string | null): string | null {
+  const provenance = record ? readRecord(record.provenance) : null
+  const snapshot = provenance ? readRecord(provenance.source_snapshot) : null
+  return (snapshot ? parseCents(snapshot.amount_cents) : null) ?? fallback
+}
+
+export function alreadyApproved(input: { inQueue: boolean; status: string | null; drifted: boolean }): boolean {
+  if (input.drifted || input.inQueue) return false
+  return input.status === "current"
 }
 
 export function reviewFunds(overview: unknown): ReviewFund[] {
@@ -133,8 +171,17 @@ export function projectReviewQueue(input: {
     const item = itemOf(entry, index, input.members)
     return item ? [item] : []
   })
+  const counts = new Map<string, number>()
+  for (const item of items) {
+    const key = item.sourceTransactionId ?? item.utilityEntryId ?? item.reviewKey
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+  const counted = items.map((item) => ({
+    ...item,
+    siblingCount: counts.get(item.sourceTransactionId ?? item.utilityEntryId ?? item.reviewKey) ?? 1,
+  }))
   return {
-    items: [...items].sort(byImpact),
+    items: [...counted].sort(byImpact),
     reasons: sentences(record?.reasons),
     partial: input.partial === true || (record ? readString(record, "next_cursor") !== null : false),
   }

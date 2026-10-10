@@ -23,7 +23,7 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { buildMoveFundsPayload, newCommandId, type MoveKind } from "@/domain/budget/commands"
 import { copy } from "@/domain/budget/copy"
-import { moveConfirmCopy, moveKindLabel, randsToCents } from "@/domain/budget/move"
+import { moveConfirmCopy, moveKindLabel, moveReason, randsToCents } from "@/domain/budget/move"
 import { localDateKey } from "@/lib/format/date"
 import { writeBudgetRpc } from "./rpc"
 
@@ -195,7 +195,7 @@ export function MoveMoneyDialog({
         expectedVersionId: versionId,
         expectedReconciliationId: reconciliationId,
         expectedReconciliationFingerprint: reconciliationFingerprint,
-        reason: copy.moveBetweenPurposes,
+        reason: moveReason(kind),
       })
       await writeBudgetRpc("budget_move_funds_v1", newCommandId(), payload)
     } catch (caught) {

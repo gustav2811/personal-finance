@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/table"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { copy } from "@/domain/budget/copy"
+import { addMonths, currentCycle } from "@/domain/budget/cycle"
 import { projectBudget, type BeneficiaryFilter, type BudgetOverview, type PurposeRow } from "@/domain/budget/overview"
 import { MoveMoneyDialog } from "./move-dialog"
 import { getBudgetSource, type BudgetSource } from "./queries"
@@ -91,10 +92,11 @@ export function BudgetView() {
   const [error, setError] = useState<string | null>(null)
   const [filter, setFilter] = useState<BeneficiaryFilter>({ kind: "household" })
   const [reloadKey, setReloadKey] = useState(0)
+  const [cycleStart, setCycleStart] = useState(() => currentCycle().start)
 
   useEffect(() => {
     let cancelled = false
-    void getBudgetSource()
+    void getBudgetSource(cycleStart)
       .then((next) => {
         if (!cancelled) setSource(next)
       })
@@ -104,7 +106,7 @@ export function BudgetView() {
     return () => {
       cancelled = true
     }
-  }, [reloadKey])
+  }, [reloadKey, cycleStart])
 
   const view = source ? projectBudget({ ...source, filter }) : null
   const filterValue = filter.kind === "member" ? filter.memberId : filter.kind
@@ -126,6 +128,9 @@ export function BudgetView() {
             <Button asChild size="sm" variant="outline">
               <Link href="/budget/liquidity">{copy.liquidity}</Link>
             </Button>
+            <Button asChild size="sm" variant="outline">
+              <Link href="/budget/reconcile">{copy.reconcile}</Link>
+            </Button>
           </div>
         }
         description={copy.pageDescription}
@@ -141,6 +146,8 @@ export function BudgetView() {
       {view ? (
         <BudgetBody
           filterValue={filterValue}
+          cycleStart={cycleStart}
+          onCycle={setCycleStart}
           onFilter={setFilter}
           onSaved={() => setReloadKey((key) => key + 1)}
           view={view}
@@ -151,12 +158,16 @@ export function BudgetView() {
 }
 
 function BudgetBody({
+  cycleStart,
   filterValue,
+  onCycle,
   onFilter,
   onSaved,
   view,
 }: {
+  cycleStart: string
   filterValue: string
+  onCycle: (cycleStart: string) => void
   onFilter: (filter: BeneficiaryFilter) => void
   onSaved: () => void
   view: BudgetOverview
@@ -169,6 +180,17 @@ function BudgetBody({
           <p className="type-caption text-muted-foreground">
             {view.revisionLabel} · {view.asOfLabel}
           </p>
+          <div className="flex gap-2">
+            <Button className={TOUCH} onClick={() => onCycle(addMonths(cycleStart, -1))} size="sm" type="button" variant="outline">
+              Earlier
+            </Button>
+            <Button className={TOUCH} onClick={() => onCycle(currentCycle().start)} size="sm" type="button" variant="outline">
+              {copy.thisCycle}
+            </Button>
+            <Button className={TOUCH} onClick={() => onCycle(addMonths(cycleStart, 1))} size="sm" type="button" variant="outline">
+              Later
+            </Button>
+          </div>
         </div>
         <ToggleGroup
           aria-label={copy.whoseExpense}
@@ -253,6 +275,19 @@ function BudgetBody({
               </ul>
             )}
             <p className="type-caption text-muted-foreground">{view.liquidity.caption}</p>
+            {view.restrictedBacking.length > 0 ? (
+              <div className="space-y-1">
+                <p className="type-caption text-muted-foreground">{copy.backing}</p>
+                <ul className="space-y-1">
+                  {view.restrictedBacking.map((account) => (
+                    <li className="type-numeric flex justify-between gap-4" key={account.id}>
+                      <span>{account.label}</span>
+                      <span>{account.amount}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
             {view.cardDebt ? (
               <p className="type-caption text-muted-foreground">
                 {copy.cardDebt}: {view.cardDebt}. {copy.cardDebtDetail}
@@ -260,6 +295,39 @@ function BudgetBody({
             ) : null}
           </div>
         </dl>
+        <p className="type-body">
+          {view.moveCash.label}. {view.moveCash.detail}
+        </p>
+        {view.calendar.length > 0 ? (
+          <div className="space-y-2">
+            <p className="type-label text-muted-foreground">{copy.expectedPayments}</p>
+            <ul className="space-y-1">
+              {view.calendar.map((entry) => (
+                <li className="type-caption flex justify-between gap-4" key={`${entry.date ?? ""}-${entry.label}-${entry.amount}`}>
+                  <span>
+                    {entry.date ?? copy.withheld} · {entry.label}
+                    {entry.payer ? ` · ${entry.payer}` : ""}
+                  </span>
+                  <span className="type-numeric">{entry.amount}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="type-caption text-muted-foreground">{copy.forecastDetail}</p>
+          </div>
+        ) : null}
+        {view.payers.length > 0 ? (
+          <div className="space-y-1">
+            <p className="type-label text-muted-foreground">{copy.whoPaid}</p>
+            <ul className="space-y-1">
+              {view.payers.map((payer) => (
+                <li className="flex justify-between gap-4" key={payer.id}>
+                  <span>{payer.sentence}</span>
+                  <span className="type-numeric">{payer.amount}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         <p className="type-caption text-muted-foreground">
           {view.forecast.label}: {view.forecast.amount ?? copy.withheld}. {view.forecast.caption}
         </p>

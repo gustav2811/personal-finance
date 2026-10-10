@@ -22,7 +22,7 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { ComparisonBars } from "@/domain/budget/comparison-bars"
 import { copy } from "@/domain/budget/copy"
-import { addMonths, cycleLabel } from "@/domain/budget/cycle"
+import { addMonths, calendarMonthLabel, cycleLabel } from "@/domain/budget/cycle"
 import { chartRows, projectHistory, type HistoryProjection, type HistoryRow } from "@/domain/budget/history"
 import { memberName, type MemberRef } from "@/domain/budget/members"
 import type { BeneficiaryFilter } from "@/domain/budget/overview"
@@ -30,13 +30,13 @@ import { readArray, readRecord, readString } from "@/domain/budget/wire"
 import { readMemberDirectory } from "./members"
 import { readActuals, readVersion, readVersions } from "./rpc"
 
-const PLAN_CHANGE = "A plan change is not a corrected transaction."
 const TOUCH = "pointer-coarse:h-9 pointer-coarse:px-3"
 const PAGE_CAP = 20
 
 type VersionHeader = {
   id: string
   label: string
+  month: string
 }
 
 type Loaded = {
@@ -68,7 +68,13 @@ function headerOf(value: unknown): VersionHeader | null {
   const revision = number ? `${copy.revision} ${number}` : copy.revision
   const state = readString(record, "state")
   const label = state === "draft" ? `${revision} · ${cycle} · draft` : `${revision} · ${cycle}`
-  return { id, label }
+  let month = cycle
+  try {
+    month = calendarMonthLabel(starts)
+  } catch {
+    month = cycle
+  }
+  return { id, label, month }
 }
 
 function headersFrom(payload: unknown): VersionHeader[] {
@@ -130,7 +136,13 @@ function HistoryTable({ rows }: { rows: HistoryRow[] }) {
         <TableBody>
           {rows.map((row) => (
             <TableRow key={row.fundId}>
-              <TableCell>{row.name}</TableCell>
+              <TableCell>
+                <div className="space-y-1">
+                  <p>{row.name}</p>
+                  {row.planChange ? <p className="type-caption text-muted-foreground">{row.planChange}</p> : null}
+                  {row.correction ? <p className="type-caption text-muted-foreground">{row.correction}</p> : null}
+                </div>
+              </TableCell>
               <TableCell className="type-numeric text-right">{row.original.text}</TableCell>
               <TableCell className="type-numeric text-right">{row.revised.text}</TableCell>
               <TableCell className="type-numeric text-right">{row.spent.text}</TableCell>
@@ -205,7 +217,7 @@ export function HistoryView() {
     <div className="@container/budget space-y-10">
       <PageHeader
         breadcrumbs={[{ href: "/budget", label: copy.pageTitle }, { label: "History" }]}
-        description={PLAN_CHANGE}
+        description={copy.planChangeIsNotCorrection}
         title="History"
       />
       {error ? (
@@ -228,7 +240,7 @@ export function HistoryView() {
             <SelectContent>
               {versions.map((version) => (
                 <SelectItem key={version.id} value={version.id}>
-                  {version.label}
+                  {version.month} · {version.label}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -272,9 +284,28 @@ function HistoryBody({ view }: { view: HistoryProjection }) {
   const bars = chartRows(view.rows)
   return (
     <>
+      <p className="type-caption text-muted-foreground">{view.planChangeNote}</p>
       <p className="type-caption text-muted-foreground">
         {view.householdTotalLabel}: <span className="type-numeric">{view.householdTotal}</span>. {view.householdTotalDetail}
       </p>
+      {view.corrections.length > 0 ? (
+        <div className="space-y-1">
+          <p>{view.correctionNote}</p>
+          <ul className="space-y-1">
+            {view.corrections.map((trail) => (
+              <li key={trail.supersedesId}>
+                {trail.sourceTransactionId ? (
+                  <a className="underline-offset-4 hover:underline" href={`/transactions?transaction=${trail.sourceTransactionId}`}>
+                    {trail.sourceTransactionId}
+                  </a>
+                ) : (
+                  copy.withheld
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       {view.partialList ? <p className="type-caption text-muted-foreground">{view.partialList}</p> : null}
       <ComparisonBars rows={bars} />
       <Section title={copy.purposes}>

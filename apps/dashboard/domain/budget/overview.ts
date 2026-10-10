@@ -1,4 +1,4 @@
-import { copy, personalExpense, reasonSentence, sharedExpensePaidBy } from "./copy"
+import { copy, paidBySentence, personalExpense, reasonSentence, sharedExpensePaidBy } from "./copy"
 import { cycleLabel, formatAsOf } from "./cycle"
 import { memberName, type MemberRef } from "./members"
 import { formatCents, isNegativeCents, parseCents } from "./money"
@@ -40,6 +40,28 @@ export type PurchaseRow = {
   setId: string | null
 }
 
+export type CashBacking = "paying" | "restricted" | "mortgage" | "card"
+
+export type CashAccount = {
+  id: string
+  label: string
+  amount: string
+  backing: CashBacking
+}
+
+export type CalendarEntry = {
+  label: string
+  date: string | null
+  amount: string
+  payer: string | null
+}
+
+export type PayerFact = {
+  id: string
+  sentence: string
+  amount: string
+}
+
 export type BudgetOverview = {
   complete: boolean
   cycleLabel: string
@@ -56,7 +78,11 @@ export type BudgetOverview = {
   liquidity: LabelledAmount
   forecast: LabelledAmount
   cardDebt: string | null
-  accounts: Array<{ id: string; label: string; amount: string }>
+  accounts: CashAccount[]
+  restrictedBacking: CashAccount[]
+  calendar: CalendarEntry[]
+  payers: PayerFact[]
+  moveCash: { label: string; detail: string }
   canAssign: boolean
   versionId: string | null
   reconciliationId: string | null
@@ -357,14 +383,57 @@ export function projectBudget(input: {
   const forecastRecord = readRecord(liquidity.forecast)
   const uncertainty = uncertaintyCodes(forecastRecord?.uncertainty_reasons)
   const liquidityComplete = readComplete(liquidity)
-  const accounts = liquidityComplete
+  const cashAccounts = liquidityComplete
     ? readArray(liquidity.accounts).flatMap((entry) => {
         const record = readRecord(entry)
         const id = record ? readString(record, "account_id") : null
         const amount = record ? parseCents(record.normalized_cash_cents) : null
         if (!record || !id || !amount) return []
         const owner = memberName(input.members, readString(record, "owner_member_id"))
-        return [{ id, label: owner ?? copy.shared, amount: formatCents(amount) }]
+        const resourceClass = readString(record, "resource_class")
+        const backing: CashBacking =
+          resourceClass === "restricted"
+            ? "restricted"
+            : resourceClass === "mortgage"
+              ? "mortgage"
+              : resourceClass === "card"
+                ? "card"
+                : "paying"
+        return [{ id, label: owner ?? copy.shared, amount: formatCents(amount), backing }]
+      })
+    : []
+  const accounts = cashAccounts.filter((account) => account.backing === "paying" || account.backing === "card")
+  const restrictedBacking = cashAccounts.filter(
+    (account) => account.backing === "restricted" || account.backing === "mortgage",
+  )
+  const forecastEntries = readArray(forecastRecord?.entries)
+  const expectedEntries = readArray(liquidity.expected)
+  const calendarSource = expectedEntries.length > 0 ? expectedEntries : forecastEntries
+  const calendar = calendarSource.flatMap((entry) => {
+    const record = readRecord(entry)
+    if (!record) return []
+    const kind = readString(record, "kind")
+    const date = readString(record, "date")
+    const amount = parseCents(record.amount_cents)
+    if (!kind && !date) return []
+    const payerId = readString(record, "planned_payer_member_id")
+    return [
+      {
+        label: kind === "income" ? "Expected income" : copy.expectedPayments,
+        date,
+        amount: formatCents(amount),
+        payer: memberName(input.members, payerId),
+      },
+    ]
+  })
+  const byPayer = householdTotals ? readRecord(householdTotals.by_actual_payer) : null
+  const payers = byPayer
+    ? Object.entries(byPayer).flatMap(([id, value]) => {
+        const groups = readRecord(value)
+        const consumption = groups ? parseCents(groups.consumption) : null
+        if (!consumption) return []
+        const name = id === "shared" || id === "unassigned" ? copy.shared : (memberName(input.members, id) ?? "A household member")
+        return [{ id, sentence: paidBySentence(name), amount: formatCents(consumption) }]
       })
     : []
 
@@ -411,6 +480,10 @@ export function projectBudget(input: {
     },
     cardDebt: liquidityComplete ? formatCents(parseCents(liquidity.card_debt_cents)) : null,
     accounts,
+    restrictedBacking,
+    calendar,
+    payers,
+    moveCash: { label: copy.moveCash, detail: copy.moveCashDetail },
     canAssign: complete && versionId !== null && reconciliationId !== null && reconciliationFingerprint !== null && unassignedCents !== null,
     versionId,
     reconciliationId,
