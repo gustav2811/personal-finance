@@ -53,8 +53,8 @@ begin
   r := public.budget_move_funds_v1('00000000-0000-4000-8000-00000000d911',p);
   movement := (r->>'movement_id')::uuid;
   raise notice '%', ok(movement is not null,'member creates backed opening');
-  replay := public.budget_move_funds_v1('00000000-0000-4000-8000-00000000d911',p);
-  raise notice '%', is(replay,r,'opening replay returns original receipt');
+  replay := public.budget_move_funds_v1('00000000-0000-4000-8000-00000000d911',p-'earmarks');
+  raise notice '%', is(replay,r,'opening replay without earmarks returns original receipt');
   p := jsonb_build_object('kind','assign','to_fund_id','00000000-0000-4000-8000-00000000d905',
     'amount_cents','50000','effective_on',current_date::text,'expected_version_id','00000000-0000-4000-8000-00000000d907',
     'expected_reconciliation_id',resources->>'reconciliation_id','expected_reconciliation_fingerprint',resources->>'reconciliation_fingerprint','reason','cycle gift',
@@ -97,8 +97,8 @@ begin
   before_receipts := (select count(*) from finance.budget_commands where household_id=h);
   before_rows := (select count(*) from finance.fund_movements where household_id=h);
   failed := false;
-  begin perform public.budget_move_funds_v1('00000000-0000-4000-8000-00000000d914',p||jsonb_build_object('earmarks',jsonb_build_array(jsonb_build_object('x',1)))); exception when sqlstate 'P0001' then failed := sqlerrm = 'budget_incomplete: earmarks are unavailable until PR4'; end;
-  raise notice '%', ok(failed,'earmark payload rejects before write');
+  begin perform public.budget_move_funds_v1('00000000-0000-4000-8000-00000000d914',p||jsonb_build_object('earmarks',jsonb_build_array(jsonb_build_object('x',1)))); exception when sqlstate 'P0001' then failed := sqlerrm = 'budget_invalid: missing fund_id'; end;
+  raise notice '%', ok(failed,'malformed earmark payload rejects before write');
   raise notice '%', is((select count(*) from finance.budget_commands where household_id=h),before_receipts,'failed move has no receipt');
   raise notice '%', is((select count(*) from finance.fund_movements where household_id=h),before_rows,'failed move has no movement');
   r := public.budget_correct_movement_v1('00000000-0000-4000-8000-00000000d915',jsonb_build_object('movement_id',movement::text,

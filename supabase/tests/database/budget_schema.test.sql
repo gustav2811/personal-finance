@@ -14,6 +14,8 @@ insert into finance.funds(id,household_id,name,beneficiary_scope,created_by) val
 insert into public.accounts(account_id,source_account_id,name,household_id,source_system) values
  ('00000000-0000-4000-8000-000000000041','budget-a','A','00000000-0000-4000-8000-000000000001','test'),
  ('00000000-0000-4000-8000-000000000042','budget-b','B','00000000-0000-4000-8000-000000000002','test');
+insert into consumption.devices(id,source,external_id,kind,name,utility_type,household_id) values
+ ('00000000-0000-4000-8000-000000000099','test','budget-device','meter','Budget device','electricity','00000000-0000-4000-8000-000000000001');
 insert into public.transactions(id,account_id,date,details,household_id,source_system) values
  ('budget-domain-tx-a','00000000-0000-4000-8000-000000000041',now(),'{}','00000000-0000-4000-8000-000000000001','test'),
  ('budget-domain-tx-b','00000000-0000-4000-8000-000000000042',now(),'{}','00000000-0000-4000-8000-000000000002','test'),
@@ -153,8 +155,8 @@ select throws_ok($q$do $$begin
   values('00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000031',10,'release',current_date,'00000000-0000-4000-8000-000000000011','00000000-0000-4000-8000-000000000173','reversal correction','00000000-0000-4000-8000-000000000174','reversal');
 end$$$q$,'P0001','budget_invalid: correction must reference an original movement','correction cannot target a reversal');
 select throws_ok($q$update finance.fund_movements set reason='x' where id='00000000-0000-4000-8000-000000000172'$q$,'P0001',NULL,'movement immutable');
-select throws_ok($q$insert into finance.budget_account_settings(household_id,account_id,owner_scope,included,resource_class,freshness_hours,transaction_sign_convention,actor_id,utility_device_id) values('00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000041','shared',true,'liquid',24,'unknown','00000000-0000-4000-8000-000000000011','00000000-0000-4000-8000-000000000099')$q$,'23514',NULL,'utility device disabled');
-select throws_ok($q$insert into finance.fund_earmarks(household_id,fund_id,restricted_account_id,amount_cents,effective_on,actor_id,command_id,reason,fund_movement_id) values('00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000031','00000000-0000-4000-8000-000000000041',1,current_date,'00000000-0000-4000-8000-000000000011','00000000-0000-4000-8000-000000000171','disabled','00000000-0000-4000-8000-000000000172')$q$,'P0001',NULL,'earmarks disabled');
+select lives_ok($q$insert into finance.budget_account_settings(household_id,account_id,owner_scope,included,resource_class,freshness_hours,transaction_sign_convention,actor_id,utility_device_id) values('00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000041','shared',true,'liquid',24,'unknown','00000000-0000-4000-8000-000000000011','00000000-0000-4000-8000-000000000099')$q$,'owned utility device association is allowed');
+select lives_ok($q$insert into finance.fund_earmarks(household_id,fund_id,restricted_account_id,amount_cents,effective_on,actor_id,command_id,reason,fund_movement_id) values('00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000031','00000000-0000-4000-8000-000000000041',1,current_date,'00000000-0000-4000-8000-000000000011','00000000-0000-4000-8000-000000000171','stage4 earmark','00000000-0000-4000-8000-000000000172')$q$,'stage4 earmark claim is writable');
 
 insert into finance.budget_reconciliations(id,household_id,as_of,actor_id,status,coverage_snapshot,notes) values ('00000000-0000-4000-8000-000000000201','00000000-0000-4000-8000-000000000001',now(),'00000000-0000-4000-8000-000000000011','incomplete','{}','seed');
 select throws_ok($q$update finance.budget_commands set kind='changed' where command_id='00000000-0000-4000-8000-000000000171'$q$,'P0001',NULL,'receipts immutable on update');
