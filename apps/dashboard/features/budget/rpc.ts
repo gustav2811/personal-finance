@@ -6,12 +6,9 @@ type RpcResult = {
   error: { message: string } | null
 }
 
-function clientRpc(name: string, args: Record<string, unknown>): Promise<RpcResult> {
-  const rpc = getBrowserClient().rpc as unknown as (
-    fn: string,
-    params: Record<string, unknown>,
-  ) => Promise<RpcResult>
-  return rpc(name, args)
+async function clientRpc(name: string, args: Record<string, unknown>): Promise<RpcResult> {
+  const client = getBrowserClient()
+  return await client.rpc(name as never, args as never)
 }
 
 export function friendlyBudgetError(message: string): Error {
@@ -23,7 +20,7 @@ export function friendlyBudgetError(message: string): Error {
   if (message.startsWith("budget_invalid:") || message.startsWith("budget_not_found:") || message.startsWith("budget_incomplete:")) {
     return new Error(copy.couldNotSave)
   }
-  return new Error(copy.couldNotRead)
+  return new Error(message || copy.couldNotRead)
 }
 
 export async function readBudgetRpc(name: string, args: Record<string, unknown>): Promise<unknown> {
