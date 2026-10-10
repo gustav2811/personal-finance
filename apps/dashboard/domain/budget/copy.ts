@@ -134,6 +134,12 @@ export function reasonSentence(code: string): string {
       return "Expected income is not known."
     case "no_statement_forecast":
       return copy.notStatementForecast
+    case "pending_activity_provisional":
+      return "A pending movement is provisional. It is not available money."
+    case "source_allocation_stale":
+      return "A reviewed purchase changed and is provisional until confirmed."
+    case "excluded_from_spend":
+      return "Excluded from spend."
     default:
       return copy.somethingUnresolved
   }

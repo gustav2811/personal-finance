@@ -185,6 +185,8 @@ function ReviewList({
                       ))}
                     </ul>
                   ) : null}
+                  {item.provisional ? <p className="type-caption text-muted-foreground">Provisional. Not a confirmed balance.</p> : null}
+                  {item.excluded ? <p className="type-caption text-muted-foreground">{item.excluded}</p> : null}
                   {item.payerSentence ? <p>{item.payerSentence}</p> : null}
                 </div>
                 <span className="type-numeric">{item.amount}</span>
@@ -194,7 +196,7 @@ function ReviewList({
                   <AlertDescription>{item.unresolved}</AlertDescription>
                 </Alert>
               ) : null}
-              {item.submittable && item.sourceAmountCents && item.fingerprint && item.sourceTransactionId ? (
+              {item.submittable && item.sourceAmountCents && item.fingerprint ? (
                 <PurchaseReview
                   amountCents={item.sourceAmountCents}
                   categories={categories}
@@ -206,6 +208,7 @@ function ReviewList({
                   setId={item.setId}
                   siblingCount={item.siblingCount}
                   sourceTransactionId={item.sourceTransactionId}
+                  utilityEntryId={item.utilityEntryId}
                 />
               ) : null}
             </li>

@@ -1,7 +1,7 @@
 import { copy, personalExpense, reasonSentence, sharedExpensePaidBy } from "./copy"
 import { formatDayMonth } from "./cycle"
 import { memberName, type MemberRef } from "./members"
-import { formatCents, isNegativeCents, isPositiveCents, parseCents } from "./money"
+import { formatCents, isCents, isNegativeCents, isPositiveCents, parseCents } from "./money"
 import { readArray, readComplete, readReasons, readRecord, readString } from "./wire"
 
 export type FundMoney = {
@@ -12,11 +12,19 @@ export type FundMoney = {
 
 export type FundEntry = {
   when: string
+  occurredOn: string | null
   amount: string
+  signedCents: string | null
   sentence: string
   sourceTransactionId: string | null
   correctionOf: string | null
   kind: string | null
+}
+
+export type FundPoint = {
+  when: string
+  balance: number
+  balanceText: string
 }
 
 export type RestrictedHolding = {
@@ -53,6 +61,7 @@ export type FundView = {
   dueOn: string | null
   holdings: RestrictedHolding[]
   timeline: FundTimelinePoint[]
+  points: FundPoint[]
   reasons: string[]
   entries: FundEntry[]
   listNote: string | null
@@ -133,7 +142,9 @@ function entryOf(value: unknown, members: readonly MemberRef[]): FundEntry | nul
   const sentence = entrySentence(record, members)
   return {
     when: whenOf(record),
+    occurredOn: readString(record, "effective_on") ?? readString(record, "occurred_on"),
     amount: formatCents(centsAt(record, "signed_amount_cents") ?? centsAt(record, "amount_cents")),
+    signedCents: centsAt(record, "signed_amount_cents") ?? centsAt(record, "amount_cents"),
     sentence: UUID.test(sentence) ? "" : sentence,
     sourceTransactionId: readString(record, "source_transaction_id"),
     correctionOf: readString(record, "correction_of") ?? readString(record, "supersedes_id"),
@@ -177,6 +188,20 @@ function holdingsOf(wire: Record<string, unknown>, context: FundContext | undefi
       },
     ]
   })
+}
+
+function balancePoints(entries: readonly FundEntry[]): FundPoint[] {
+  const ordered = [...entries].sort((left, right) => (left.occurredOn ?? "").localeCompare(right.occurredOn ?? ""))
+  let balance = BigInt(0)
+  const points: FundPoint[] = []
+  for (const entry of ordered) {
+    if (!entry.signedCents || !isCents(entry.signedCents)) continue
+    balance += BigInt(entry.signedCents)
+    const value = Number(balance)
+    if (!Number.isSafeInteger(value)) return []
+    points.push({ when: entry.when, balance: value, balanceText: formatCents(balance.toString()) })
+  }
+  return points
 }
 
 function timelineOf(entries: readonly FundEntry[], behaviour: string | null): FundTimelinePoint[] {
@@ -282,6 +307,7 @@ export function projectFund(wire: unknown, members: readonly MemberRef[], contex
     dueOn,
     holdings: holdingsOf(record, context, asOf),
     timeline: timelineOf(entries, behaviour),
+    points: behaviour === "accumulating" ? balancePoints(entries) : [],
     reasons: reasonLabels(record.reasons),
     entries,
     listNote: readString(record, "next_cursor") ? copy.partialList : null,

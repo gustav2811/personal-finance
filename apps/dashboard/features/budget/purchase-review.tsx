@@ -41,6 +41,7 @@ export function PurchaseReview({
   setId,
   siblingCount = 1,
   sourceTransactionId,
+  utilityEntryId = null,
 }: {
   amountCents: string
   categories: CategoryOption[]
@@ -51,7 +52,8 @@ export function PurchaseReview({
   onSaved: () => Promise<void>
   setId: string | null
   siblingCount?: number
-  sourceTransactionId: string
+  sourceTransactionId: string | null
+  utilityEntryId?: string | null
 }) {
   const [mixed, setMixed] = useState(false)
   const [mode, setMode] = useState<"purchase" | "transfer" | "refund" | "debt">("purchase")
@@ -74,7 +76,8 @@ export function PurchaseReview({
 
   async function save(components: ReviewComponentInput[], evidence?: { splitReviewReason?: string; receiptReference?: string }) {
     const payload = buildReviewPayload({
-      transactionId: sourceTransactionId,
+      transactionId: sourceTransactionId ?? undefined,
+      utilityEntryId: utilityEntryId ?? undefined,
       expectedSourceFingerprint: fingerprint,
       expectedCurrentSetId: setId ?? undefined,
       sourceAmountCents: amountCents,

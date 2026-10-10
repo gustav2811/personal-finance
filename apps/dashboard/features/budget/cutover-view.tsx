@@ -29,7 +29,7 @@ import { copy } from "@/domain/budget/copy"
 import { readCutover, type CutoverAccount, type CutoverWorkspace } from "@/domain/budget/cutover"
 import { memberName } from "@/domain/budget/members"
 import { randsToCents } from "@/domain/budget/move"
-import { readCutover as loadCutover, writeBudgetRpc } from "./rpc"
+import { readCutover as loadCutover, readDevices, writeBudgetRpc } from "./rpc"
 
 function message(caught: unknown): string {
   return caught instanceof Error && caught.message.length > 0 ? caught.message : copy.couldNotSave
@@ -37,6 +37,7 @@ function message(caught: unknown): string {
 
 export function CutoverView() {
   const [workspace, setWorkspace] = useState<CutoverWorkspace | null>(null)
+  const [devices, setDevices] = useState<Array<{ id: string; name: string }>>([])
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
@@ -45,9 +46,12 @@ export function CutoverView() {
 
   useEffect(() => {
     let cancelled = false
-    void loadCutover()
-      .then((payload) => {
-        if (!cancelled) setWorkspace(readCutover(payload))
+    void Promise.all([loadCutover(), readDevices().catch(() => null)])
+      .then(([payload, devicePayload]) => {
+        if (cancelled) return
+        setWorkspace(readCutover(payload))
+        const record = devicePayload && typeof devicePayload === "object" ? (devicePayload as { devices?: Array<{ id?: string; name?: string }> }) : null
+        setDevices((record?.devices ?? []).flatMap((device) => device.id && device.name ? [{ id: device.id, name: device.name }] : []))
       })
       .catch((caught: unknown) => {
         if (!cancelled) setError(message(caught))
@@ -107,15 +111,25 @@ export function CutoverView() {
       {error ? <Alert><AlertTitle>{copy.couldNotSave}</AlertTitle><AlertDescription>{error}</AlertDescription></Alert> : null}
       {notice ? <Alert><AlertDescription>{notice}</AlertDescription></Alert> : null}
       {!workspace && !error ? <p className="type-body text-muted-foreground">Reading the budget.</p> : null}
-      {workspace ? <CutoverBody onRun={run} workspace={workspace} /> : null}
+      {workspace ? <CutoverBody devices={devices} onRun={run} workspace={workspace} /> : null}
     </div>
   )
 }
 
+const EVIDENCE_GATES = [
+  "Payroll net pay is reconciled. Deductions are not subtracted twice.",
+  "Included ownership, currency, and sign convention are confirmed.",
+  "Card debt is counted once.",
+  "Notice, mortgage, and wallet reserves come from a statement, not the sheet.",
+  "Utility coverage is an explicit choice.",
+] as const
+
 function CutoverBody({
+  devices,
   onRun,
   workspace,
 }: {
+  devices: Array<{ id: string; name: string }>
   onRun: (name: string, payload: Record<string, unknown>) => Promise<void>
   workspace: CutoverWorkspace
 }) {
@@ -125,7 +139,7 @@ function CutoverBody({
         <ul className="space-y-6">
           {workspace.accounts.map((account) => (
             <li key={account.id}>
-              <AccountForm account={account} members={workspace.members} onRun={onRun} />
+              <AccountForm account={account} devices={devices} members={workspace.members} onRun={onRun} />
             </li>
           ))}
         </ul>
@@ -148,10 +162,12 @@ function CutoverBody({
 
 function AccountForm({
   account,
+  devices,
   members,
   onRun,
 }: {
   account: CutoverAccount
+  devices: Array<{ id: string; name: string }>
   members: CutoverWorkspace["members"]
   onRun: (name: string, payload: Record<string, unknown>) => Promise<void>
 }) {
@@ -165,6 +181,7 @@ function AccountForm({
   const [signEvidence, setSignEvidence] = useState(settings?.signEvidence ?? "")
   const [freshness, setFreshness] = useState(String(settings?.freshnessHours ?? 24))
   const [settlement, setSettlement] = useState(settings?.settlementAccountId ?? "")
+  const [deviceId, setDeviceId] = useState("")
 
   return (
     <form
@@ -186,6 +203,7 @@ function AccountForm({
             freshnessHours: hours,
             transactionSignConvention: sign,
             signEvidence: sign === "unknown" ? undefined : signEvidence,
+            utilityDeviceId: deviceId || undefined,
           }),
         )
       }}
@@ -235,6 +253,12 @@ function AccountForm({
         </SelectContent>
       </Select>
       {sign === "unknown" ? null : <Input aria-label="Sign evidence" onChange={(event) => setSignEvidence(event.target.value)} value={signEvidence} />}
+      <Select onValueChange={(next) => { if (next) setDeviceId(next) }} value={deviceId || undefined}>
+        <SelectTrigger aria-label="Wallet device"><SelectValue placeholder="Wallet device" /></SelectTrigger>
+        <SelectContent>
+          {devices.map((device) => <SelectItem key={device.id} value={device.id}>{device.name}</SelectItem>)}
+        </SelectContent>
+      </Select>
       <Button type="submit">Save account</Button>
     </form>
   )
@@ -252,6 +276,7 @@ function ReconciliationForm({
   const [utilityStatus, setUtilityStatus] = useState<"not_required" | "verified" | "unknown">("unknown")
   const [utilityEvidence, setUtilityEvidence] = useState("")
   const [cutoff, setCutoff] = useState("")
+  const [gates, setGates] = useState<boolean[]>(EVIDENCE_GATES.map(() => false))
   const [rows, setRows] = useState<Record<string, { status: "included" | "excluded" | "missing"; convention: CoverageAccountInput["balanceConvention"]; evidence: string; activityThrough: string; restricted: string; restrictedEvidence: string; pending: string[] }>>({})
 
   function row(account: CutoverAccount) {
@@ -275,7 +300,7 @@ function ReconciliationForm({
           "budget_record_reconciliation_v1",
           buildReconciliationPayload({
             asOf: new Date().toISOString(),
-            openingFundCutover: cutoff || undefined,
+            openingFundCutover: cutoff && gates.every(Boolean) ? cutoff : undefined,
             notes,
             evidence,
             utilityStatus,
@@ -303,6 +328,21 @@ function ReconciliationForm({
       <Textarea aria-label="Notes" onChange={(event) => setNotes(event.target.value)} value={notes} />
       <Textarea aria-label="Evidence" onChange={(event) => setEvidence(event.target.value)} value={evidence} />
       <Input aria-label="Opening cutoff" onChange={(event) => setCutoff(event.target.value)} placeholder="2026-09-23" value={cutoff} />
+      <ul className="space-y-1">
+        {EVIDENCE_GATES.map((gate, index) => (
+          <li key={gate}>
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                checked={gates[index] === true}
+                onChange={(event) => setGates(gates.map((value, gateIndex) => gateIndex === index ? event.target.checked : value))}
+                type="checkbox"
+              />
+              {gate}
+            </label>
+          </li>
+        ))}
+      </ul>
+      {cutoff && !gates.every(Boolean) ? <p className="type-caption text-muted-foreground">Opening cutoff stays unset until every evidence gate is confirmed.</p> : null}
       <Select onValueChange={(next) => { if (next === "not_required" || next === "verified" || next === "unknown") setUtilityStatus(next) }} value={utilityStatus}>
         <SelectTrigger aria-label="Utility coverage"><SelectValue /></SelectTrigger>
         <SelectContent>

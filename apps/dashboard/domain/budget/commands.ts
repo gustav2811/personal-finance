@@ -405,6 +405,7 @@ export function buildConfigureAccountPayload(input: {
   freshnessHours: number
   transactionSignConvention: (typeof SIGN_CONVENTIONS)[number]
   signEvidence?: string
+  utilityDeviceId?: string
 }): Record<string, unknown> {
   if (!OWNER_SCOPES.includes(input.ownerScope)) throw new Error("budget_invalid: owner")
   if (input.ownerScope === "shared" && input.ownerMemberId) throw new Error("budget_invalid: owner")
@@ -435,6 +436,7 @@ export function buildConfigureAccountPayload(input: {
     freshness_hours: input.freshnessHours,
     transaction_sign_convention: input.transactionSignConvention,
     sign_evidence: input.signEvidence?.trim() || null,
+    utility_device_id: input.utilityDeviceId ?? null,
   }
 }
 

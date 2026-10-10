@@ -288,6 +288,26 @@ function HistoryBody({ view }: { view: HistoryProjection }) {
       <p className="type-caption text-muted-foreground">
         {view.householdTotalLabel}: <span className="type-numeric">{view.householdTotal}</span>. {view.householdTotalDetail}
       </p>
+      {view.months.length > 0 ? (
+        <div className="space-y-1">
+          <p className="type-label text-muted-foreground">Calendar month</p>
+          <ul className="space-y-1">
+            {view.months.map((month) => (
+              <li className="flex justify-between gap-4" key={month.month}>
+                <span>{month.label}</span>
+                <span className="type-numeric">{month.consumption}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {view.chain.length > 0 ? (
+        <ul className="space-y-1">
+          {view.chain.map((hop) => (
+            <li key={`${hop.id}-${hop.supersedesId}`}>{hop.sentence}</li>
+          ))}
+        </ul>
+      ) : null}
       {view.corrections.length > 0 ? (
         <div className="space-y-1">
           <p>{view.correctionNote}</p>

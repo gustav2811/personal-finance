@@ -67,6 +67,14 @@ export function readCutover(): Promise<unknown> {
   return readBudgetRpc("budget_get_cutover_v1", {})
 }
 
+export function readSourceReview(transactionId: string): Promise<unknown> {
+  return readBudgetRpc("budget_get_source_review_v1", { p_transaction_id: transactionId, p_utility_entry_id: null })
+}
+
+export function readDevices(): Promise<unknown> {
+  return readBudgetRpc("budget_list_devices_v1", {})
+}
+
 export class BudgetRpcError extends Error {
   readonly raw: string
 

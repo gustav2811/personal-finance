@@ -17,6 +17,7 @@ import { currentCycle } from "@/domain/budget/cycle"
 import { readCutover } from "@/domain/budget/cutover"
 import { projectFund, type FundMoney, type FundView as FundDetail } from "@/domain/budget/fund"
 import type { MemberRef } from "@/domain/budget/members"
+import { FundLine } from "@/domain/budget/fund-line"
 import { TargetBar } from "@/domain/budget/target-bar"
 import { readMemberDirectory } from "./members"
 import { readCutover as readCutoverRpc, readFund } from "./rpc"
@@ -105,6 +106,7 @@ function FundBody({ view }: { view: FundDetail }) {
           </ul>
         </div>
       ) : null}
+      {view.points.length > 1 ? <FundLine points={view.points} /> : null}
       {view.timeline.length > 0 ? (
         <div className="space-y-1">
           <p className="type-label text-muted-foreground">{copy.assigned}</p>
