@@ -1,7 +1,9 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import Link from "next/link"
 import { PageHeader } from "@/components/patterns/page-header"
+import { Button } from "@/components/ui/button"
 import { Section } from "@/components/patterns/section"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
@@ -103,7 +105,15 @@ export function BudgetView() {
 
   return (
     <div className="@container/budget space-y-10">
-      <PageHeader description={copy.pageDescription} title={copy.pageTitle} />
+      <PageHeader
+        actions={
+          <Button asChild size="sm" variant="outline">
+            <Link href="/budget/review">{copy.reviewPurchases}</Link>
+          </Button>
+        }
+        description={copy.pageDescription}
+        title={copy.pageTitle}
+      />
       {error ? (
         <Alert>
           <AlertTitle>{copy.couldNotRead}</AlertTitle>

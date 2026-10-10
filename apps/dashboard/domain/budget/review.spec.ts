@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
-import { copy, reasonSentence, sharedExpensePaidBy } from "./copy"
+import { copy, reasonSentence } from "./copy"
 import { formatCents } from "./money"
 import { projectReviewQueue } from "./review"
 
@@ -120,7 +120,7 @@ describe("projectReviewQueue", () => {
     assert.equal(byKey.get("utility-only")?.submittable, false)
   })
 
-  it("keeps a shared payer sentence from reading as personal overspending", () => {
+  it("does not call an account owner a shared expense before that is decided", () => {
     const view = projectReviewQueue({
       queue: {
         items: [
@@ -141,10 +141,9 @@ describe("projectReviewQueue", () => {
     })
     const sentence = view.items[0]?.payerSentence
 
-    assert.equal(sentence, sharedExpensePaidBy("Cara"))
-    assert.equal(sentence?.toLowerCase().includes("overspending"), false)
+    assert.equal(sentence, `${copy.actualPayer} Cara`)
+    assert.equal(sentence?.includes("Shared expense"), false)
     assert.equal(sentence?.toLowerCase().includes("overspent"), false)
-    assert.equal(sentence?.includes("'s expense"), false)
     assert.equal(sentence?.includes(CARA), false)
     assert.equal(JSON.stringify(view.items[0]?.reasons).includes(CARA), false)
   })

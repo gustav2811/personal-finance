@@ -145,7 +145,7 @@ export function ReviewView() {
 
   return (
     <div className="@container/budget space-y-10">
-      <PageHeader description={copy.purchasesDetail} title={copy.pageTitle} />
+      <PageHeader description={copy.purchasesDetail} title={copy.reviewPurchases} />
       {error ? (
         <Alert>
           <AlertTitle>{copy.couldNotRead}</AlertTitle>
@@ -251,13 +251,17 @@ function ReviewDecision({
   const [whose, setWhose] = useState<WhoseExpense | null>(null)
   const [fundId, setFundId] = useState<string | null>(null)
   const [categoryId, setCategoryId] = useState<string | null>(null)
+  const [transfer, setTransfer] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const whoseValue = whose?.kind === "member" ? whose.memberId : whose?.kind
-  const canSave = Boolean(whose && fundId && categoryId && item.amountCents && item.fingerprint && item.sourceTransactionId)
+  const canSave = Boolean(
+    whose && categoryId && item.amountCents && item.fingerprint && item.sourceTransactionId && (transfer || fundId),
+  )
 
   async function save() {
-    if (!whose || !fundId || !categoryId || !item.amountCents || !item.fingerprint || !item.sourceTransactionId) return
+    if (!whose || !categoryId || !item.amountCents || !item.fingerprint || !item.sourceTransactionId) return
+    if (!transfer && !fundId) return
     setSaving(true)
     setError(null)
     try {
@@ -273,15 +277,15 @@ function ReviewDecision({
               amountCents: item.amountCents,
               beneficiaryScope: whose.kind,
               beneficiaryMemberId: whose.kind === "member" ? whose.memberId : undefined,
-              effectKind: "consumption",
-              fundId,
+              effectKind: transfer ? "movement" : "consumption",
+              fundId: transfer ? undefined : fundId ?? undefined,
               categoryId,
             },
           ],
           decisionUpdate: {
             categoryId,
-            isTransfer: false,
-            excludeFromSpend: false,
+            isTransfer: transfer,
+            excludeFromSpend: transfer,
           },
         }),
       )
@@ -296,6 +300,27 @@ function ReviewDecision({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-end gap-3">
+        <div className="space-y-1">
+          <p className="type-label text-muted-foreground">{copy.purchase}</p>
+          <ToggleGroup
+            aria-label={copy.purchase}
+            onValueChange={(next) => {
+              if (next === "purchase" || next === "transfer") setTransfer(next === "transfer")
+            }}
+            size="sm"
+            spacing={0}
+            type="single"
+            value={transfer ? "transfer" : "purchase"}
+            variant="outline"
+          >
+            <ToggleGroupItem className={TOUCH} value="purchase">
+              {copy.purchase}
+            </ToggleGroupItem>
+            <ToggleGroupItem className={TOUCH} value="transfer">
+              {copy.transferNotPurchase}
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </div>
         <div className="space-y-1">
           <p className="type-label text-muted-foreground">{copy.whoseExpense}</p>
           <ToggleGroup
@@ -320,6 +345,7 @@ function ReviewDecision({
             ))}
           </ToggleGroup>
         </div>
+        {transfer ? null : (
         <div className="space-y-1">
           <p className="type-label text-muted-foreground">{copy.purposes}</p>
           <Select
@@ -340,6 +366,7 @@ function ReviewDecision({
             </SelectContent>
           </Select>
         </div>
+        )}
         <div className="space-y-1">
           <p className="type-label text-muted-foreground">Category</p>
           <Select

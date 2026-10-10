@@ -1,4 +1,4 @@
-import { copy, reasonSentence, sharedExpensePaidBy } from "./copy"
+import { copy, reasonSentence } from "./copy"
 import { memberName, type MemberRef } from "./members"
 import { compareCents, formatCents, parseCents } from "./money"
 import { readArray, readReasons, readRecord, readString } from "./wire"
@@ -94,7 +94,7 @@ function itemOf(value: unknown, index: number, members: readonly MemberRef[]): R
     amountCents,
     impactCents,
     reasons: sentences(record.reasons),
-    payerSentence: paidBy ? sharedExpensePaidBy(paidBy) : null,
+    payerSentence: paidBy ? `${copy.actualPayer} ${paidBy}` : null,
     fingerprint,
     setId: provenance ? present(readString(provenance, "set_id")) : null,
     submittable: bankSource && fingerprint !== null,
