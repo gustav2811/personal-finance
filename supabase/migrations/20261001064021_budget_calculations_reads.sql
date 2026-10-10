@@ -426,11 +426,11 @@ begin
       'movement'::text as entry_type,m.id,
       case when m.to_fund_id=p_fund_id then m.amount_cents else -m.amount_cents end::numeric as signed_amount,
       case when m.to_fund_id=p_fund_id then m.amount_cents else -m.amount_cents end::numeric as delta,
-      null::text as source_transaction_id,null::uuid as set_id,null::uuid as supersedes_id,
+      null::text as source_transaction_id,null::uuid as utility_entry_id,null::uuid as set_id,null::uuid as supersedes_id,
       null::text as status,null::text as category_name_snapshot,null::uuid as beneficiary_member_id,
       null::uuid as paid_by_member_id,null::uuid as payment_account_id,
       null::text as beneficiary_scope,null::text as effect_kind,true as active_effect,
-      m.correction_of,m.correction_role
+      m.correction_of,m.correction_role,null::uuid as original_refund_allocation_id,null::uuid as financial_event_id
     from finance.fund_movements m where m.household_id=h and (m.from_fund_id=p_fund_id or m.to_fund_id=p_fund_id)
       and m.effective_on >= p_from and m.effective_on < p_to
       and (v_cursor is null or (m.effective_on,m.recorded_at,'movement'::text,m.id) <
@@ -440,10 +440,11 @@ begin
     select s.occurred_on,s.recorded_at,'allocation',a.id,a.amount_cents::numeric,
       case when s.status='superseded' or finance.budget_opening_cutover(h) is null
         or s.occurred_on < finance.budget_opening_cutover(h) then 0 else a.amount_cents end::numeric,
-      s.transaction_id,s.id,s.supersedes_id,s.status,a.category_name_snapshot,a.beneficiary_member_id,
+      s.transaction_id,s.utility_entry_id,s.id,s.supersedes_id,s.status,a.category_name_snapshot,a.beneficiary_member_id,
       a.paid_by_member_id,a.payment_account_id,a.beneficiary_scope,a.effect_kind,
       (s.status in ('current','needs_review') and finance.budget_opening_cutover(h) is not null
-        and s.occurred_on >= finance.budget_opening_cutover(h)),null,null
+        and s.occurred_on >= finance.budget_opening_cutover(h)),s.supersedes_id,null,
+      a.original_refund_allocation_id,a.financial_event_id
     from finance.budget_allocations a join finance.budget_allocation_sets s on s.household_id=a.household_id and s.id=a.set_id
     where a.household_id=h and a.fund_id=p_fund_id and s.occurred_on >= p_from and s.occurred_on < p_to
       and (v_cursor is null or (s.occurred_on,s.recorded_at,'allocation'::text,a.id) <
@@ -464,12 +465,13 @@ begin
       'effective_on',v_row.effective_on,'recorded_at',v_row.recorded_at,'entry_type',v_row.entry_type,
       'id',v_row.id::text,'signed_amount_cents',v_row.signed_amount::text,
       'effective_delta_cents',v_row.delta::text,'source_transaction_id',v_row.source_transaction_id,
-      'set_id',v_row.set_id,'supersedes_id',v_row.supersedes_id,'status',v_row.status,
+      'utility_entry_id',v_row.utility_entry_id,'set_id',v_row.set_id,'supersedes_id',v_row.supersedes_id,'status',v_row.status,
       'category_name_snapshot',v_row.category_name_snapshot,'beneficiary_member_id',v_row.beneficiary_member_id,
       'paid_by_member_id',v_row.paid_by_member_id,'payment_account_id',v_row.payment_account_id,
       'beneficiary_scope',v_row.beneficiary_scope,'effect_kind',v_row.effect_kind,
       'active_effect',v_row.active_effect,
-      'correction_of',v_row.correction_of,'correction_role',v_row.correction_role));
+      'correction_of',v_row.correction_of,'correction_role',v_row.correction_role,
+      'original_refund_allocation_id',v_row.original_refund_allocation_id,'financial_event_id',v_row.financial_event_id));
   end loop;
   if finance.budget_opening_cutover(h) is null then
     v_resources := v_resources || jsonb_build_object('complete',false,

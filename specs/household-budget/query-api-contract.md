@@ -67,7 +67,7 @@ are shown separately and are not silently made spendable.
 Example (synthetic):
 
 ```json
-{"household_id":"00000000-0000-4000-8000-000000000001","calculation_version":"household-budget-v1","as_of":"2026-10-10T10:00:00Z","complete":true,"reasons":[],"cycle_start":"2026-09-23","end_exclusive":"2026-10-23","original_version_id":"00000000-0000-0000-0000-000000000101","current_version_id":"00000000-0000-0000-0000-000000000102","net_liquid_cents":"2000000","net_claims_cents":"1500000","positive_claims_cents":"1500000","deficit_cents":"0","unassigned_cents":"500000","forecast_gap_cents":"25000","funds":[{"fund_id":"00000000-0000-0000-0000-000000000201","name":"Gifts","balance_cents":"1500000","restricted_cents":"300000"}],"restricted_resources":[],"restricted_claims":[],"provenance":[]}
+{"household_id":"00000000-0000-4000-8000-000000000001","calculation_version":"household-budget-v1","as_of":"2026-10-10T10:00:00Z","complete":true,"reasons":[],"cycle_start":"2026-09-23","end_exclusive":"2026-10-23","original_version_id":"00000000-0000-0000-0000-000000000101","current_version_id":"00000000-0000-0000-0000-000000000102","net_liquid_cents":"2000000","net_claims_cents":"1200000","positive_claims_cents":"1200000","deficit_cents":"0","unassigned_cents":"800000","forecast_gap_cents":"25000","funds":[{"fund_id":"00000000-0000-0000-0000-000000000201","name":"Gifts","balance_cents":"1500000","liquid_cents":"1200000","restricted_cents":"300000"}],"restricted_resources":[],"restricted_claims":[],"provenance":[]}
 ```
 
 ### `budget_get_fund_v1(p_fund_id uuid, p_from date, p_to date, p_cursor text default null, p_limit integer default 50)`
@@ -120,9 +120,14 @@ and provenance values may be null.
 Unknown keys, invalid combinations, or a member filter without `member` scope
 raise `budget_invalid:`. Returns `entries`, `filtered_totals`,
 `household_totals`, `next_cursor`, and shared fields. Totals are nested under
-`by_group`, `by_beneficiary`, and `by_actual_payer`; `by_group` separates
-consumption, contribution, debt_commitment, and other, while entries preserve
-both attribution axes: beneficiary scope/member and actual payer/account.
+`by_group`, `by_beneficiary`, and `by_actual_payer`; `by_group` separates each
+effect type, with both debt payment types grouped as `debt_commitment`. Payer
+and beneficiary maps
+are keyed by member (or `shared`/`unassigned`) and contain separate signed
+amounts for consumption, contribution, debt commitment, refund, income,
+financing, movement, and unresolved items. Linked refunds follow the original
+allocation's beneficiary and payer in these totals, while entries preserve the
+refund's recorded attribution and original-allocation link.
 Entries are current reviewed allocation components only, with source identity,
 allocation-set identity, correction/supersession identity, signed amount,
 fund/effect, source snapshot/fingerprint, decision/treatment and provenance
@@ -135,7 +140,7 @@ counted in addition to its components. Filtered totals are a view, not a
 replacement for unchanged household totals.
 
 ```json
-{"entries":[{"source_transaction_id":"tx-synthetic-1","amount_cents":"-60000","effect_kind":"consumption","fund_id":"00000000-0000-0000-0000-000000000201","beneficiary_scope":"shared","paid_by_member_id":"00000000-0000-0000-0000-000000000011","source_snapshot":{},"supersedes_id":null}],"filtered_totals":{"by_group":{"consumption":"-60000"},"by_beneficiary":{},"by_actual_payer":{}},"household_totals":{"by_group":{"consumption":"-60000"},"by_beneficiary":{},"by_actual_payer":{}},"next_cursor":null,"complete":true,"reasons":[],"calculation_version":"household-budget-v1","household_id":"00000000-0000-0000-0000-000000000001","as_of":"2026-10-10T10:00:00Z"}
+{"entries":[{"source_transaction_id":"tx-synthetic-1","amount_cents":"-60000","effect_kind":"consumption","fund_id":"00000000-0000-0000-0000-000000000201","beneficiary_scope":"shared","paid_by_member_id":"00000000-0000-0000-0000-000000000011","attributed_beneficiary_scope":"shared","attributed_beneficiary_member_id":null,"attributed_payer_member_id":"00000000-0000-0000-0000-000000000011","source_snapshot":{},"supersedes_id":null}],"filtered_totals":{"by_group":{"consumption":"-60000"},"by_beneficiary":{"shared":{"consumption":"-60000"}},"by_actual_payer":{"00000000-0000-0000-0000-000000000011":{"consumption":"-60000"}}},"household_totals":{"by_group":{"consumption":"-60000"},"by_beneficiary":{"shared":{"consumption":"-60000"}},"by_actual_payer":{"00000000-0000-0000-0000-000000000011":{"consumption":"-60000"}}},"next_cursor":null,"complete":true,"reasons":[],"calculation_version":"household-budget-v1","household_id":"00000000-0000-0000-0000-000000000001","as_of":"2026-10-10T10:00:00Z"}
 ```
 
 ### `budget_get_review_queue_v1(p_cursor text default null, p_limit integer default 50)`

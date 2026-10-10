@@ -32,26 +32,53 @@ begin
       ('query-groceries',a,'2026-09-24',date '2026-09-24','{}',h,'test',false,false,-600,'ZAR','q-groceries'),
       ('query-transfer',a,'2026-09-25',date '2026-09-25','{}',h,'test',false,false,-600,'ZAR','q-transfer'),
       ('query-split',a,'2026-09-26',date '2026-09-26','{}',h,'test',false,false,-900,'ZAR','q-split'),
-      ('query-review',a,'2026-09-27',date '2026-09-27','{}',h,'test',false,false,-125,'ZAR','q-review');
+      ('query-review',a,'2026-09-27',date '2026-09-27','{}',h,'test',false,false,-125,'ZAR','q-review'),
+      ('query-refund',a,'2026-09-27',date '2026-09-27','{}',h,'test',false,false,100,'ZAR','q-refund'),
+      ('query-contribution',a,'2026-09-27',date '2026-09-27','{}',h,'test',false,false,-50,'ZAR','q-contribution'),
+      ('query-debt',a,'2026-09-27',date '2026-09-27','{}',h,'test',false,false,-100,'ZAR','q-debt'),
+      ('query-income',a,'2026-09-27',date '2026-09-27','{}',h,'test',false,false,750,'ZAR','q-income'),
+      ('query-financing',a,'2026-09-27',date '2026-09-27','{}',h,'test',false,false,1250,'ZAR','q-financing');
+  insert into finance.financial_events(id,household_id,event_type,status)
+    values('00000000-0000-4000-8000-00000000e81c',h,'purchase','confirmed');
+  insert into finance.financial_event_legs(household_id,event_id,transaction_id,leg_role,status)
+    values(h,'00000000-0000-4000-8000-00000000e81c','query-groceries','economic_recognition','active');
   insert into finance.budget_allocation_sets(id,household_id,transaction_id,source_snapshot,source_fingerprint,source_amount_cents,occurred_on,revision_number,status,actor_id,command_id)
     values
       ('00000000-0000-4000-8000-00000000e80e',h,'query-groceries','{}','q-groceries',-60000,date '2026-09-24',1,'current',m,'00000000-0000-4000-8000-00000000e80a'),
       ('00000000-0000-4000-8000-00000000e80f',h,'query-transfer','{}','q-transfer',-60000,date '2026-09-25',1,'current',m,'00000000-0000-4000-8000-00000000e80b'),
       ('00000000-0000-4000-8000-00000000e810',h,'query-split','{}','q-split',-90000,date '2026-09-26',1,'current',m,'00000000-0000-4000-8000-00000000e80c'),
-      ('00000000-0000-4000-8000-00000000e811',h,'query-review','{}','q-review',-12500,date '2026-09-27',1,'needs_review',m,'00000000-0000-4000-8000-00000000e80d');
-  insert into finance.budget_allocations(id,household_id,set_id,ordinal,amount_cents,fund_id,beneficiary_scope,paid_by_member_id,effect_kind)
+      ('00000000-0000-4000-8000-00000000e811',h,'query-review','{}','q-review',-12500,date '2026-09-27',1,'needs_review',m,'00000000-0000-4000-8000-00000000e80d'),
+      ('00000000-0000-4000-8000-00000000e820',h,'query-refund','{}','q-refund',10000,date '2026-09-27',1,'current',m,'00000000-0000-4000-8000-00000000e82a'),
+      ('00000000-0000-4000-8000-00000000e821',h,'query-contribution','{}','q-contribution',-5000,date '2026-09-27',1,'current',m,'00000000-0000-4000-8000-00000000e82b'),
+      ('00000000-0000-4000-8000-00000000e822',h,'query-debt','{}','q-debt',-10000,date '2026-09-27',1,'current',m,'00000000-0000-4000-8000-00000000e82c'),
+      ('00000000-0000-4000-8000-00000000e823',h,'query-income','{}','q-income',75000,date '2026-09-27',1,'current',m,'00000000-0000-4000-8000-00000000e82d'),
+      ('00000000-0000-4000-8000-00000000e824',h,'query-financing','{}','q-financing',125000,date '2026-09-27',1,'current',m,'00000000-0000-4000-8000-00000000e82e');
+  insert into finance.budget_allocations(id,household_id,set_id,ordinal,amount_cents,fund_id,beneficiary_scope,paid_by_member_id,effect_kind,financial_event_id)
     values
-      ('00000000-0000-4000-8000-00000000e812',h,'00000000-0000-4000-8000-00000000e80e',0,-60000,f,'shared',m,'consumption'),
-      ('00000000-0000-4000-8000-00000000e813',h,'00000000-0000-4000-8000-00000000e80f',0,-60000,null,'shared',m,'movement'),
-      ('00000000-0000-4000-8000-00000000e814',h,'00000000-0000-4000-8000-00000000e810',0,-60000,f2,'shared',m,'consumption'),
-      ('00000000-0000-4000-8000-00000000e815',h,'00000000-0000-4000-8000-00000000e810',1,-30000,f,'shared',m,'consumption'),
-      ('00000000-0000-4000-8000-00000000e816',h,'00000000-0000-4000-8000-00000000e811',0,-12500,null,'shared',null,'unresolved');
+      ('00000000-0000-4000-8000-00000000e812',h,'00000000-0000-4000-8000-00000000e80e',0,-60000,f,'shared',m,'consumption','00000000-0000-4000-8000-00000000e81c'),
+      ('00000000-0000-4000-8000-00000000e813',h,'00000000-0000-4000-8000-00000000e80f',0,-60000,null,'shared',m,'movement',null),
+      ('00000000-0000-4000-8000-00000000e814',h,'00000000-0000-4000-8000-00000000e810',0,-60000,f2,'shared',m,'consumption',null),
+      ('00000000-0000-4000-8000-00000000e815',h,'00000000-0000-4000-8000-00000000e810',1,-30000,f,'shared',m,'consumption',null),
+      ('00000000-0000-4000-8000-00000000e816',h,'00000000-0000-4000-8000-00000000e811',0,-12500,null,'shared',null,'unresolved',null);
+  insert into finance.budget_allocations(id,household_id,set_id,ordinal,amount_cents,fund_id,beneficiary_scope,paid_by_member_id,effect_kind,original_refund_allocation_id)
+    values('00000000-0000-4000-8000-00000000e817',h,'00000000-0000-4000-8000-00000000e820',0,10000,f,'shared',null,'refund','00000000-0000-4000-8000-00000000e812');
+  insert into finance.budget_allocations(id,household_id,set_id,ordinal,amount_cents,fund_id,beneficiary_scope,beneficiary_member_id,paid_by_member_id,effect_kind)
+    values
+      ('00000000-0000-4000-8000-00000000e818',h,'00000000-0000-4000-8000-00000000e821',0,-5000,f,'shared',null,m,'contribution'),
+      ('00000000-0000-4000-8000-00000000e819',h,'00000000-0000-4000-8000-00000000e822',0,-10000,f,'shared',null,m,'required_debt_payment'),
+      ('00000000-0000-4000-8000-00000000e81a',h,'00000000-0000-4000-8000-00000000e823',0,75000,null,'shared',null,m,'income'),
+      ('00000000-0000-4000-8000-00000000e81b',h,'00000000-0000-4000-8000-00000000e824',0,125000,null,'shared',null,m,'financing');
   insert into finance.budget_commands(household_id,command_id,kind,payload,actor_id,result)
     values
       (h,'00000000-0000-4000-8000-00000000e80a','fixture','{}',m,'{}'),
       (h,'00000000-0000-4000-8000-00000000e80b','fixture','{}',m,'{}'),
       (h,'00000000-0000-4000-8000-00000000e80c','fixture','{}',m,'{}'),
-      (h,'00000000-0000-4000-8000-00000000e80d','fixture','{}',m,'{}');
+      (h,'00000000-0000-4000-8000-00000000e80d','fixture','{}',m,'{}'),
+      (h,'00000000-0000-4000-8000-00000000e82a','fixture','{}',m,'{}'),
+      (h,'00000000-0000-4000-8000-00000000e82b','fixture','{}',m,'{}'),
+      (h,'00000000-0000-4000-8000-00000000e82c','fixture','{}',m,'{}'),
+      (h,'00000000-0000-4000-8000-00000000e82d','fixture','{}',m,'{}'),
+      (h,'00000000-0000-4000-8000-00000000e82e','fixture','{}',m,'{}');
   update finance.budget_allocation_sets set status='needs_review'
     where id='00000000-0000-4000-8000-00000000e811';
 end
@@ -146,6 +173,17 @@ begin
   execute 'set local role authenticated';
   p:=jsonb_build_object('from','2026-09-23','to','2026-09-28');
   r:=public.budget_get_actuals_v1(p,null,50);
+  raise notice '%',ok(r->'household_totals'->'by_actual_payer'->member_id::text->>'consumption'='-150000'
+    and r->'household_totals'->'by_actual_payer'->member_id::text->>'movement'='-60000'
+    and r->'household_totals'->'by_actual_payer'->member_id::text->>'contribution'='-5000'
+    and r->'household_totals'->'by_actual_payer'->member_id::text->>'debt_commitment'='-10000'
+    and r->'household_totals'->'by_actual_payer'->member_id::text->>'refund'='10000'
+    and r->'household_totals'->'by_actual_payer'->member_id::text->>'income'='75000'
+    and r->'household_totals'->'by_actual_payer'->member_id::text->>'financing'='125000',
+    'DD-00 payer totals keep spending, transfers, contributions, debt, refunds, income and financing separate');
+  raise notice '%',ok((select count(*)=1 from jsonb_array_elements(r->'entries') x where x->>'allocation_id'='00000000-0000-4000-8000-00000000e817'
+    and x->>'attributed_beneficiary_scope'='shared' and x->>'attributed_payer_member_id'=member_id::text),
+    'refund attribution follows the original expense beneficiary and payer');
 
   raise notice '%',ok((select count(*)=1 from jsonb_array_elements(r->'entries') x where x->>'source_transaction_id'='query-groceries' and x->>'amount_cents'='-60000' and x->>'beneficiary_scope'='shared' and x->>'paid_by_member_id'=member_id::text),'DD-01 shared groceries: actual payer is retained separately from shared beneficiary');
   raise notice '%',ok((r->'entries' @> jsonb_build_array(jsonb_build_object('source_transaction_id','query-transfer','effect_kind','movement'))),'DD-02 spouse/internal transfer: movement is not a second consumption row');
@@ -170,6 +208,11 @@ begin
   r:=public.budget_get_overview_v1(date '2026-09-23','2026-09-27 12:00:00Z');
   raise notice '%',ok(r->>'complete'='false' and jsonb_array_length(coalesce(r->'reasons','[]'))>0,'DD-17 stale/missing reconciliation is incomplete with reasons');
   before:=(select count(*) from finance.budget_commands); r:=public.budget_get_fund_v1('00000000-0000-4000-8000-00000000e804',date '2026-09-23',date '2026-09-28',null,50); raise notice '%',is((select count(*) from finance.budget_commands),before,'DD-18 read replay never creates a second assignment command');
+  raise notice '%',ok((select count(*)=1 from jsonb_array_elements(r->'entries') x where x->>'id'='00000000-0000-4000-8000-00000000e817'
+    and x->>'original_refund_allocation_id'='00000000-0000-4000-8000-00000000e812')
+    and (select count(*)=1 from jsonb_array_elements(r->'entries') x where x->>'id'='00000000-0000-4000-8000-00000000e812'
+      and x->>'financial_event_id'='00000000-0000-4000-8000-00000000e81c'),
+    'fund history returns refund and financial event links populated from their source rows');
   perform set_config('request.jwt.claims',jsonb_build_object('sub','00000000-0000-4000-8000-00000000e599','role','authenticated')::text,true); perform set_config('request.jwt.claim.sub','00000000-0000-4000-8000-00000000e599',true); begin perform public.budget_get_actuals_v1(p,null,50); raise exception 'not rejected'; exception when sqlstate 'P0001' then raise notice '%',ok(sqlerrm like 'budget_forbidden:%','DD-19 foreign household member is denied'); end;
   perform set_config('request.jwt.claims',jsonb_build_object('sub',auth_uid::text,'role','authenticated')::text,true); perform set_config('request.jwt.claim.sub',auth_uid::text,true); r:=public.budget_get_review_queue_v1(null,50); raise notice '%',ok((select count(*)=1 from jsonb_array_elements(r->'items') x where x->>'kind'='allocation' and x->>'source_transaction_id'='query-review' and x->>'fund_id' is null and x->'reasons' @> '[{"code":"allocation_needs_review"}]'::jsonb),'DD-20 unresolved/null-fund item remains visible in review queue');
   r:=public.budget_get_actuals_v1(p,null,50); raise notice '%',ok((r->'entries'->0->>'signed_amount_cents') ~ '^-?[0-9]+$','DD-21 provider sign is normalized as decimal signed cents');
