@@ -190,17 +190,27 @@ end $$;
 
 create or replace function finance.budget_validate_earmark_final(p_household uuid,p_asof date,p_reconciliation uuid)
 returns void language plpgsql security definer set search_path=pg_temp as $$
-declare r record; claimed numeric; capacity bigint; balance bigint;
+declare r record; d date; claimed numeric; capacity bigint; balance bigint;
 begin
-  for r in select distinct fund_id from finance.fund_earmarks where household_id=p_household and effective_on<=p_asof loop
-    select coalesce(sum(amount_cents),0) into claimed from finance.fund_earmarks where household_id=p_household and fund_id=r.fund_id and effective_on<=p_asof;
-    select balance_cents into balance from finance.budget_fund_balances(p_household,p_asof) where fund_id=r.fund_id;
-    if claimed < 0 or claimed > greatest(coalesce(balance,0),0) then perform finance.budget_fail('budget_insufficient','earmark fund claim'); end if;
-  end loop;
-  for r in select distinct restricted_account_id from finance.fund_earmarks where household_id=p_household and effective_on<=p_asof loop
-    select coalesce(sum(amount_cents),0) into claimed from finance.fund_earmarks where household_id=p_household and restricted_account_id=r.restricted_account_id and effective_on<=p_asof;
-    capacity:=finance.budget_earmark_capacity(p_household,r.restricted_account_id,p_reconciliation);
-    if claimed < 0 or claimed > capacity then perform finance.budget_fail('budget_insufficient','earmark restricted capacity'); end if;
+  -- A backdated claim must remain valid after every later movement, allocation,
+  -- or claim correction, not only at its own effective date.
+  for d in
+    select p_asof union
+    select effective_on from finance.fund_earmarks where household_id=p_household and effective_on>p_asof
+    union select effective_on from finance.fund_movements where household_id=p_household and effective_on>p_asof
+    union select s.occurred_on from finance.budget_allocation_sets s where s.household_id=p_household and s.occurred_on>p_asof and s.status in ('current','needs_review')
+    order by 1
+  loop
+    for r in select distinct fund_id from finance.fund_earmarks where household_id=p_household and effective_on<=d loop
+      select coalesce(sum(amount_cents),0) into claimed from finance.fund_earmarks where household_id=p_household and fund_id=r.fund_id and effective_on<=d;
+      select balance_cents into balance from finance.budget_fund_balances(p_household,d) where fund_id=r.fund_id;
+      if claimed < 0 or claimed > greatest(coalesce(balance,0),0) then perform finance.budget_fail('budget_insufficient','earmark fund claim'); end if;
+    end loop;
+    for r in select distinct restricted_account_id from finance.fund_earmarks where household_id=p_household and effective_on<=d loop
+      select coalesce(sum(amount_cents),0) into claimed from finance.fund_earmarks where household_id=p_household and restricted_account_id=r.restricted_account_id and effective_on<=d;
+      capacity:=finance.budget_earmark_capacity(p_household,r.restricted_account_id,p_reconciliation);
+      if claimed < 0 or claimed > capacity then perform finance.budget_fail('budget_insufficient','earmark restricted capacity'); end if;
+    end loop;
   end loop;
 end $$;
 
@@ -280,7 +290,7 @@ alter function finance.budget_review_allocation_v1(uuid,jsonb) rename to budget_
 create or replace function public.budget_review_allocation_v1(p_command_id uuid,p_payload jsonb)
 returns jsonb language plpgsql security definer set search_path=pg_temp set timezone='UTC' as $$
 declare h uuid; actor uuid; p jsonb; replay jsonb; snap jsonb; entry uuid; current_set finance.budget_allocation_sets%rowtype;
-  new_set uuid; alloc uuid; ids jsonb:='[]'::jsonb; c jsonb; amount bigint; total bigint:=0; ord int:=0; effect text; fund uuid; v_event_id uuid; expected_current uuid; evidence jsonb; signed bigint; occurred date; old_claim finance.fund_earmarks%rowtype; claim_alloc uuid;
+  new_set uuid; alloc uuid; ids jsonb:='[]'::jsonb; c jsonb; amount bigint; total bigint:=0; ord int:=0; effect text; fund uuid; v_event_id uuid; expected_current uuid; evidence jsonb; signed bigint; occurred date; old_claim finance.fund_earmarks%rowtype; claim_alloc uuid; v_reconciliation uuid;
 begin
   -- A prior bank call in the same SQL transaction may have left an envelope.
   -- Only the current bank dispatch below is allowed to establish one.
@@ -348,13 +358,16 @@ begin
   end loop;
   if total<>signed then perform finance.budget_fail('budget_invalid','component sum'); end if;
   if jsonb_array_length(p->'earmarks')>0 then
+    select id into v_reconciliation from finance.budget_reconciliations where household_id=h and status='complete' order by as_of desc,recorded_at desc limit 1;
     for c,ord in select value,ordinality::int from jsonb_array_elements(p->'earmarks') with ordinality loop
       if ord > jsonb_array_length(ids) then perform finance.budget_fail('budget_invalid','earmark allocation link'); end if;
       c:=finance.budget_earmark_payload(c,false);
       claim_alloc:=(ids->>(ord-1))::uuid;
-      perform finance.budget_insert_earmark(h,actor,p_command_id,c,(select id from finance.budget_reconciliations where household_id=h and status='complete' order by as_of desc,recorded_at desc limit 1),occurred,jsonb_build_object('fund_movement_id',null,'allocation_id',claim_alloc::text,'financial_event_id',null,'reconciliation_id',null));
+      perform finance.budget_insert_earmark(h,actor,p_command_id,c,v_reconciliation,occurred,jsonb_build_object('fund_movement_id',null,'allocation_id',claim_alloc::text,'financial_event_id',null,'reconciliation_id',null));
     end loop;
   end if;
+  select id into v_reconciliation from finance.budget_reconciliations where household_id=h and status='complete' order by as_of desc,recorded_at desc limit 1;
+  perform finance.budget_validate_earmark_final(h,occurred,v_reconciliation);
   perform finance.budget_finish_command(p_command_id,'budget_review_allocation_v1',p,jsonb_build_object('set_id',new_set::text,'revision_number',coalesce(current_set.revision_number,0)+1,'allocation_ids',ids,'source_fingerprint',snap->>'source_fingerprint'));
   set constraints all immediate;
   return jsonb_build_object('set_id',new_set::text,'revision_number',coalesce(current_set.revision_number,0)+1,'allocation_ids',ids,'source_fingerprint',snap->>'source_fingerprint');
@@ -558,15 +571,109 @@ begin
   return r || jsonb_build_object('restricted_resources',restricted,'restricted_claims',claims);
 end $$;
 
+-- Utility ledgers are a separate source family: coverage is explicit, reviewed
+-- rows are fingerprinted against utility snapshots, and unallocated charges
+-- keep availability provisional.
+create or replace function finance.budget_utility_source_state(p_household uuid,p_asof timestamptz)
+returns jsonb language plpgsql stable security definer set search_path=pg_temp set timezone='UTC' as $$
+declare l record; s finance.budget_allocation_sets%rowtype; snap jsonb; reasons jsonb:='[]'::jsonb; cutover date;
+begin
+  cutover:=finance.budget_opening_cutover(p_household);
+  for l in select e.id,e.entry_type,e.occurred_at,e.posted_at from consumption.ledger_entries e
+    where e.household_id=p_household and e.entry_type in ('usage_charge','fee','correction')
+      and coalesce(e.occurred_at,e.posted_at) is not null
+      and coalesce(e.occurred_at,e.posted_at)<=p_asof
+      and (cutover is null or coalesce(e.occurred_at,e.posted_at)::date>=cutover)
+    order by e.id loop
+    select * into s from finance.budget_allocation_sets x where x.household_id=p_household
+      and x.utility_entry_id=l.id and x.status in ('current','needs_review') limit 1;
+    if not found then
+      reasons:=reasons||jsonb_build_array(jsonb_build_object('code','utility_unallocated','utility_entry_id',l.id::text));
+      continue;
+    end if;
+    if s.status='needs_review' then
+      reasons:=reasons||jsonb_build_array(jsonb_build_object('code','utility_allocation_needs_review','utility_entry_id',l.id::text,'set_id',s.id::text));
+    end if;
+    begin snap:=finance.budget_utility_snapshot(p_household,l.id);
+    exception when others then snap:=null; end;
+    if snap is null or not coalesce((snap->>'complete')::boolean,false)
+       or snap->>'source_fingerprint' is distinct from s.source_fingerprint then
+      reasons:=reasons||jsonb_build_array(jsonb_build_object('code','utility_source_drift','utility_entry_id',l.id::text,'set_id',s.id::text));
+    end if;
+  end loop;
+  return jsonb_build_object('complete',jsonb_array_length(reasons)=0,'reasons',reasons);
+end $$;
+
+-- The Stage3 source loop assumes every allocation has a bank transaction id.
+-- Remove only its null-transaction artifacts for utility sets, then apply the
+-- explicit utility source checks above.
+alter function finance.budget_source_exposure(uuid,jsonb,timestamptz) rename to budget_source_exposure_stage3;
+create or replace function finance.budget_source_exposure(p_household uuid,p_coverage jsonb,p_asof timestamptz)
+returns jsonb language plpgsql stable security definer set search_path=pg_temp set timezone='UTC' as $$
+declare r jsonb; u jsonb; utility_ids uuid[]:='{}'; removed_delta numeric:=0; reasons jsonb; adjustments jsonb;
+begin
+  r:=finance.budget_source_exposure_stage3(p_household,p_coverage,p_asof);
+  select coalesce(array_agg(s.id),'{}') into utility_ids from finance.budget_allocation_sets s
+    where s.household_id=p_household and s.utility_entry_id is not null and s.status in ('current','needs_review');
+  select coalesce(sum((x->>'resource_delta_cents')::numeric),0) into removed_delta
+    from jsonb_array_elements(coalesce(r->'adjustments','[]'::jsonb)) x
+    where nullif(x->>'set_id','')::uuid=any(utility_ids);
+  select coalesce(jsonb_agg(x),'[]'::jsonb) into adjustments
+    from jsonb_array_elements(coalesce(r->'adjustments','[]'::jsonb)) x
+    where nullif(x->>'set_id','')::uuid is null or not (nullif(x->>'set_id','')::uuid=any(utility_ids));
+  select coalesce(jsonb_agg(x),'[]'::jsonb) into reasons
+    from jsonb_array_elements(coalesce(r->'reasons','[]'::jsonb)) x
+    where not (x->>'code'='source_allocation_stale' and x->>'transaction_id' is null);
+  u:=finance.budget_utility_source_state(p_household,p_asof);
+  reasons:=reasons||coalesce(u->'reasons','[]'::jsonb);
+  return r||jsonb_build_object('complete',jsonb_array_length(reasons)=0,'reasons',reasons,
+    'adjustments',adjustments,'resource_delta_cents',case when r->>'resource_delta_cents' is null then null
+      else finance.budget_checked_bigint((r->>'resource_delta_cents')::numeric-removed_delta)::text end,
+    'provisional_known',coalesce((r->>'provisional_known')::boolean,false) and coalesce((u->>'complete')::boolean,false));
+end $$;
+
+-- A verified utility statement/evidence set can satisfy coverage.  Existing
+-- devices require that proof; households with no utility devices may opt out.
+alter function finance.budget_check_coverage_base(uuid,jsonb,timestamptz) rename to budget_check_coverage_base_stage3;
+create or replace function finance.budget_check_coverage_base(p_household uuid,p_coverage jsonb,p_asof timestamptz)
+returns jsonb language plpgsql stable security definer set search_path=pg_temp set timezone='UTC' as $$
+declare r jsonb; reasons jsonb; status text; evidence text;
+begin
+  r:=finance.budget_check_coverage_base_stage3(p_household,p_coverage,p_asof);
+  status:=p_coverage->'utility_coverage'->>'status';
+  evidence:=nullif(btrim(p_coverage->'utility_coverage'->>'evidence'),'');
+  select coalesce(jsonb_agg(x),'[]'::jsonb) into reasons from jsonb_array_elements(coalesce(r->'reasons','[]'::jsonb)) x
+    where not (x->>'code'='utilities_unverified' and status='verified' and evidence is not null);
+  if status='not_required' and evidence is not null and exists(select 1 from consumption.devices d where d.household_id=p_household) then
+    reasons:=reasons||jsonb_build_array(jsonb_build_object('code','utilities_unverified'));
+  end if;
+  if status='verified' and evidence is null and not (reasons @> '[{"code":"utilities_unverified"}]'::jsonb) then
+    reasons:=reasons||jsonb_build_array(jsonb_build_object('code','utilities_unverified'));
+  end if;
+  return r||jsonb_build_object('status',case when jsonb_array_length(reasons)=0 then 'complete' else 'incomplete' end,'reasons',reasons);
+end $$;
+
 alter function public.budget_get_overview_v1(date,timestamptz) set schema finance;
 alter function finance.budget_get_overview_v1(date,timestamptz) rename to budget_get_overview_v1_stage3;
 create or replace function public.budget_get_overview_v1(p_cycle_start date,p_as_of timestamptz default now())
 returns jsonb language plpgsql stable security definer set search_path=pg_temp set timezone='UTC' as $$
-declare v jsonb; h uuid; f jsonb;
+declare v jsonb; h uuid; f jsonb; net_liquid numeric; net_claims numeric:=0; positive_claims numeric:=0; negative_claims numeric:=0; deficit numeric;
 begin
   v:=finance.budget_get_overview_v1_stage3(p_cycle_start,p_as_of); h:=finance.budget_reader_household();
   select coalesce(jsonb_agg(x || jsonb_build_object('restricted_cents',b.restricted_cents::text,'liquid_cents',greatest(b.balance_cents-b.restricted_cents,0)::text) order by ord),'[]'::jsonb) into f from jsonb_array_elements(coalesce(v->'funds','[]'::jsonb)) with ordinality q(x,ord) left join finance.budget_fund_balances(h,(p_as_of at time zone 'Africa/Johannesburg')::date) b on b.fund_id=(x->>'fund_id')::uuid;
-  return v || jsonb_build_object('funds',f,'restricted_resources',finance.budget_resources(h,p_as_of)->'restricted_resources','restricted_claims',finance.budget_resources(h,p_as_of)->'restricted_claims');
+  select coalesce(sum(balance_cents::numeric-restricted_cents::numeric),0),
+    coalesce(sum(greatest(balance_cents::numeric-restricted_cents::numeric,0)),0),
+    coalesce(sum(greatest(-balance_cents::numeric,0)),0)
+    into net_claims,positive_claims,negative_claims
+    from finance.budget_fund_balances(h,(p_as_of at time zone 'Africa/Johannesburg')::date);
+  net_liquid:=nullif(v->>'net_liquid_cents','')::numeric;
+  deficit:=case when net_liquid is null then null else greatest(positive_claims-net_liquid,negative_claims,0) end;
+  return v || jsonb_build_object('funds',f,'restricted_resources',finance.budget_resources(h,p_as_of)->'restricted_resources','restricted_claims',finance.budget_resources(h,p_as_of)->'restricted_claims',
+    'net_claims_cents',finance.budget_checked_bigint(net_claims)::text,
+    'positive_claims_cents',finance.budget_checked_bigint(positive_claims)::text,
+    'deficit_cents',case when deficit is null then null else finance.budget_checked_bigint(deficit)::text end,
+    'unassigned_cents',case when net_liquid is null or coalesce((v->>'complete')::boolean,false) is not true then null
+      else finance.budget_checked_bigint(net_liquid-net_claims)::text end);
 end $$;
 
 alter function public.budget_get_fund_v1(uuid,date,date,text,integer) set schema finance;
@@ -576,8 +683,8 @@ returns jsonb language plpgsql stable security definer set search_path=pg_temp s
 declare v jsonb; h uuid; b record;
 begin v:=finance.budget_get_fund_v1_stage3(p_fund_id,p_from,p_to,p_cursor,p_limit); h:=finance.budget_reader_household(); select * into b from finance.budget_fund_balances(h,p_to-1) where fund_id=p_fund_id; return v || jsonb_build_object('restricted_cents',coalesce(b.restricted_cents,0)::text,'liquid_cents',greatest(coalesce(b.balance_cents,0)-coalesce(b.restricted_cents,0),0)::text); end $$;
 
-revoke all on function finance.budget_utility_snapshot(uuid,uuid),finance.budget_earmark_payload(jsonb,boolean),finance.budget_earmark_capacity(uuid,uuid,uuid),finance.budget_validate_earmark_final(uuid,date,uuid),finance.budget_insert_earmark(uuid,uuid,uuid,jsonb,uuid,date,jsonb),finance.budget_review_allocation_bank_v1(uuid,jsonb) from public,anon,authenticated,service_role;
-revoke all on function finance.budget_reconciliation_state_stage3(uuid,uuid,timestamptz),finance.budget_reconciliation_state(uuid,uuid,timestamptz) from public,anon,authenticated,service_role;
+revoke all on function finance.budget_utility_snapshot(uuid,uuid),finance.budget_utility_source_state(uuid,timestamptz),finance.budget_earmark_payload(jsonb,boolean),finance.budget_earmark_capacity(uuid,uuid,uuid),finance.budget_validate_earmark_final(uuid,date,uuid),finance.budget_insert_earmark(uuid,uuid,uuid,jsonb,uuid,date,jsonb),finance.budget_review_allocation_bank_v1(uuid,jsonb),finance.budget_source_exposure_stage3(uuid,jsonb,timestamptz),finance.budget_check_coverage_base_stage3(uuid,jsonb,timestamptz) from public,anon,authenticated,service_role;
+revoke all on function finance.budget_reconciliation_state_stage3(uuid,uuid,timestamptz),finance.budget_reconciliation_state(uuid,uuid,timestamptz),finance.budget_source_exposure(uuid,jsonb,timestamptz),finance.budget_check_coverage_base(uuid,jsonb,timestamptz) from public,anon,authenticated,service_role;
 revoke all on function finance.budget_resources_stage3(uuid,timestamptz),finance.budget_resources(uuid,timestamptz),finance.budget_get_overview_v1_stage3(date,timestamptz),finance.budget_get_fund_v1_stage3(uuid,date,date,text,integer) from public,anon,authenticated,service_role;
 revoke all on function public.budget_change_earmark_v1(uuid,jsonb),public.budget_review_allocation_v1(uuid,jsonb) from public,anon,service_role;
 revoke all on function public.budget_get_overview_v1(date,timestamptz),public.budget_get_fund_v1(uuid,date,date,text,integer) from public,anon,service_role;

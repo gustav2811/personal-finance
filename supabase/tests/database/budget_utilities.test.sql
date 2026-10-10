@@ -160,11 +160,13 @@ select throws_ok($q$select public.budget_review_allocation_v1('00000000-0000-400
   'P0001','budget_stale: source fingerprint','stale utility fingerprint rejects');
 select throws_ok(format($q$select public.budget_review_allocation_v1('00000000-0000-4000-8000-00000000f4b4',jsonb_build_object('utility_entry_id','00000000-0000-4000-8000-00000000f482','expected_source_fingerprint',%L,'components',jsonb_build_array(jsonb_build_object('amount_cents','-3494','beneficiary_scope','shared','effect_kind','consumption','fund_id','00000000-0000-4000-8000-00000000f441')),'evidence',jsonb_build_object('utility_decision_reference',' ')))$q$,current_setting('test.utility_fp')),
   'P0001','budget_invalid: empty utility_decision_reference','utility review rejects empty decision reference');
+select throws_ok(format($q$select public.budget_review_allocation_v1('00000000-0000-4000-8000-00000000f4b6',jsonb_build_object('utility_entry_id','00000000-0000-4000-8000-00000000f482','expected_source_fingerprint',%L,'components',jsonb_build_array(jsonb_build_object('amount_cents','-3494','beneficiary_scope','shared','effect_kind','consumption','fund_id','00000000-0000-4000-8000-00000000f441')),'earmarks',jsonb_build_array(jsonb_build_object('fund_id','00000000-0000-4000-8000-00000000f441','restricted_account_id','00000000-0000-4000-8000-00000000f431','amount_cents','1','reason','unsupported claim')),'evidence',jsonb_build_object('utility_decision_reference','claim-capacity-fixture')))$q$,current_setting('test.utility_fp')),
+  'P0001','budget_insufficient: earmark fund claim','utility allocation cannot create an earmark beyond its resulting fund balance');
 
 -- Failed utility work is atomic: validation errors leave neither a set nor a
 -- completed command receipt behind.
-select is((select count(*) from finance.budget_allocation_sets where id in ('00000000-0000-4000-8000-00000000f4b1','00000000-0000-4000-8000-00000000f4b2','00000000-0000-4000-8000-00000000f4b3','00000000-0000-4000-8000-00000000f4b4','00000000-0000-4000-8000-00000000f4b5')),0::bigint,'rejected utility sources create no allocation set');
-select is((select count(*) from finance.budget_commands where command_id in ('00000000-0000-4000-8000-00000000f4b1','00000000-0000-4000-8000-00000000f4b2','00000000-0000-4000-8000-00000000f4b3','00000000-0000-4000-8000-00000000f4b4','00000000-0000-4000-8000-00000000f4b5')),0::bigint,'rejected utility sources create no command receipt');
+select is((select count(*) from finance.budget_allocation_sets where id in ('00000000-0000-4000-8000-00000000f4b1','00000000-0000-4000-8000-00000000f4b2','00000000-0000-4000-8000-00000000f4b3','00000000-0000-4000-8000-00000000f4b4','00000000-0000-4000-8000-00000000f4b5','00000000-0000-4000-8000-00000000f4b6')),0::bigint,'rejected utility sources create no allocation set');
+select is((select count(*) from finance.budget_commands where command_id in ('00000000-0000-4000-8000-00000000f4b1','00000000-0000-4000-8000-00000000f4b2','00000000-0000-4000-8000-00000000f4b3','00000000-0000-4000-8000-00000000f4b4','00000000-0000-4000-8000-00000000f4b5','00000000-0000-4000-8000-00000000f4b6')),0::bigint,'rejected utility sources create no command receipt');
 
 reset role;
 do $utility_success$
@@ -233,5 +235,7 @@ select is((select count(*) from finance.budget_commands where command_id in ('00
   'successful utility allocations retain exactly one receipt each');
 select is((select count(*) from finance.budget_allocation_sets where utility_entry_id in ('00000000-0000-4000-8000-00000000f481','00000000-0000-4000-8000-00000000f482','00000000-0000-4000-8000-00000000f483') and status in ('current','needs_review')),3::bigint,
   'successful utility sources retain one live allocation lineage each');
+select ok(not (finance.budget_source_exposure('00000000-0000-4000-8000-00000000f401','{"accounts":[]}'::jsonb,statement_timestamp())->'reasons' @> '[{"code":"source_allocation_stale"}]'::jsonb),
+  'reviewed utility allocations do not enter the bank transaction stale-source path');
 select * from finish();
 rollback;
