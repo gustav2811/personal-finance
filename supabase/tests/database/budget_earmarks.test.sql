@@ -3,7 +3,7 @@
 -- This suite deliberately uses private synthetic rows for the source state and
 -- invokes every money-changing operation through the member-facing RPCs.
 begin;
-select plan(28);
+select plan(29);
 set constraints all deferred;
 
 do $fixture$
@@ -83,6 +83,16 @@ begin
   -- appended before the command marks the allocation set complete.
   insert into finance.budget_commands(household_id,command_id,kind,payload,actor_id,result)
     values(h,c_alloc,'fixture','{}',m,'{}');
+  -- Known future spending leaves the later home claim valid on Oct 1 but
+  -- reduces the fund before the next check; a Sep 30 backdated claim must see it.
+  insert into public.transactions(id,account_id,date,occurred_on,details,household_id,source_system,source_is_pending,source_is_archived,amount,currency_code,raw_payload_hash)
+    values('earmark-future-home-spend',a_liquid,date '2026-10-01',date '2026-10-01','{}',h,'test',false,false,-2100,'ZAR','earmark-future-home-spend');
+  insert into finance.budget_allocation_sets(id,household_id,transaction_id,source_snapshot,source_fingerprint,source_amount_cents,occurred_on,revision_number,status,actor_id,command_id)
+    values('00000000-0000-4000-8000-00000000e43c',h,'earmark-future-home-spend',finance.budget_source_snapshot(h,'earmark-future-home-spend'),finance.budget_source_snapshot(h,'earmark-future-home-spend')->>'source_fingerprint',-210000,date '2026-10-01',1,'current',m,'00000000-0000-4000-8000-00000000e43d');
+  insert into finance.budget_allocations(id,household_id,set_id,ordinal,amount_cents,fund_id,beneficiary_scope,effect_kind)
+    values('00000000-0000-4000-8000-00000000e43e',h,'00000000-0000-4000-8000-00000000e43c',0,-210000,f_home,'shared','consumption');
+  insert into finance.budget_commands(household_id,command_id,kind,payload,actor_id,result)
+    values(h,'00000000-0000-4000-8000-00000000e43d','fixture','{}',m,'{}');
   coverage := jsonb_build_object('schema_version',1,'evidence','verified fixture',
     'utility_coverage',jsonb_build_object('status','not_required','evidence','not in this suite'),
     'accounts',jsonb_build_array(
@@ -122,6 +132,9 @@ declare
   before_earmarks bigint;
   before_commands bigint;
   movement jsonb;
+  overview jsonb;
+  expected_claims numeric;
+  expected_positive numeric;
   movement_id uuid;
   restricted bigint;
   liquid bigint;
@@ -163,7 +176,14 @@ begin
   raise notice '%', is(restricted,433333::bigint,'emergency fund reports its ordinary and mortgage restricted claims');
   select balance_cents-restricted_cents into liquid from finance.budget_fund_balances(h,date '2026-10-01') where fund_id='00000000-0000-4000-8000-00000000e406';
   raise notice '%', is(liquid,66667::bigint,'fund balance exposes liquid portion after ordinary and mortgage claims');
+  select coalesce(sum(balance_cents::numeric-restricted_cents::numeric),0),
+    coalesce(sum(greatest(balance_cents::numeric-restricted_cents::numeric,0)),0)
+    into expected_claims,expected_positive from finance.budget_fund_balances(h,date '2026-10-01');
   execute 'set local role authenticated';
+  overview:=public.budget_get_overview_v1(date '2026-09-23','2026-10-01 10:00+00');
+  raise notice '%',ok((overview->>'net_claims_cents')::numeric=expected_claims
+    and (overview->>'positive_claims_cents')::numeric=expected_positive,
+    'overview household claim totals use liquid fund portions');
 
   -- Claims cannot exceed a fund's nonnegative balance, and negative funds do
   -- not become a source of restricted capacity.
@@ -211,13 +231,13 @@ begin
     and (select count(*) from finance.budget_commands where household_id=h)=before_commands,
     'failed linked claim rolls back movement, earmark, and receipt');
 
-  -- An earlier-effective claim is valid even when a later-effective claim is
-  -- already known; capacity is evaluated at the claim's effective date.
+  -- A backdated claim must also fit the known later fund balance.
   failed := false;
   begin
     perform public.budget_change_earmark_v1('00000000-0000-4000-8000-00000000e42c',jsonb_build_object('fund_id','00000000-0000-4000-8000-00000000e408','restricted_account_id','00000000-0000-4000-8000-00000000e405','amount_cents','200000','effective_on','2026-09-30','reason','earlier effective reserve','expected_reconciliation_id',r::text,'expected_reconciliation_fingerprint',fp,'link',jsonb_build_object('reconciliation_id',r::text)));
   exception when others then failed := true; end;
-  raise notice '%', ok(not failed,'earlier effective claim is not blocked by later claim capacity');
+  raise notice '%', ok(failed and not exists(select 1 from finance.budget_commands where command_id='00000000-0000-4000-8000-00000000e42c'),
+    'backdated claim cannot evade a later fund outflow');
 
   -- Correction reverses the original linked claim and appends replacement
   -- claim lineage in the same command.
