@@ -24,7 +24,8 @@ describe("projectCashNeed", () => {
     const bond = view.needs.find((need) => need.id === "bond")
     assert.equal(view.nextIncome, "2026-10-25")
     assert.equal(paying?.shortfall, "R200")
-    assert.equal(paying?.sentence.includes("short"), true)
+    assert.match(paying?.sentence ?? "", /Cara needs R200 before Thursday 15 Oct/)
+    assert.equal(paying?.sentence.includes("900"), false)
     assert.equal(bond?.shortfall, null)
     assert.match(bond?.sentence ?? "", /Not the account that pays the bill/)
     assert.equal(JSON.stringify(paying).includes("900000"), false)
@@ -40,6 +41,7 @@ describe("projectCashNeed", () => {
     assert.equal(view.incomeKnown, false)
     assert.equal(view.needs[0]?.shortfall, null)
     assert.match(view.needs[0]?.sentence ?? "", /income date is not known/)
+    assert.equal(view.needs[0]?.sentence.includes("can cover"), false)
   })
 
   it("does not say the paying account can cover a payment that has no account", () => {

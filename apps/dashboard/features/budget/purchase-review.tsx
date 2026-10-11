@@ -35,6 +35,7 @@ export function PurchaseReview({
   categories,
   drifted,
   fingerprint,
+  fundId: suggestedFundId = null,
   funds,
   members,
   onSaved,
@@ -47,6 +48,7 @@ export function PurchaseReview({
   categories: CategoryOption[]
   drifted: boolean
   fingerprint: string
+  fundId?: string | null
   funds: ReviewFund[]
   members: MemberRef[]
   onSaved: () => Promise<void>
@@ -58,9 +60,10 @@ export function PurchaseReview({
   const [mixed, setMixed] = useState(false)
   const [mode, setMode] = useState<"purchase" | "transfer" | "refund" | "debt">("purchase")
   const [whose, setWhose] = useState<WhoseExpense | null>(null)
-  const [fundId, setFundId] = useState<string | null>(null)
+  const [fundId, setFundId] = useState<string | null>(
+    suggestedFundId && funds.some((fund) => fund.id === suggestedFundId) ? suggestedFundId : null,
+  )
   const [categoryId, setCategoryId] = useState<string | null>(null)
-  const [refundAllocationId, setRefundAllocationId] = useState("")
   const [openingRefundReason, setOpeningRefundReason] = useState("")
   const [debtKind, setDebtKind] = useState<"required_debt_payment" | "extra_debt_payment">("required_debt_payment")
   const [splitReason, setSplitReason] = useState("")
@@ -145,7 +148,10 @@ export function PurchaseReview({
       return
     }
     if (mode === "refund") {
-      if (!fundId) return
+      if (!fundId || openingRefundReason.trim().length === 0) {
+        setError(copy.refundNeedsLink)
+        return
+      }
       void save([
         {
           amountCents,
@@ -154,8 +160,7 @@ export function PurchaseReview({
           effectKind: "refund",
           fundId,
           categoryId,
-          originalRefundAllocationId: refundAllocationId.trim() || undefined,
-          openingRefundReason: openingRefundReason.trim() || undefined,
+          openingRefundReason: openingRefundReason.trim(),
         },
       ])
       return
@@ -277,10 +282,7 @@ export function PurchaseReview({
           )}
           <CategorySelect categories={categories} categoryId={categoryId} onChange={setCategoryId} />
           {mode === "refund" ? (
-            <>
-              <Input aria-label="Original allocation" onChange={(event) => setRefundAllocationId(event.target.value)} placeholder="Original allocation" value={refundAllocationId} />
-              <Input aria-label={copy.refundNeedsLink} onChange={(event) => setOpeningRefundReason(event.target.value)} placeholder="Opening refund reason" value={openingRefundReason} />
-            </>
+            <Input aria-label="What is this refund for?" onChange={(event) => setOpeningRefundReason(event.target.value)} placeholder="What is this refund for?" value={openingRefundReason} />
           ) : null}
           {mode === "debt" ? (
             <ToggleGroup aria-label={copy.commitments} onValueChange={(next) => { if (next === "required_debt_payment" || next === "extra_debt_payment") setDebtKind(next) }} size="sm" type="single" value={debtKind} variant="outline">
@@ -290,9 +292,9 @@ export function PurchaseReview({
           ) : null}
           {utilityEntryId ? (
             <Input
-              aria-label="Utility decision reference"
+              aria-label="What you decided about this utility charge"
               onChange={(event) => setUtilityDecision(event.target.value)}
-              placeholder="Utility decision reference"
+              placeholder="What you decided"
               value={utilityDecision}
             />
           ) : null}

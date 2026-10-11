@@ -1,9 +1,9 @@
 export const copy = {
   pageTitle: "Budget",
-  pageDescription: "What is reserved for each purpose, who it was for, and who paid.",
-  needsReconciliation: "Needs reconciliation",
+  pageDescription: "What is still spendable, who needs cash, and what we are agreeing to.",
+  needsReconciliation: "We can't say yet",
   needsReconciliationDetail:
-    "A trustworthy spending total is withheld until the missing facts are reconciled.",
+    "A trustworthy spending total waits until the missing facts are agreed.",
   availableByPurpose: "Available by purpose",
   availableByPurposeDetail: "Each purpose stands alone. Do not add it to unassigned cash.",
   seeEachPurpose: "Each row below.",
@@ -70,14 +70,40 @@ export const copy = {
   actualPayer: "Paid by",
   expectedPayment: "Expected payment",
   rollover: "Rollover",
-  reconcile: "Reconcile",
+  reconcile: "Opening balances",
+  spendQuestion: "What can we still spend?",
+  cashQuestion: "Who needs money?",
+  attentionQuestion: "What needs a decision?",
+  agreementQuestion: "What are we agreeing to?",
+  reviewNextCycle: "Review next cycle",
+  decide: "Decide",
+  agreeOpening: "Agree opening balances",
+  balancesMayBeStale: "Balances may be out of date.",
+  saved: "Saved.",
+  accountSetUp: "Set up.",
+  accountNotSetUp: "Not set up yet.",
+  publishAgreement: "Publish this agreement",
+  whatChanges: "What changes",
+  nothingWouldChange: "Nothing would change yet.",
+  cashInEachAccount: "Cash in each account",
+  moreDecisions: "There are more on the decision list.",
+  moveSavedMoney: "Move money already saved",
+  moveSavedDetail: "Tick this only if money already saved should move as well. Publishing does not do that on its own.",
+  nextCycleKeeps: "Next cycle keeps this agreement until you publish a change.",
+  contributionDoesNotMove: "Changing a contribution does not move money already saved.",
+  theseChangeAnswers: "These change what we can spend or who can pay.",
+  nothingToDecide: "Nothing needs a decision before those answers.",
+  decisionsUnread: "Decisions could not be read.",
+  notInPayingAccount: "Money in a notice deposit or the mortgage is not in the account that pays.",
+  stillSpendUnknown: "We can't say what is still spendable.",
+  whoNeedsUnknown: "We can't say who needs money in their account.",
   whoPaid: "Who paid",
   notPersonalOverspending: "Who paid is not personal overspending.",
   backing: "Not the account that pays the bill.",
   expectedPayments: "Expected payments",
   alreadyApproved: "Already approved. Do not ask again.",
   mixedNeedsSplit: "A mixed purchase needs a split. One consumption line would be the wrong economics.",
-  driftedNeedsSplit: "This source changed. Do not replace it with one consumption line.",
+  driftedNeedsSplit: "This purchase changed after you reviewed it. Do not replace it with one line.",
   refundNeedsLink: "A refund has to name the original purpose.",
   increasedPlan: "We increased the plan.",
   decreasedPlan: "We decreased the plan.",
@@ -115,19 +141,19 @@ export function personalExpense(beneficiary: string, payer: string | null): stri
 export function reasonSentence(code: string): string {
   switch (code) {
     case "cutover_missing":
-      return "Opening balances have not been reconciled."
+      return "Opening balances have not been agreed."
     case "plan_missing":
-      return "No published plan covers this cycle."
+      return "There is no agreed plan for this cycle."
     case "review_items_present":
       return "Some purchases still need a decision."
     case "allocation_needs_review":
-      return "A reviewed purchase changed and needs another look."
+      return "A purchase needs another look."
     case "source_fingerprint_drift":
-      return "A source changed after it was reviewed."
+      return "A purchase changed after you reviewed it."
     case "unallocated_outflow":
       return "Money left an account without a purpose."
     case "utilities_unverified":
-      return "Utility charges are not confirmed."
+      return "A utility charge is not confirmed."
     case "resource_balance_unknown":
       return "An account balance is missing."
     case "income_assumption_unknown":

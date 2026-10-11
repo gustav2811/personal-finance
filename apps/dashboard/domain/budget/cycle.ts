@@ -53,6 +53,18 @@ export function currentCycle(now = new Date()): { start: string; endExclusive: s
   return cycleContaining(localDateKey(now.toISOString()))
 }
 
+export function formatSpokenDate(isoDate: string): string {
+  const [year, month, day] = assertIsoDate(isoDate).split("-").map(Number) as [number, number, number]
+  return new Intl.DateTimeFormat("en-ZA", {
+    weekday: "long",
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  })
+    .format(new Date(Date.UTC(year, month - 1, day)))
+    .replace(/,/g, "")
+}
+
 export function formatDayMonth(isoDate: string): string {
   const [year, month, day] = assertIsoDate(isoDate).split("-").map(Number) as [number, number, number]
   return new Intl.DateTimeFormat("en-ZA", {

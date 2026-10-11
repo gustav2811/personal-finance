@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
-import { copy, sharedExpensePaidBy } from "./copy"
+import { copy, reasonSentence, sharedExpensePaidBy } from "./copy"
 import { projectBudget } from "./overview"
 
 const CARA = "00000000-0000-0000-0000-000000000011"
@@ -85,7 +85,7 @@ describe("projectBudget", () => {
     assert.equal(view.unassigned.withheld, true)
     assert.equal(view.unassigned.amount, null)
     assert.equal(view.canAssign, false)
-    assert.equal(view.reasons.includes("Opening balances have not been reconciled."), true)
+    assert.equal(view.reasons.includes(reasonSentence("cutover_missing")), true)
     assert.equal(JSON.stringify(view).includes("800000"), false)
     assert.equal(JSON.stringify(view).includes("R8 000"), false)
     assert.equal(view.purposes[0]?.available, copy.needsReconciliation)

@@ -29,6 +29,7 @@ import { copy } from "@/domain/budget/copy"
 import { readCutover, type CutoverAccount, type CutoverWorkspace } from "@/domain/budget/cutover"
 import { memberName } from "@/domain/budget/members"
 import { randsToCents } from "@/domain/budget/move"
+import { formatCents } from "@/domain/budget/money"
 import { readCutover as loadCutover, readDevices, writeBudgetRpc } from "./rpc"
 
 function message(caught: unknown): string {
@@ -79,7 +80,7 @@ export function CutoverView() {
       const result = await writeBudgetRpc(held.name, held.id, held.payload)
       heldRef.current = null
       setOutstanding(false)
-      setNotice(JSON.stringify(result))
+      setNotice(copy.saved)
       setReloadKey((key) => key + 1)
     } catch (caught: unknown) {
       const uncertain = commandFailureIsUncertain(commandFailureText(caught))
@@ -121,7 +122,7 @@ const EVIDENCE_GATES = [
   "Included ownership, currency, and sign convention are confirmed.",
   "Card debt is counted once.",
   "Notice, mortgage, and wallet reserves come from a statement, not the sheet.",
-  "Utility coverage is an explicit choice.",
+  "Say which utility charges count.",
 ] as const
 
 function CutoverBody({
@@ -210,7 +211,7 @@ function AccountForm({
     >
       <p>{account.name}</p>
       <p className="type-caption text-muted-foreground">
-        {settings ? `Fingerprint ${settings.settingsFingerprint}` : "No settings yet. Leave the expected fingerprint empty."}
+        {settings ? copy.accountSetUp : copy.accountNotSetUp}
       </p>
       <Select onValueChange={(next) => { if (next === "shared" || next === "member") setOwnerScope(next) }} value={ownerScope}>
         <SelectTrigger aria-label={copy.beneficiary}><SelectValue /></SelectTrigger>
@@ -228,13 +229,13 @@ function AccountForm({
         </Select>
       ) : null}
       <Select onValueChange={(next) => { if (next === "liquid" || next === "restricted" || next === "mortgage" || next === "card" || next === "tracking_only") setResourceClass(next) }} value={resourceClass}>
-        <SelectTrigger aria-label="Resource class"><SelectValue /></SelectTrigger>
+        <SelectTrigger aria-label="Where this money sits"><SelectValue /></SelectTrigger>
         <SelectContent>
-          <SelectItem value="liquid">Liquid</SelectItem>
-          <SelectItem value="restricted">Notice</SelectItem>
+          <SelectItem value="liquid">Can pay a bill</SelectItem>
+          <SelectItem value="restricted">Notice deposit</SelectItem>
           <SelectItem value="mortgage">Mortgage</SelectItem>
           <SelectItem value="card">Card</SelectItem>
-          <SelectItem value="tracking_only">Tracking only</SelectItem>
+          <SelectItem value="tracking_only">Track only</SelectItem>
         </SelectContent>
       </Select>
       <label className="flex items-center gap-2 text-sm">
@@ -243,21 +244,21 @@ function AccountForm({
       </label>
       {included ? null : <Input aria-label="Exclusion reason" onChange={(event) => setExclusionReason(event.target.value)} value={exclusionReason} />}
       <Input aria-label="Freshness hours" onChange={(event) => setFreshness(event.target.value)} value={freshness} />
-      <Input aria-label="Settlement account" onChange={(event) => setSettlement(event.target.value)} placeholder="Settlement account id" value={settlement} />
+      <Input aria-label="Card settles into" onChange={(event) => setSettlement(event.target.value)} placeholder="Account that settles the card" value={settlement} />
       <Select onValueChange={(next) => { if (next === "outflow_negative" || next === "outflow_positive" || next === "unknown") setSign(next) }} value={sign}>
         <SelectTrigger aria-label="Sign"><SelectValue /></SelectTrigger>
         <SelectContent>
-          <SelectItem value="outflow_negative">Outflow negative</SelectItem>
-          <SelectItem value="outflow_positive">Outflow positive</SelectItem>
+          <SelectItem value="outflow_negative">Money out is negative</SelectItem>
+          <SelectItem value="outflow_positive">Money out is positive</SelectItem>
           <SelectItem value="unknown">Unknown</SelectItem>
         </SelectContent>
       </Select>
-      {sign === "unknown" ? null : <Input aria-label="Sign evidence" onChange={(event) => setSignEvidence(event.target.value)} value={signEvidence} />}
+      {sign === "unknown" ? null : <Input aria-label="Note" onChange={(event) => setSignEvidence(event.target.value)} value={signEvidence} />}
       <Select onValueChange={(next) => { if (next) setDeviceId(next) }} value={deviceId || undefined}>
         <SelectTrigger aria-label="Wallet device"><SelectValue placeholder="Wallet device" /></SelectTrigger>
         <SelectContent>
           {deviceId && !devices.some((device) => device.id === deviceId) ? (
-            <SelectItem value={deviceId}>{deviceId}</SelectItem>
+            <SelectItem value={deviceId}>Saved wallet</SelectItem>
           ) : null}
           {devices.map((device) => <SelectItem key={device.id} value={device.id}>{device.name}</SelectItem>)}
         </SelectContent>
@@ -329,8 +330,8 @@ function ReconciliationForm({
       }}
     >
       <Textarea aria-label="Notes" onChange={(event) => setNotes(event.target.value)} value={notes} />
-      <Textarea aria-label="Evidence" onChange={(event) => setEvidence(event.target.value)} value={evidence} />
-      <Input aria-label="Opening cutoff" onChange={(event) => setCutoff(event.target.value)} placeholder="2026-09-23" value={cutoff} />
+      <Textarea aria-label="Note" onChange={(event) => setEvidence(event.target.value)} value={evidence} />
+      <Input aria-label="Opening date" onChange={(event) => setCutoff(event.target.value)} placeholder="2026-09-23" value={cutoff} />
       <ul className="space-y-1">
         {EVIDENCE_GATES.map((gate, index) => (
           <li key={gate}>
@@ -345,25 +346,25 @@ function ReconciliationForm({
           </li>
         ))}
       </ul>
-      {cutoff && !gates.every(Boolean) ? <p className="type-caption text-muted-foreground">Opening cutoff stays unset until every evidence gate is confirmed.</p> : null}
+      {cutoff && !gates.every(Boolean) ? <p className="type-caption text-muted-foreground">The opening date stays unset until each of these is confirmed.</p> : null}
       <Select onValueChange={(next) => { if (next === "not_required" || next === "verified" || next === "unknown") setUtilityStatus(next) }} value={utilityStatus}>
-        <SelectTrigger aria-label="Utility coverage"><SelectValue /></SelectTrigger>
+        <SelectTrigger aria-label="Which utilities count"><SelectValue /></SelectTrigger>
         <SelectContent>
           <SelectItem value="unknown">Utilities unknown</SelectItem>
           <SelectItem value="not_required">Utilities not required</SelectItem>
           <SelectItem value="verified">Utilities verified</SelectItem>
         </SelectContent>
       </Select>
-      <Input aria-label="Utility evidence" onChange={(event) => setUtilityEvidence(event.target.value)} value={utilityEvidence} />
+      <Input aria-label="Note about utilities" onChange={(event) => setUtilityEvidence(event.target.value)} value={utilityEvidence} />
       {accounts.map((account) => {
         const current = row(account)
         return (
           <div className="space-y-2 rounded-lg border p-3" key={account.id}>
             <p>{account.name}</p>
             <p className="type-caption text-muted-foreground">
-              {account.latestSnapshot ? `Snapshot ${account.latestSnapshot.date} · ${account.latestSnapshot.amountCents ?? copy.withheld}` : "No snapshot. Included coverage will stay incomplete."}
+              {account.latestSnapshot ? `Balance on ${account.latestSnapshot.date}: ${formatCents(account.latestSnapshot.amountCents)}` : "No balance yet. This account cannot be included until there is one."}
             </p>
-            <Input aria-label={`${account.name} evidence`} onChange={(event) => setRows({ ...rows, [account.id]: { ...current, evidence: event.target.value } })} value={current.evidence} />
+            <Input aria-label={`${account.name} note`} onChange={(event) => setRows({ ...rows, [account.id]: { ...current, evidence: event.target.value } })} value={current.evidence} />
             <Input aria-label={`${account.name} activity`} onChange={(event) => setRows({ ...rows, [account.id]: { ...current, activityThrough: event.target.value } })} placeholder="Activity through" value={current.activityThrough} />
             {account.pendingIds.length > 0 ? (
               <ul className="space-y-1">
@@ -380,7 +381,7 @@ function ReconciliationForm({
                         }}
                         type="checkbox"
                       />
-                      Pending {pendingId} is already in this balance
+                      A pending movement is already in this balance
                     </label>
                   </li>
                 ))}
@@ -388,14 +389,14 @@ function ReconciliationForm({
             ) : null}
             {(account.settings?.resourceClass === "restricted" || account.settings?.resourceClass === "mortgage") ? (
               <>
-                <Input aria-label="Eligible restricted cents" onChange={(event) => setRows({ ...rows, [account.id]: { ...current, restricted: event.target.value } })} placeholder="Eligible cents" value={current.restricted} />
-                <Input aria-label="Restricted evidence" onChange={(event) => setRows({ ...rows, [account.id]: { ...current, restrictedEvidence: event.target.value } })} value={current.restrictedEvidence} />
+                <Input aria-label="Amount that cannot pay a bill today" onChange={(event) => setRows({ ...rows, [account.id]: { ...current, restricted: event.target.value } })} placeholder="Cents that cannot pay a bill today" value={current.restricted} />
+                <Input aria-label="Note" onChange={(event) => setRows({ ...rows, [account.id]: { ...current, restrictedEvidence: event.target.value } })} value={current.restrictedEvidence} />
               </>
             ) : null}
           </div>
         )
       })}
-      <Button type="submit">Record reconciliation</Button>
+      <Button type="submit">{copy.agreeOpening}</Button>
     </form>
   )
 }
@@ -498,7 +499,7 @@ function EarmarkForm({ onRun, workspace }: { onRun: (name: string, payload: Reco
       <Input aria-label="Amount" onChange={(event) => setAmount(event.target.value)} value={amount} />
       <Input aria-label="Effective on" onChange={(event) => setDate(event.target.value)} placeholder="2026-09-23" value={date} />
       <Input aria-label="Reason" onChange={(event) => setReason(event.target.value)} value={reason} />
-      <Button disabled={!reconciliation?.fingerprint} type="submit">Save earmark</Button>
+      <Button disabled={!reconciliation?.fingerprint} type="submit">Reserve this amount</Button>
       <ul className="space-y-1">
         {workspace.earmarks.map((earmark) => (
           <li className="type-caption" key={earmark.id}>{earmark.amountCents} · {earmark.effectiveOn} · {earmark.reason}</li>
@@ -527,7 +528,7 @@ function MovementForm({ onRun, workspace }: { onRun: (name: string, payload: Rec
       }}
     >
       <Select onValueChange={(next) => { if (next) setMovementId(next) }} value={movementId || undefined}>
-        <SelectTrigger aria-label="Movement"><SelectValue /></SelectTrigger>
+        <SelectTrigger aria-label="Earlier movement"><SelectValue placeholder="Earlier movement" /></SelectTrigger>
         <SelectContent>
           {workspace.movements.map((movement) => (
             <SelectItem key={movement.id} value={movement.id}>{movement.kind} · {movement.amountCents} · {movement.effectiveOn}</SelectItem>

@@ -128,7 +128,7 @@ describe("projectFund", () => {
       members,
     )
 
-    assert.equal(incomplete.headline, "Needs reconciliation")
+    assert.equal(incomplete.headline, copy.needsReconciliation)
     assert.equal(incomplete.headline, copy.needsReconciliation)
     assert.equal(incomplete.entries.length, 1)
     assert.equal(incomplete.entries[0]?.sentence, sharedExpensePaidBy("Cara"))

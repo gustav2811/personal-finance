@@ -18,19 +18,35 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { copy } from "@/domain/budget/copy"
 import { addMonths, currentCycle } from "@/domain/budget/cycle"
 import { projectBudget, type BeneficiaryFilter, type BudgetOverview, type PurposeRow } from "@/domain/budget/overview"
+import { projectRoutine, type HouseholdRoutine, type RoutineNext } from "@/domain/budget/routine"
 import { MoveMoneyDialog } from "./move-dialog"
 import { getBudgetSource, type BudgetSource } from "./queries"
 
 const TOUCH = "pointer-coarse:h-9 pointer-coarse:px-3"
 
-function Fact({ fact }: { fact: BudgetOverview["unassigned"] }) {
+function nextStep(next: RoutineNext): { href: string; label: string } {
+  switch (next) {
+    case "opening":
+      return { href: "/budget/reconcile", label: copy.agreeOpening }
+    case "decide":
+      return { href: "/budget/review", label: copy.decide }
+    case "agree":
+      return { href: "/budget/plan?cycle=next", label: copy.reviewNextCycle }
+    default: {
+      const unreachable: never = next
+      return unreachable
+    }
+  }
+}
+
+function Answer({ answer }: { answer: HouseholdRoutine["spend"] }) {
   return (
-    <div className="space-y-1 bg-card px-4 py-3">
-      <p className="type-label text-muted-foreground">{fact.label}</p>
-      <p className="type-numeric text-2xl font-semibold tracking-tight">
-        {fact.withheld ? copy.needsReconciliation : (fact.amount ?? copy.withheld)}
+    <div className="max-w-3xl space-y-1">
+      <p className="type-body">
+        {answer.amount ? <span className="type-numeric">{answer.amount} </span> : null}
+        {answer.sentence}
       </p>
-      <p className="type-caption text-muted-foreground">{fact.caption}</p>
+      {answer.detail ? <p className="type-body-small text-muted-foreground">{answer.detail}</p> : null}
     </div>
   )
 }
@@ -109,31 +125,20 @@ export function BudgetView() {
   }, [reloadKey, cycleStart])
 
   const view = source ? projectBudget({ ...source, filter }) : null
-  const filterValue = filter.kind === "member" ? filter.memberId : filter.kind
+  const routine = source ? projectRoutine(source) : null
+  const step = routine ? nextStep(routine.next) : null
 
   return (
     <div className="@container/budget space-y-10">
       <PageHeader
         actions={
-          <div className="flex flex-wrap gap-2">
-            <Button asChild size="sm" variant="outline">
-              <Link href="/budget/review">{copy.reviewPurchases}</Link>
+          step ? (
+            <Button asChild>
+              <Link href={step.href}>{step.label}</Link>
             </Button>
-            <Button asChild size="sm" variant="outline">
-              <Link href="/budget/plan">{copy.editPlan}</Link>
-            </Button>
-            <Button asChild size="sm" variant="outline">
-              <Link href="/budget/history">History</Link>
-            </Button>
-            <Button asChild size="sm" variant="outline">
-              <Link href="/budget/liquidity">{copy.liquidity}</Link>
-            </Button>
-            <Button asChild size="sm" variant="outline">
-              <Link href="/budget/reconcile">{copy.reconcile}</Link>
-            </Button>
-          </div>
+          ) : null
         }
-        description={copy.pageDescription}
+        description={view?.cycleLabel ?? copy.pageDescription}
         title={copy.pageTitle}
       />
       {error ? (
@@ -143,13 +148,14 @@ export function BudgetView() {
         </Alert>
       ) : null}
       {!view && !error ? <p className="type-body text-muted-foreground">Reading the budget.</p> : null}
-      {view ? (
+      {view && routine ? (
         <BudgetBody
-          filterValue={filterValue}
           cycleStart={cycleStart}
+          filterValue={filter.kind === "member" ? filter.memberId : filter.kind}
           onCycle={setCycleStart}
           onFilter={setFilter}
           onSaved={() => setReloadKey((key) => key + 1)}
+          routine={routine}
           view={view}
         />
       ) : null}
@@ -163,6 +169,7 @@ function BudgetBody({
   onCycle,
   onFilter,
   onSaved,
+  routine,
   view,
 }: {
   cycleStart: string
@@ -170,199 +177,135 @@ function BudgetBody({
   onCycle: (cycleStart: string) => void
   onFilter: (filter: BeneficiaryFilter) => void
   onSaved: () => void
+  routine: HouseholdRoutine
   view: BudgetOverview
 }) {
+  const viewingNow = cycleStart === currentCycle().start
   return (
     <>
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="space-y-1">
-          <p className="type-label text-muted-foreground">{view.cycleLabel}</p>
-          <p className="type-caption text-muted-foreground">
-            {view.revisionLabel} · {view.asOfLabel} · {view.freshness}
-          </p>
-          <div className="flex gap-2">
-            <Button className={TOUCH} onClick={() => onCycle(addMonths(cycleStart, -1))} size="sm" type="button" variant="outline">
-              Earlier
-            </Button>
-            <Button className={TOUCH} onClick={() => onCycle(currentCycle().start)} size="sm" type="button" variant="outline">
-              {copy.thisCycle}
-            </Button>
-            <Button className={TOUCH} onClick={() => onCycle(addMonths(cycleStart, 1))} size="sm" type="button" variant="outline">
-              Later
-            </Button>
-          </div>
-        </div>
-        <ToggleGroup
-          aria-label={copy.whoseExpense}
-          onValueChange={(next) => {
-            if (next === "household" || next === "shared") onFilter({ kind: next })
-            else if (next) onFilter({ kind: "member", memberId: next })
-          }}
-          size="sm"
-          spacing={0}
-          type="single"
-          value={filterValue}
-          variant="outline"
-        >
-          <ToggleGroupItem className={TOUCH} value="household">
-            {copy.household}
-          </ToggleGroupItem>
-          <ToggleGroupItem className={TOUCH} value="shared">
-            {copy.shared}
-          </ToggleGroupItem>
-          {view.members.map((member) => (
-            <ToggleGroupItem className={TOUCH} key={member.id} value={member.id}>
-              {member.name}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
+      <div className="flex flex-wrap gap-2">
+        <Button className={TOUCH} onClick={() => onCycle(addMonths(cycleStart, -1))} size="sm" type="button" variant="outline">
+          Earlier
+        </Button>
+        <Button className={TOUCH} onClick={() => onCycle(currentCycle().start)} size="sm" type="button" variant="outline">
+          {copy.thisCycle}
+        </Button>
+        <Button className={TOUCH} onClick={() => onCycle(addMonths(cycleStart, 1))} size="sm" type="button" variant="outline">
+          Later
+        </Button>
       </div>
-      <MoveMoneyDialog
-        canAssign={view.canAssign}
-        funds={[...view.purposes, ...view.commitments, ...view.retired].map((row) => ({
-          id: row.fundId,
-          name: row.name,
-          balanceLabel: row.available,
-        }))}
-        onSaved={onSaved}
-        reconciliationFingerprint={view.reconciliationFingerprint}
-        reconciliationId={view.reconciliationId}
-        versionId={view.versionId}
-      />
 
-      {view.complete ? null : (
+      {routine.stale ? (
         <Alert>
-          <AlertTitle>{copy.needsReconciliation}</AlertTitle>
-          <AlertDescription>
-            <p>{copy.needsReconciliationDetail}</p>
-            {view.reasons.length > 0 ? (
-              <ul className="mt-2 list-disc pl-4">
-                {view.reasons.map((reason) => (
-                  <li key={reason}>{reason}</li>
-                ))}
-              </ul>
-            ) : null}
-          </AlertDescription>
+          <AlertDescription>{routine.stale}</AlertDescription>
         </Alert>
-      )}
+      ) : null}
 
-      <section aria-label={copy.availableByPurpose} className="space-y-4">
-        <div className="space-y-1">
-          <p className="type-label text-muted-foreground">{copy.availableByPurpose}</p>
-          <p className="type-caption text-muted-foreground">{copy.availableByPurposeDetail}</p>
-        </div>
-        <dl className="grid gap-px overflow-hidden rounded-lg border bg-border @3xl/budget:grid-cols-3">
-          <div className="space-y-1 bg-card px-4 py-3">
-            <p className="type-label text-muted-foreground">{copy.availableByPurpose}</p>
-            <p className="type-body">{view.complete ? copy.seeEachPurpose : copy.needsReconciliation}</p>
-            <p className="type-caption text-muted-foreground">{copy.availableByPurposeDetail}</p>
-          </div>
-          <Fact fact={view.unassigned} />
-          <div className="space-y-1 bg-card px-4 py-3">
-            <p className="type-label text-muted-foreground">{copy.liquidity}</p>
-            {view.accounts.length === 0 ? (
-              <p className="type-body text-muted-foreground">
-                {view.liquidity.withheld ? copy.needsReconciliation : copy.noReconciledAccounts}
-              </p>
-            ) : (
-              <ul className="space-y-1">
-                {view.accounts.map((account) => (
-                  <li className="type-numeric flex justify-between gap-4" key={account.id}>
-                    <span>{account.label}</span>
-                    <span>{account.amount}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <p className="type-caption text-muted-foreground">{view.liquidity.caption}</p>
-            {view.restrictedBacking.length > 0 ? (
-              <div className="space-y-1">
-                <p className="type-caption text-muted-foreground">{copy.backing}</p>
-                <ul className="space-y-1">
-                  {view.restrictedBacking.map((account) => (
-                    <li className="type-numeric flex justify-between gap-4" key={account.id}>
-                      <span>{account.label}</span>
-                      <span>{account.amount}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-            {view.cardDebt ? (
-              <p className="type-caption text-muted-foreground">
-                {copy.cardDebt}: {view.cardDebt}. {copy.cardDebtDetail}
-              </p>
-            ) : null}
-          </div>
-        </dl>
-        {view.provisional ? <p className="type-caption text-muted-foreground">{view.provisional}</p> : null}
-        <div className="space-y-1">
-          <p className="type-label text-muted-foreground">
-            {view.cashNeed.incomeKnown ? `Before ${view.cashNeed.nextIncome}` : copy.liquidity}
-          </p>
-          <ul className="space-y-1">
-            {view.cashNeed.needs.map((need) => (
-              <li key={need.id}>
-                <span className="type-numeric">{need.owner}</span>
-                {need.shortfall ? <span className="type-numeric"> · short {need.shortfall}</span> : null}
-                <span className="type-caption text-muted-foreground"> · {need.sentence}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-        <p className="type-body">
-          {view.moveCash.label}. {view.moveCash.detail}
-        </p>
-        {view.transfers.length > 0 ? (
-          <ul className="space-y-1">
-            {view.transfers.map((transfer) => (
-              <li key={transfer.id}>
-                {transfer.sentence} <span className="type-numeric">{transfer.amount}</span>
-                {transfer.sourceTransactionId ? (
-                  <Link className="ml-2 underline-offset-4 hover:underline" href={`/transactions?transaction=${transfer.sourceTransactionId}`}>
-                    Source
-                  </Link>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        ) : null}
+      <Section title={copy.spendQuestion}>
+        <Answer answer={routine.spend} />
+      </Section>
+
+      <Section title={copy.cashQuestion}>
+        <Answer answer={routine.cash} />
+        {viewingNow ? null : (
+          <p className="type-caption text-muted-foreground">This cash position is now, not the cycle above.</p>
+        )}
         {view.calendar.length > 0 ? (
-          <div className="space-y-2">
-            <p className="type-label text-muted-foreground">{copy.expectedPayments}</p>
-            <ul className="space-y-1">
+          <details>
+            <summary className="type-caption cursor-pointer text-muted-foreground">{copy.expectedPayments}</summary>
+            <ul className="mt-2 space-y-1">
               {view.calendar.map((entry) => (
                 <li className="type-caption flex justify-between gap-4" key={`${entry.date ?? ""}-${entry.label}-${entry.amount}`}>
                   <span>
-                    {entry.date ?? copy.withheld} · {entry.label}
+                    {entry.date ?? copy.withheld}
                     {entry.payer ? ` · ${entry.payer}` : ""}
                   </span>
                   <span className="type-numeric">{entry.amount}</span>
                 </li>
               ))}
             </ul>
-            <p className="type-caption text-muted-foreground">{copy.forecastDetail}</p>
-          </div>
-        ) : null}
-        {view.payers.length > 0 ? (
-          <div className="space-y-1">
-            <p className="type-label text-muted-foreground">{copy.whoPaid}</p>
-            <ul className="space-y-1">
-              {view.payers.map((payer) => (
-                <li className="flex justify-between gap-4" key={payer.id}>
-                  <span>{payer.sentence}</span>
-                  <span className="type-numeric">{payer.amount}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
+          </details>
         ) : null}
         <p className="type-caption text-muted-foreground">
-          {view.forecast.label}: {view.forecast.amount ?? copy.withheld}. {view.forecast.caption}
+          <Link className="underline-offset-4 hover:underline" href="/budget/liquidity">
+            {copy.cashInEachAccount}
+          </Link>
         </p>
-      </section>
+      </Section>
 
-      <Section description={copy.availableByPurposeDetail} title={copy.purposes}>
+      <Section title={copy.attentionQuestion}>
+        <p className="type-body max-w-3xl">{routine.attention.sentence}</p>
+        {routine.attention.items.length > 0 ? (
+          <ul className="divide-y rounded-lg border">
+            {routine.attention.items.map((item) => (
+              <li className="flex items-baseline justify-between gap-4 px-4 py-3" key={item.id}>
+                <span>
+                  <span className="block">{item.sentence}</span>
+                  {item.when ? <span className="type-caption text-muted-foreground">{item.when}</span> : null}
+                </span>
+                <span className="type-numeric">{item.amount}</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {routine.attention.more ? <p className="type-caption text-muted-foreground">{copy.moreDecisions}</p> : null}
+      </Section>
+
+      <Section title={copy.agreementQuestion}>
+        <Answer answer={routine.agreement} />
+        <p className="type-caption text-muted-foreground">
+          <Link className="underline-offset-4 hover:underline" href="/budget/plan?cycle=next">
+            {copy.reviewNextCycle}
+          </Link>
+        </p>
+      </Section>
+
+      <p className="type-caption text-muted-foreground">
+        {view.forecast.label}: {view.forecast.amount ?? copy.withheld}. {view.forecast.caption}
+      </p>
+
+      <Section
+        actions={
+          <ToggleGroup
+            aria-label={copy.whoseExpense}
+            onValueChange={(next) => {
+              if (next === "household" || next === "shared") onFilter({ kind: next })
+              else if (next) onFilter({ kind: "member", memberId: next })
+            }}
+            size="sm"
+            spacing={0}
+            type="single"
+            value={filterValue}
+            variant="outline"
+          >
+            <ToggleGroupItem className={TOUCH} value="household">
+              {copy.household}
+            </ToggleGroupItem>
+            <ToggleGroupItem className={TOUCH} value="shared">
+              {copy.shared}
+            </ToggleGroupItem>
+            {view.members.map((member) => (
+              <ToggleGroupItem className={TOUCH} key={member.id} value={member.id}>
+                {member.name}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+        }
+        description={copy.availableByPurposeDetail}
+        title={copy.purposes}
+      >
+        <MoveMoneyDialog
+          canAssign={view.canAssign}
+          funds={[...view.purposes, ...view.commitments, ...view.retired].map((row) => ({
+            id: row.fundId,
+            name: row.name,
+            balanceLabel: row.available,
+          }))}
+          onSaved={onSaved}
+          reconciliationFingerprint={view.reconciliationFingerprint}
+          reconciliationId={view.reconciliationId}
+          versionId={view.versionId}
+        />
         <PurposeTable rows={view.purposes} />
       </Section>
       <Section description={copy.commitmentsDetail} title={copy.commitments}>
@@ -396,6 +339,16 @@ function BudgetBody({
           </ul>
         )}
       </Section>
+
+      <p className="type-caption text-muted-foreground">
+        <Link className="underline-offset-4 hover:underline" href="/budget/history">
+          History
+        </Link>
+        {" · "}
+        <Link className="underline-offset-4 hover:underline" href="/budget/reconcile">
+          {copy.reconcile}
+        </Link>
+      </p>
     </>
   )
 }

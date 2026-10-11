@@ -1,5 +1,5 @@
 import { copy } from "./copy"
-import { assertIsoDate } from "./cycle"
+import { assertIsoDate, formatSpokenDate } from "./cycle"
 import { memberName, type MemberRef } from "./members"
 import { formatCents, isCents, parseCents } from "./money"
 import { readArray, readRecord, readString } from "./wire"
@@ -35,6 +35,7 @@ type NeedEntry = {
   amountCents: string | null
   payerId: string | null
   accountId: string | null
+  label?: string | null
 }
 
 function add(left: bigint, right: string | null): bigint {
@@ -49,6 +50,38 @@ function dateOrNull(value: string | null): string | null {
   } catch {
     return null
   }
+}
+
+function joinNames(names: readonly string[]): string {
+  const unique = [...new Set(names)]
+  if (unique.length <= 1) return unique[0] ?? ""
+  if (unique.length === 2) return `${unique[0]} and ${unique[1]}`
+  return `${unique.slice(0, -1).join(", ")}, and ${unique[unique.length - 1]}`
+}
+
+function duePayments(accountId: string, nextIncome: string | null, expected: readonly NeedEntry[]): NeedEntry[] {
+  return expected.filter((entry) => {
+    if (entry.kind === "income" || entry.accountId !== accountId) return false
+    const date = dateOrNull(entry.date)
+    if (!nextIncome || !date || date >= nextIncome) return false
+    return true
+  })
+}
+
+function payingSentence(owner: string, shortfall: string | null, payments: readonly NeedEntry[], nextIncome: string | null): string {
+  const dates = payments.flatMap((entry) => {
+    const date = dateOrNull(entry.date)
+    return date ? [date] : []
+  })
+  const earliest = dates.sort()[0] ?? null
+  const spoken = earliest ? formatSpokenDate(earliest) : nextIncome ? formatSpokenDate(nextIncome) : null
+  const when = spoken ? `before ${spoken}` : "before the next income"
+  if (shortfall && shortfall !== "0") {
+    const names = payments.flatMap((entry) => (entry.label ? [entry.label] : []))
+    const bills = names.length > 0 ? `to pay ${joinNames(names)}` : "for the payments due from this account"
+    return `${owner} needs ${formatCents(shortfall)} ${when} ${bills}.`
+  }
+  return `${owner} can cover the payments due ${when} from this account.`
 }
 
 export function projectCashNeed(input: {
@@ -90,12 +123,8 @@ export function projectCashNeed(input: {
       account.ownerScope === "member"
         ? (memberName(input.members, account.ownerId) ?? "A household member")
         : copy.shared
-    const due = input.expected.reduce((total, entry) => {
-      if (entry.kind === "income" || entry.accountId !== account.id) return total
-      const date = dateOrNull(entry.date)
-      if (!nextIncome || !date || date >= nextIncome) return total
-      return add(total, entry.amountCents)
-    }, BigInt(0))
+    const payments = duePayments(account.id, nextIncome, input.expected)
+    const due = payments.reduce((total, entry) => add(total, entry.amountCents), BigInt(0))
     const cash = account.cashCents && isCents(account.cashCents) ? BigInt(account.cashCents) : null
     const shortfall = cash === null ? null : due - cash > BigInt(0) ? (due - cash).toString() : "0"
     const pays = backing === "paying"
@@ -111,11 +140,9 @@ export function projectCashNeed(input: {
           ? unassignedPayment
             ? "A payment due before the next income has no paying account."
             : nextIncome
-              ? copy.needsReconciliation
-              : "Expected income date is not known."
-          : shortfall && shortfall !== "0"
-            ? `${owner} is short ${formatCents(shortfall)} before the next income. Restricted money is not this account.`
-            : `${owner} can cover the payments due before the next income from this account.`
+              ? "We can't say who needs money in their account until the missing facts are agreed."
+              : "Expected income date is not known, so we can't say who needs money in their account."
+          : payingSentence(owner, shortfall, payments, nextIncome)
         : `${copy.backing} ${copy.fundedNotAccessible}`,
     }
   })

@@ -105,7 +105,7 @@ function planFor(
   return selected.applicable ? plans.get(selected.applicable.versionId) ?? null : null
 }
 
-export function PlanEditor() {
+export function PlanEditor({ initialChoice = "this" }: { initialChoice?: CycleChoice }) {
   const [reloadKey, setReloadKey] = useState(0)
   const [loaded, setLoaded] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -116,7 +116,7 @@ export function PlanEditor() {
   const [published, setPublished] = useState<PublishedPlan | null>(null)
   const [lines, setLines] = useState<PlanLine[]>([])
   const [income, setIncome] = useState<IncomeAssumptionInput[]>([])
-  const [choice, setChoice] = useState<CycleChoice>("this")
+  const [choice, setChoice] = useState<CycleChoice>(initialChoice)
   const [reason, setReason] = useState("")
   const [draft, setDraft] = useState<DraftReceipt | null>(null)
   const [workspace, setWorkspace] = useState<CutoverWorkspace | null>(null)
@@ -135,14 +135,14 @@ export function PlanEditor() {
     void Promise.all([loadAgreement(), loadCutover().catch(() => null)])
       .then(([agreement, cutover]) => {
         if (cancelled) return
-        const next = planFor(agreement.headers, agreement.plans, "this")
+        const next = planFor(agreement.headers, agreement.plans, initialChoice)
         setHeaders(agreement.headers)
         setPlans(agreement.plans)
         setPublished(next)
         setWorkspace(cutover ? readCutover(cutover) : null)
         setLines(next ? cloneLines(next.lines) : [])
         setIncome(next ? next.incomeAssumptions.map((entry) => ({ ...entry })) : [])
-        setChoice("this")
+        setChoice(initialChoice)
         setReason("")
         setDraft(null)
         setActionError(null)
@@ -159,7 +159,7 @@ export function PlanEditor() {
     return () => {
       cancelled = true
     }
-  }, [reloadKey])
+  }, [initialChoice, reloadKey])
 
   async function onCreateFund(name: string) {
     const trimmed = name.trim()
@@ -337,7 +337,11 @@ export function PlanEditor() {
 
   return (
     <div className="space-y-10">
-      <PageHeader title={copy.editPlan} />
+      <PageHeader
+        breadcrumbs={[{ href: "/budget", label: copy.pageTitle }, { label: copy.reviewNextCycle }]}
+        description={copy.contributionDoesNotMove}
+        title={copy.agreementQuestion}
+      />
       {loadError ? (
         <Alert>
           <AlertTitle>{copy.couldNotRead}</AlertTitle>
@@ -474,6 +478,18 @@ function PlanBody({
         </ToggleGroup>
       </div>
 
+      <Section title={copy.whatChanges}>
+        {diff.every((row) => row.unchanged) ? (
+          <p className="type-body">{copy.nothingWouldChange} {copy.nextCycleKeeps}</p>
+        ) : (
+          <ul className="space-y-2">
+            {diff.filter((row) => !row.unchanged).map((row) => (
+              <li key={row.stableLineId}>{row.text}</li>
+            ))}
+          </ul>
+        )}
+      </Section>
+
       <Section title={copy.revisedPlan}>
         <form
           className="flex gap-2"
@@ -534,29 +550,10 @@ function PlanBody({
           Add income
         </Button>
       </Section>
-      <Section title={copy.originalPlan}>
-        {diff.length > 0 && diff.every((row) => row.unchanged) ? (
-          <p className="type-caption text-muted-foreground">{copy.planUnchanged}</p>
-        ) : null}
-        <ul className="space-y-2">
-          {diff.map((row) => (
-            <li className="type-numeric" key={row.stableLineId}>
-              {row.text}
-            </li>
-          ))}
-        </ul>
-      </Section>
-
-      <div className="space-y-3">
-        <Textarea aria-label={copy.publishReason} onChange={(event) => onReason(event.target.value)} value={reason} />
-        {reasonMissing ? (
-          <Alert id="plan-publish-reason">
-            <AlertDescription>{copy.publishReason}</AlertDescription>
-          </Alert>
-        ) : null}
+      <Section description={copy.moveSavedDetail} title={copy.moveSavedMoney}>
         <label className="flex items-center gap-2 text-sm">
           <input checked={moveMoney} onChange={(event) => onMoveMoney(event.target.checked)} type="checkbox" />
-          Also move already-saved money. Changing a contribution does not do this.
+          {copy.moveSavedMoney}
         </label>
         {moveMoney ? (
           <div className="grid gap-2">
@@ -576,13 +573,22 @@ function PlanBody({
             <p className="type-caption text-muted-foreground">{moveReason("reallocate")}. {copy.planUnchanged}</p>
           </div>
         ) : null}
+      </Section>
+
+      <div className="space-y-3">
+        <Textarea aria-label={copy.publishReason} onChange={(event) => onReason(event.target.value)} placeholder={copy.publishReason} value={reason} />
+        {reasonMissing ? (
+          <Alert id="plan-publish-reason">
+            <AlertDescription>{copy.publishReason}</AlertDescription>
+          </Alert>
+        ) : null}
         <Button
           aria-describedby={reasonMissing ? "plan-publish-reason" : undefined}
           disabled={!ready || pending}
           onClick={onPublish}
           type="button"
         >
-          {reasonMissing ? copy.publishReason : "Publish"}
+          {copy.publishAgreement}
         </Button>
       </div>
     </>

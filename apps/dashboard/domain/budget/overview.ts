@@ -298,6 +298,27 @@ function purchaseOf(value: unknown, members: readonly MemberRef[], names: Map<st
   }
 }
 
+function lineNameById(current: Record<string, unknown> | null): Map<string, string> {
+  const names = new Map<string, string>()
+  for (const entry of readArray(current?.lines)) {
+    const record = readRecord(entry)
+    const id = record ? readString(record, "id") : null
+    const name = record ? readString(record, "name") : null
+    if (record && id && name) names.set(id, name)
+  }
+  return names
+}
+
+function paymentLabel(record: Record<string, unknown>, names: ReadonlyMap<string, string>): string | null {
+  const provenance = readRecord(record.provenance)
+  const lineId = provenance ? readString(provenance, "line_id") : null
+  if (lineId) {
+    const named = names.get(lineId)
+    if (named) return named
+  }
+  return readString(record, "name")
+}
+
 function resourcesOf(overview: Record<string, unknown>): Record<string, unknown> | null {
   const provenance = readRecord(overview.provenance)
   const nested = provenance ? readRecord(provenance.resources) : null
@@ -413,6 +434,7 @@ export function projectBudget(input: {
   )
   const forecastEntries = readArray(forecastRecord?.entries)
   const expectedEntries = readArray(liquidity.expected)
+  const paymentNames = lineNameById(current)
   const calendarSource = expectedEntries.length > 0 ? expectedEntries : forecastEntries
   const calendar = calendarSource.flatMap((entry) => {
     const record = readRecord(entry)
@@ -515,6 +537,7 @@ export function projectBudget(input: {
             amountCents: parseCents(record.amount_cents),
             payerId: readString(record, "planned_payer_member_id"),
             accountId: readString(record, "account_id"),
+            label: paymentLabel(record, paymentNames),
           },
         ]
       }),

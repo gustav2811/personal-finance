@@ -70,7 +70,7 @@ export function LiquidityView() {
           { label: copy.liquidity },
         ]}
         description={copy.liquidityDetail}
-        title={copy.liquidity}
+        title={copy.cashInEachAccount}
       />
       {error ? (
         <Alert>

@@ -121,7 +121,11 @@ export function ReviewView() {
 
   return (
     <div className="@container/budget space-y-10">
-      <PageHeader description={copy.purchasesDetail} title={copy.reviewPurchases} />
+      <PageHeader
+        breadcrumbs={[{ href: "/budget", label: copy.pageTitle }, { label: copy.decide }]}
+        description={copy.theseChangeAnswers}
+        title={copy.attentionQuestion}
+      />
       {error ? (
         <Alert>
           <AlertTitle>{copy.couldNotRead}</AlertTitle>
@@ -156,7 +160,7 @@ function ReviewList({
   queue: ReviewQueue
 }) {
   return (
-    <Section description={copy.purchasesDetail} title={copy.purchases}>
+    <Section description={copy.purchasesDetail} title={copy.attentionQuestion}>
       {queue.partial ? <p className="type-caption text-muted-foreground">{copy.partialList}</p> : null}
       {queue.reasons.length > 0 ? (
         <Alert>
@@ -179,11 +183,7 @@ function ReviewList({
                     <p className="type-caption text-muted-foreground">{dayLabel(item.occurredOn)}</p>
                   ) : null}
                   {item.reasons.length > 0 ? (
-                    <ul className="space-y-1">
-                      {item.reasons.map((reason, index) => (
-                        <li key={`${reason.code}:${index}`}>{reason.sentence}</li>
-                      ))}
-                    </ul>
+                    <p>{[...new Set(item.reasons.map((reason) => reason.sentence))].join(" ")}</p>
                   ) : null}
                   {item.provisional ? <p className="type-caption text-muted-foreground">Provisional. Not a confirmed balance.</p> : null}
                   {item.excluded ? <p className="type-caption text-muted-foreground">{item.excluded}</p> : null}
@@ -202,6 +202,7 @@ function ReviewList({
                   categories={categories}
                   drifted={item.drifted}
                   fingerprint={item.fingerprint}
+                  fundId={item.fundId}
                   funds={funds}
                   members={members}
                   onSaved={onSaved}

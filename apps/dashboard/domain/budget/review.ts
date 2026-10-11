@@ -21,6 +21,7 @@ export type ReviewItem = {
   sourceTransactionId: string | null
   utilityEntryId: string | null
   amount: string
+  fundId: string | null
   amountCents: string | null
   impactCents: string | null
   reasons: ReviewReason[]
@@ -98,6 +99,7 @@ function itemOf(value: unknown, index: number, members: readonly MemberRef[]): R
     sourceTransactionId,
     utilityEntryId,
     amount: formatCents(amountCents),
+    fundId: present(readString(record, "fund_id")),
     amountCents,
     impactCents,
     reasons: sentences(record.reasons),
