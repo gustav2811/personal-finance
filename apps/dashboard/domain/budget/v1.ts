@@ -63,7 +63,20 @@ export function projectCashNeed(input: {
     return date ? [date] : []
   })
   const nextIncome = incomeDates.sort()[0] ?? null
-  const withheld = !input.complete || nextIncome === null
+  const payingIds = new Set(
+    input.accounts.flatMap((account) =>
+      account.resourceClass === "restricted" || account.resourceClass === "mortgage" || account.resourceClass === "card"
+        ? []
+        : [account.id],
+    ),
+  )
+  const unassignedPayment = input.expected.some((entry) => {
+    if (entry.kind === "income") return false
+    const date = dateOrNull(entry.date)
+    if (!nextIncome || !date || date >= nextIncome) return false
+    return entry.accountId === null || !payingIds.has(entry.accountId)
+  })
+  const withheld = !input.complete || nextIncome === null || unassignedPayment
   const needs = input.accounts.map((account) => {
     const backing: CashNeed["backing"] =
       account.resourceClass === "restricted"
@@ -95,9 +108,11 @@ export function projectCashNeed(input: {
       shortfall: !pays || withheld || shortfall === null ? null : formatCents(shortfall),
       sentence: pays
         ? withheld
-          ? nextIncome
-            ? copy.needsReconciliation
-            : "Expected income date is not known."
+          ? unassignedPayment
+            ? "A payment due before the next income has no paying account."
+            : nextIncome
+              ? copy.needsReconciliation
+              : "Expected income date is not known."
           : shortfall && shortfall !== "0"
             ? `${owner} is short ${formatCents(shortfall)} before the next income. Restricted money is not this account.`
             : `${owner} can cover the payments due before the next income from this account.`
@@ -107,26 +122,29 @@ export function projectCashNeed(input: {
   return { nextIncome, incomeKnown: nextIncome !== null, needs, withheld }
 }
 
+function observationLabel(at: Date): string {
+  return at.toISOString().slice(0, 16).replace("T", " ")
+}
+
 export function freshnessSentence(input: {
   asOf: string | null
   accounts: readonly { observedAt: string | null; freshnessHours: number | null; included: boolean }[]
 }): string {
-  const observed = input.accounts.flatMap((account) => {
-    if (!account.included || !account.observedAt) return []
-    const at = new Date(account.observedAt)
-    if (Number.isNaN(at.getTime())) return []
-    return [{ at, hours: account.freshnessHours }]
-  })
-  if (observed.length === 0) return "Source freshness is unknown."
-  const oldest = observed.reduce((left, right) => (left.at < right.at ? left : right))
+  const included = input.accounts.filter((account) => account.included)
   const asOf = input.asOf ? new Date(input.asOf) : null
-  const stale =
-    asOf !== null &&
-    !Number.isNaN(asOf.getTime()) &&
-    oldest.hours !== null &&
-    oldest.at.getTime() + oldest.hours * 60 * 60 * 1000 < asOf.getTime()
-  const label = oldest.at.toISOString().slice(0, 16).replace("T", " ")
-  return stale ? `Source is stale. Oldest observation ${label} UTC.` : `Source fresh. Oldest observation ${label} UTC.`
+  if (included.length === 0 || asOf === null || Number.isNaN(asOf.getTime())) return "Source freshness is unknown."
+  let oldest: Date | null = null
+  for (const account of included) {
+    if (!account.observedAt || account.freshnessHours === null) return "Source freshness is unknown."
+    const at = new Date(account.observedAt)
+    if (Number.isNaN(at.getTime())) return "Source freshness is unknown."
+    if (at.getTime() + account.freshnessHours * 60 * 60 * 1000 < asOf.getTime()) {
+      return `Source is stale. Observation ${observationLabel(at)} UTC is outside its freshness window.`
+    }
+    if (oldest === null || at < oldest) oldest = at
+  }
+  if (oldest === null) return "Source freshness is unknown."
+  return `Source fresh. Oldest observation ${observationLabel(oldest)} UTC.`
 }
 
 export function provisionalSentence(cents: string | null): string | null {

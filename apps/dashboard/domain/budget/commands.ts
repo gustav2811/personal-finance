@@ -68,6 +68,7 @@ export type ReviewEvidenceInput = {
   receiptReference?: string
   splitReviewReason?: string
   reviewReason?: string
+  utilityDecisionReference?: string
 }
 
 const PURPOSE_OUTFLOW = new Set<ReviewEffectKind>([
@@ -172,6 +173,16 @@ export function buildReviewPayload(input: {
     components: input.components,
     evidence: input.evidence,
   })
+  const utilityReference = input.evidence?.utilityDecisionReference?.trim() ?? ""
+  if (input.utilityEntryId && utilityReference.length === 0) {
+    throw new Error("budget_invalid: utility decision")
+  }
+  const evidence: Record<string, string | null> = {
+    receipt_reference: input.evidence?.receiptReference?.trim() || null,
+    split_review_reason: input.evidence?.splitReviewReason?.trim() || null,
+    review_reason: input.evidence?.reviewReason?.trim() || null,
+  }
+  if (input.utilityEntryId) evidence.utility_decision_reference = utilityReference
   const payload: Record<string, unknown> = {
     expected_source_fingerprint: input.expectedSourceFingerprint,
     components: input.components.map((component) => ({
@@ -184,11 +195,7 @@ export function buildReviewPayload(input: {
       original_refund_allocation_id: component.originalRefundAllocationId ?? null,
       opening_refund_reason: component.openingRefundReason ?? null,
     })),
-    evidence: {
-      receipt_reference: input.evidence?.receiptReference?.trim() || null,
-      split_review_reason: input.evidence?.splitReviewReason?.trim() || null,
-      review_reason: input.evidence?.reviewReason?.trim() || null,
-    },
+    evidence,
   }
   if (input.transactionId) payload.transaction_id = input.transactionId
   if (input.utilityEntryId) payload.utility_entry_id = input.utilityEntryId

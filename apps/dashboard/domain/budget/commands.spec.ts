@@ -5,6 +5,7 @@ import {
   buildDraftPayload,
   buildEarmarkPayload,
   buildReconciliationPayload,
+  buildReviewPayload,
   isOneConsumptionLine,
 } from "./commands"
 import { moveReason } from "./move"
@@ -101,6 +102,42 @@ describe("review economics", () => {
         }),
       (error: unknown) => error instanceof Error && error.message === "budget_invalid: refund",
     )
+  })
+})
+
+describe("utility review payload", () => {
+  it("requires the utility decision reference and does not add it to a bank review", () => {
+    const component = {
+      amountCents: "-3494",
+      beneficiaryScope: "shared" as const,
+      effectKind: "consumption" as const,
+      fundId: FUND,
+    }
+    assert.throws(
+      () =>
+        buildReviewPayload({
+          utilityEntryId: LINE,
+          expectedSourceFingerprint: "live",
+          sourceAmountCents: "-3494",
+          components: [component],
+        }),
+      (error: unknown) => error instanceof Error && error.message === "budget_invalid: utility decision",
+    )
+    const utility = buildReviewPayload({
+      utilityEntryId: LINE,
+      expectedSourceFingerprint: "live",
+      sourceAmountCents: "-3494",
+      components: [component],
+      evidence: { utilityDecisionReference: "statement 12" },
+    })
+    assert.equal((utility.evidence as { utility_decision_reference?: string }).utility_decision_reference, "statement 12")
+    const bank = buildReviewPayload({
+      transactionId: "tx-1",
+      expectedSourceFingerprint: "live",
+      sourceAmountCents: "-3494",
+      components: [component],
+    })
+    assert.equal("utility_decision_reference" in (bank.evidence as object), false)
   })
 })
 

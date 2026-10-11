@@ -72,7 +72,6 @@ export function TransactionBudget({ transactionId }: { transactionId: string }) 
   }, [reloadKey, transactionId])
 
   if (!ready) return null
-  if (!ready.ask && !ready.amountCents) return null
   if (!ready.ask) return <AlreadyApproved sentence={ready.sentence} />
   if (!ready.amountCents || !ready.fingerprint) return <p className="type-caption text-muted-foreground">{copy.somethingUnresolved}</p>
   return (

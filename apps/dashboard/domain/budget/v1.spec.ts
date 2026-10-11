@@ -41,6 +41,23 @@ describe("projectCashNeed", () => {
     assert.equal(view.needs[0]?.shortfall, null)
     assert.match(view.needs[0]?.sentence ?? "", /income date is not known/)
   })
+
+  it("does not say the paying account can cover a payment that has no account", () => {
+    const view = projectCashNeed({
+      complete: true,
+      accounts: [{ id: "pay", ownerId: null, ownerScope: "shared", resourceClass: "liquid", cashCents: "10000" }],
+      expected: [
+        { kind: "income", date: "2026-10-25", amountCents: "100000", payerId: null, accountId: null },
+        { kind: "payment", date: "2026-10-15", amountCents: "50000", payerId: null, accountId: null },
+      ],
+      members: [],
+    })
+    const paying = view.needs[0]
+    assert.equal(paying?.shortfall, null)
+    assert.equal(paying?.dueBeforeIncome, null)
+    assert.equal(paying?.sentence.includes("can cover"), false)
+    assert.match(paying?.sentence ?? "", /no paying account/)
+  })
 })
 
 describe("freshness and provisional", () => {
@@ -53,6 +70,18 @@ describe("freshness and provisional", () => {
       /stale/i,
     )
     assert.match(provisionalSentence("800000") ?? "", /Not currently available money/)
+  })
+
+  it("does not call the source fresh when a shorter window has expired", () => {
+    const sentence = freshnessSentence({
+      asOf: "2026-10-10T10:00:00Z",
+      accounts: [
+        { observedAt: "2026-10-01T10:00:00Z", freshnessHours: 240, included: true },
+        { observedAt: "2026-10-08T10:00:00Z", freshnessHours: 24, included: true },
+      ],
+    })
+    assert.match(sentence, /stale/i)
+    assert.equal(sentence.toLowerCase().includes("fresh."), false)
   })
 })
 

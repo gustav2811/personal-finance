@@ -66,6 +66,18 @@ export function cycleLabel(start: string, endExclusive: string): string {
   return `${formatDayMonth(start)} – ${formatDayMonth(dayBefore(endExclusive))}`
 }
 
+export function calendarMonthRange(cycleStart: string): { from: string; to: string } {
+  const start = assertIsoDate(cycleStart)
+  const lastIncluded = dayBefore(addMonths(start, 1))
+  const [year, month] = lastIncluded.slice(0, 7).split("-").map(Number) as [number, number]
+  const nextMonth = month === 12 ? 1 : month + 1
+  const nextYear = month === 12 ? year + 1 : year
+  return {
+    from: assertIsoDate(`${start.slice(0, 7)}-01`),
+    to: assertIsoDate(`${String(nextYear).padStart(4, "0")}-${String(nextMonth).padStart(2, "0")}-01`),
+  }
+}
+
 export function calendarMonthKey(cycleStart: string): string {
   const lastDay = dayBefore(addMonths(cycleStart, 1))
   return lastDay.slice(0, 7)

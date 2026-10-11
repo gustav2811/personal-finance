@@ -64,6 +64,7 @@ export function PurchaseReview({
   const [openingRefundReason, setOpeningRefundReason] = useState("")
   const [debtKind, setDebtKind] = useState<"required_debt_payment" | "extra_debt_payment">("required_debt_payment")
   const [splitReason, setSplitReason] = useState("")
+  const [utilityDecision, setUtilityDecision] = useState("")
   const [rows, setRows] = useState<SplitRow[]>([
     { key: "a", amount: "", fundId: "", categoryId: "", whose: null },
     { key: "b", amount: "", fundId: "", categoryId: "", whose: null },
@@ -75,6 +76,10 @@ export function PurchaseReview({
   const needsSplit = mixed || siblingCount > 1
 
   async function save(components: ReviewComponentInput[], evidence?: { splitReviewReason?: string; receiptReference?: string }) {
+    if (utilityEntryId && utilityDecision.trim().length === 0) {
+      setError("A utility review needs the decision reference.")
+      return
+    }
     const payload = buildReviewPayload({
       transactionId: sourceTransactionId ?? undefined,
       utilityEntryId: utilityEntryId ?? undefined,
@@ -85,7 +90,10 @@ export function PurchaseReview({
       drifted,
       existingComponentCount: siblingCount,
       components,
-      evidence,
+      evidence: {
+        ...evidence,
+        utilityDecisionReference: utilityEntryId ? utilityDecision : undefined,
+      },
       decisionUpdate: categoryId
         ? { categoryId, isTransfer: mode === "transfer", excludeFromSpend: mode === "transfer" }
         : undefined,
@@ -280,7 +288,15 @@ export function PurchaseReview({
               <ToggleGroupItem value="extra_debt_payment">Extra</ToggleGroupItem>
             </ToggleGroup>
           ) : null}
-          <Button disabled={saving || (needsSplit && mode === "purchase")} onClick={saveSimple} type="button">Save</Button>
+          {utilityEntryId ? (
+            <Input
+              aria-label="Utility decision reference"
+              onChange={(event) => setUtilityDecision(event.target.value)}
+              placeholder="Utility decision reference"
+              value={utilityDecision}
+            />
+          ) : null}
+          <Button disabled={saving || (needsSplit && mode === "purchase") || (utilityEntryId !== null && utilityDecision.trim().length === 0)} onClick={saveSimple} type="button">Save</Button>
         </div>
       )}
       {error ? <Alert><AlertDescription>{error}</AlertDescription></Alert> : null}

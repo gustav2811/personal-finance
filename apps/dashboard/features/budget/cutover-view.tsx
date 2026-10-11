@@ -181,7 +181,7 @@ function AccountForm({
   const [signEvidence, setSignEvidence] = useState(settings?.signEvidence ?? "")
   const [freshness, setFreshness] = useState(String(settings?.freshnessHours ?? 24))
   const [settlement, setSettlement] = useState(settings?.settlementAccountId ?? "")
-  const [deviceId, setDeviceId] = useState("")
+  const [deviceId, setDeviceId] = useState(settings?.utilityDeviceId ?? "")
 
   return (
     <form
@@ -256,6 +256,9 @@ function AccountForm({
       <Select onValueChange={(next) => { if (next) setDeviceId(next) }} value={deviceId || undefined}>
         <SelectTrigger aria-label="Wallet device"><SelectValue placeholder="Wallet device" /></SelectTrigger>
         <SelectContent>
+          {deviceId && !devices.some((device) => device.id === deviceId) ? (
+            <SelectItem value={deviceId}>{deviceId}</SelectItem>
+          ) : null}
           {devices.map((device) => <SelectItem key={device.id} value={device.id}>{device.name}</SelectItem>)}
         </SelectContent>
       </Select>

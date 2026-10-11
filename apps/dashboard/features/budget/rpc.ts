@@ -33,8 +33,8 @@ export function readOverview(cycleStart: string): Promise<unknown> {
   return readBudgetRpc("budget_get_overview_v1", { p_cycle_start: cycleStart })
 }
 
-export function readActuals(filters: { from: string; to: string }): Promise<unknown> {
-  return readBudgetRpc("budget_get_actuals_v1", { p_filters: filters, p_limit: 200 })
+export function readActuals(filters: { from: string; to: string }, cursor: string | null = null): Promise<unknown> {
+  return readBudgetRpc("budget_get_actuals_v1", { p_filters: filters, p_cursor: cursor, p_limit: 200 })
 }
 
 export function readLiquidity(): Promise<unknown> {

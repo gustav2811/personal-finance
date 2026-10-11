@@ -44,6 +44,7 @@ export type HistoryInput = {
   version: unknown
   parent: unknown
   actuals: unknown
+  calendarActuals?: unknown
   filter?: BeneficiaryFilter
 }
 
@@ -158,6 +159,12 @@ function correctionsOf(entries: unknown[]): CorrectionTrail[] {
   })
 }
 
+function calendarMonths(payload: unknown): MonthActual[] {
+  const record = readRecord(payload)
+  if (!record || listPartial(record)) return []
+  return groupActualsByMonth(readArray(record.entries))
+}
+
 function householdConsumption(actuals: Record<string, unknown>): string | null {
   const totals = readRecord(actuals.household_totals)
   const byGroup = totals ? readRecord(totals.by_group) : null
@@ -233,7 +240,7 @@ export function projectHistory(input: HistoryInput): HistoryProjection {
     partialList: partial ? copy.partialList : null,
     corrections,
     chain: correctionChain(entries),
-    months: partial ? [] : groupActualsByMonth(entries),
+    months: calendarMonths(input.calendarActuals),
     planChangeNote: copy.planChangeIsNotCorrection,
     correctionNote: copy.correctedSpend,
   }

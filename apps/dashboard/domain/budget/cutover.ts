@@ -25,6 +25,7 @@ export type CutoverSettings = {
   transactionSignConvention: "outflow_negative" | "outflow_positive" | "unknown"
   signEvidence: string | null
   settingsFingerprint: string
+  utilityDeviceId: string | null
 }
 
 export type CutoverSnapshot = {
@@ -134,6 +135,7 @@ function settingsOf(value: unknown): CutoverSettings | null {
     transactionSignConvention: sign as CutoverSettings["transactionSignConvention"],
     signEvidence: text(record, "sign_evidence"),
     settingsFingerprint: requireText(record, "settings_fingerprint"),
+    utilityDeviceId: text(record, "utility_device_id"),
   }
 }
 

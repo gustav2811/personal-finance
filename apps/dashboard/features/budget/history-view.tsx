@@ -22,7 +22,7 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { ComparisonBars } from "@/domain/budget/comparison-bars"
 import { copy } from "@/domain/budget/copy"
-import { addMonths, calendarMonthLabel, cycleLabel } from "@/domain/budget/cycle"
+import { addMonths, calendarMonthLabel, calendarMonthRange, cycleLabel } from "@/domain/budget/cycle"
 import { chartRows, projectHistory, type HistoryProjection, type HistoryRow } from "@/domain/budget/history"
 import { memberName, type MemberRef } from "@/domain/budget/members"
 import type { BeneficiaryFilter } from "@/domain/budget/overview"
@@ -43,6 +43,7 @@ type Loaded = {
   version: unknown
   parent: unknown
   actuals: unknown
+  calendarActuals: unknown
 }
 
 function versionNumber(record: Record<string, unknown>): string | null {
@@ -115,7 +116,28 @@ async function loadComparison(versionId: string): Promise<Loaded> {
   const parentId = body ? readString(body, "parent_version_id") : null
   const parent = parentId ? await readVersion(parentId) : null
   const actuals = await readActuals({ from: starts, to: addMonths(starts, 1) })
-  return { version, parent, actuals }
+  const calendarActuals = await readCalendarActuals(calendarMonthRange(starts))
+  return { version, parent, actuals, calendarActuals }
+}
+
+async function readCalendarActuals(range: { from: string; to: string }): Promise<unknown> {
+  const entries: unknown[] = []
+  let cursor: string | null = null
+  let last: Record<string, unknown> | null = null
+  const seen = new Set<string>()
+  for (let page = 0; page < PAGE_CAP; page += 1) {
+    const payload = await readActuals(range, cursor)
+    const record = readRecord(payload)
+    if (!record) throw new Error(copy.couldNotRead)
+    last = record
+    entries.push(...readArray(record.entries))
+    const next = readString(record, "next_cursor")
+    if (!next) return { ...record, entries, next_cursor: null }
+    if (seen.has(next)) throw new Error(copy.couldNotRead)
+    seen.add(next)
+    cursor = next
+  }
+  return { ...(last ?? {}), entries, next_cursor: cursor }
 }
 
 function HistoryTable({ rows }: { rows: HistoryRow[] }) {
