@@ -251,8 +251,27 @@ describe("household routine", () => {
     assert.equal(routine.next, "create")
     assert.equal(routineHref(routine.next).href, "/budget/plan?cycle=this")
     assert.equal(routineHref(routine.next).label, copy.createThisCycle)
-    assert.equal(agreementHref(routine.next).href.includes("cycle=next"), false)
+    assert.equal(agreementHref(routine).href.includes("cycle=next"), false)
     assert.match(routine.agreement.sentence, /this cycle/)
     assert.equal(routine.agreement.sentence.includes(copy.nextCycleKeeps), false)
+  })
+
+  it("keeps first setup on this cycle when opening balances are also missing", () => {
+    const routine = projectRoutine(
+      source({
+        overview: {
+          complete: false,
+          current_plan: null,
+          current_version_id: null,
+          reasons: [{ code: "plan_missing" }, { code: "cutover_missing" }],
+        },
+      }),
+    )
+
+    assert.equal(routine.next, "opening")
+    assert.equal(routine.planMissing, true)
+    assert.equal(agreementHref(routine).href, "/budget/plan?cycle=this")
+    assert.equal(agreementHref(routine).label, copy.createThisCycle)
+    assert.match(routine.agreement.detail ?? "", /later cycle can wait/)
   })
 })

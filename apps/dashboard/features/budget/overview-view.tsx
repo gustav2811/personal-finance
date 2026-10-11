@@ -239,8 +239,8 @@ function BudgetBody({
       <Section title={copy.agreementQuestion}>
         <Answer answer={routine.agreement} />
         <p className="type-caption text-muted-foreground">
-          <Link className="underline-offset-4 hover:underline" href={agreementHref(routine.next).href}>
-            {agreementHref(routine.next).label}
+          <Link className="underline-offset-4 hover:underline" href={agreementHref(routine).href}>
+            {agreementHref(routine).label}
           </Link>
         </p>
       </Section>

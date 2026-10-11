@@ -31,6 +31,7 @@ export type HouseholdRoutine = {
   }
   agreement: RoutineAnswer
   next: RoutineNext
+  planMissing: boolean
   stale: string | null
 }
 
@@ -265,8 +266,8 @@ export function routineHref(next: RoutineNext): { href: string; label: string } 
   }
 }
 
-export function agreementHref(next: RoutineNext): { href: string; label: string } {
-  if (next === "create") return routineHref("create")
+export function agreementHref(input: { next: RoutineNext; planMissing: boolean }): { href: string; label: string } {
+  if (input.planMissing || input.next === "create") return routineHref("create")
   return { href: "/budget/plan?cycle=next", label: copy.reviewNextCycle }
 }
 
@@ -300,6 +301,7 @@ export function projectRoutine(input: {
           detail: copy.contributionDoesNotMove,
         },
     next: nextAction(codes, input.review, attention.items.length),
+    planMissing: codes.includes("plan_missing"),
     stale: /stale/i.test(view.freshness) ? copy.balancesMayBeStale : null,
   }
 }
