@@ -4,6 +4,7 @@ import {
   Home,
   List,
   Radio,
+  Scale,
   Wallet,
   Zap,
   type LucideIcon,
@@ -34,6 +35,7 @@ type NavItem = {
 
 const HOUSEHOLD: NavItem[] = [
   { href: "/", icon: Home, label: "Overview" },
+  { href: "/budget", icon: Scale, label: "Budget" },
   { href: "/money", icon: Wallet, label: "Money" },
   { href: "/transactions", icon: List, label: "Transactions" },
 ]
