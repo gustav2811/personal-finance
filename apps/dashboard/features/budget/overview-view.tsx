@@ -18,26 +18,11 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { copy } from "@/domain/budget/copy"
 import { addMonths, currentCycle } from "@/domain/budget/cycle"
 import { projectBudget, type BeneficiaryFilter, type BudgetOverview, type PurposeRow } from "@/domain/budget/overview"
-import { projectRoutine, type HouseholdRoutine, type RoutineNext } from "@/domain/budget/routine"
+import { agreementHref, projectRoutine, routineHref, type HouseholdRoutine } from "@/domain/budget/routine"
 import { MoveMoneyDialog } from "./move-dialog"
 import { getBudgetSource, type BudgetSource } from "./queries"
 
 const TOUCH = "pointer-coarse:h-9 pointer-coarse:px-3"
-
-function nextStep(next: RoutineNext): { href: string; label: string } {
-  switch (next) {
-    case "opening":
-      return { href: "/budget/reconcile", label: copy.agreeOpening }
-    case "decide":
-      return { href: "/budget/review", label: copy.decide }
-    case "agree":
-      return { href: "/budget/plan?cycle=next", label: copy.reviewNextCycle }
-    default: {
-      const unreachable: never = next
-      return unreachable
-    }
-  }
-}
 
 function Answer({ answer }: { answer: HouseholdRoutine["spend"] }) {
   return (
@@ -126,7 +111,7 @@ export function BudgetView() {
 
   const view = source ? projectBudget({ ...source, filter }) : null
   const routine = source ? projectRoutine(source) : null
-  const step = routine ? nextStep(routine.next) : null
+  const step = routine ? routineHref(routine.next) : null
 
   return (
     <div className="@container/budget space-y-10">
@@ -254,8 +239,8 @@ function BudgetBody({
       <Section title={copy.agreementQuestion}>
         <Answer answer={routine.agreement} />
         <p className="type-caption text-muted-foreground">
-          <Link className="underline-offset-4 hover:underline" href="/budget/plan?cycle=next">
-            {copy.reviewNextCycle}
+          <Link className="underline-offset-4 hover:underline" href={agreementHref(routine.next).href}>
+            {agreementHref(routine.next).label}
           </Link>
         </p>
       </Section>

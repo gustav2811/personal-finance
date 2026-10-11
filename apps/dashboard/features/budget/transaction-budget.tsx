@@ -3,11 +3,12 @@
 import { useEffect, useState } from "react"
 import { copy } from "@/domain/budget/copy"
 import type { MemberRef } from "@/domain/budget/members"
-import { alreadyApproved, projectReviewQueue, reviewFunds, type ReviewFund } from "@/domain/budget/review"
+import { alreadyApproved, projectReviewQueue, reviewFunds, type RefundablePurchase, type ReviewFund } from "@/domain/budget/review"
 import { readSavedReview } from "@/domain/budget/v1"
 import { readArray, readRecord, readString } from "@/domain/budget/wire"
 import { readMemberDirectory } from "./members"
 import { AlreadyApproved, PurchaseReview } from "./purchase-review"
+import { loadRefundablePurchases } from "./purchases"
 import { readCutover, readOverview, readReviewQueue, readSourceReview } from "./rpc"
 import { currentCycle } from "@/domain/budget/cycle"
 
@@ -22,6 +23,10 @@ type Ready = {
   funds: ReviewFund[]
   members: MemberRef[]
   categories: Array<{ id: string; name: string }>
+  purchases: RefundablePurchase[]
+  purchasesPartial: boolean
+  purchasesUnread: boolean
+  decisionsConfirmed: boolean
 }
 
 export function TransactionBudget({ transactionId }: { transactionId: string }) {
@@ -37,7 +42,7 @@ export function TransactionBudget({ transactionId }: { transactionId: string }) 
       readMemberDirectory(),
       readSourceReview(transactionId).catch(() => null),
     ])
-      .then(([queue, overview, cutover, members, saved]) => {
+      .then(async ([queue, overview, cutover, members, saved]) => {
         if (cancelled) return
         const projected = projectReviewQueue({ queue, members })
         const item = projected.items.find((entry) => entry.sourceTransactionId === transactionId) ?? null
@@ -48,6 +53,13 @@ export function TransactionBudget({ transactionId }: { transactionId: string }) 
           const name = record ? readString(record, "name") : null
           return id && name ? [{ id, name }] : []
         })
+        const funds = reviewFunds(overview)
+        const purchases = await loadRefundablePurchases({ funds, members }).catch(() => ({
+          purchases: [],
+          partial: false,
+          unread: true,
+        }))
+        if (cancelled) return
         const savedReview = saved ? readSavedReview(saved, members) : null
         const payer = item?.payerSentence
         setReady({
@@ -58,9 +70,13 @@ export function TransactionBudget({ transactionId }: { transactionId: string }) 
           setId: item?.setId ?? null,
           siblingCount: item?.siblingCount ?? 1,
           drifted,
-          funds: reviewFunds(overview),
+          funds,
           members,
           categories,
+          purchases: purchases.purchases,
+          purchasesPartial: purchases.partial,
+          purchasesUnread: purchases.unread,
+          decisionsConfirmed: item?.decisionsConfirmed ?? false,
         })
       })
       .catch(() => {
@@ -78,11 +94,15 @@ export function TransactionBudget({ transactionId }: { transactionId: string }) 
     <PurchaseReview
       amountCents={ready.amountCents}
       categories={ready.categories}
+      decisionsConfirmed={ready.decisionsConfirmed}
       drifted={ready.drifted}
       fingerprint={ready.fingerprint}
       funds={ready.funds}
       members={ready.members}
       onSaved={async () => setReloadKey((key) => key + 1)}
+      purchases={ready.purchases}
+      purchasesPartial={ready.purchasesPartial}
+      purchasesUnread={ready.purchasesUnread}
       setId={ready.setId}
       siblingCount={ready.siblingCount}
       sourceTransactionId={transactionId}

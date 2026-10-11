@@ -3,7 +3,7 @@ import { describe, it } from "node:test"
 import { copy } from "./copy"
 import { formatCents } from "./money"
 import { formatSpokenDate } from "./cycle"
-import { projectRoutine } from "./routine"
+import { agreementHref, projectRoutine, routineHref } from "./routine"
 
 const CARA = "00000000-0000-0000-0000-000000000011"
 const GUSTAV = "00000000-0000-0000-0000-000000000012"
@@ -144,6 +144,28 @@ describe("household routine", () => {
     assert.equal(JSON.stringify(routine.spend).includes("overspent"), false)
   })
 
+  it("names a shortfall elsewhere before treating the everyday allowance as spendable", () => {
+    const routine = projectRoutine(
+      source({
+        overview: {
+          funds: [
+            fund({}),
+            fund({ fund_id: GIFTS, name: "Gifts", balance_cents: "-50000", liquid_cents: "-50000" }),
+            fund({ fund_id: RETIREMENT, name: "Retirement", balance_cents: "500000", liquid_cents: "500000" }),
+          ],
+        },
+      }),
+    )
+
+    assert.equal(routine.spend.amount, null)
+    assert.match(routine.spend.sentence, /^Gifts is short by R500\./)
+    assert.match(routine.spend.sentence, /R1 400 is still set aside/)
+    assert.match(routine.spend.sentence, /not spendable until the shortfall is covered/)
+    assert.equal(routine.spend.sentence.startsWith("R1 400"), false)
+    assert.equal((routine.spend.detail ?? "").includes("Gifts stays reserved"), false)
+    assert.equal(JSON.stringify(routine.spend).toLowerCase().includes("overspent"), false)
+  })
+
   it("withholds spend in plain language when opening balances are not agreed", () => {
     const routine = projectRoutine(
       source({
@@ -212,5 +234,25 @@ describe("household routine", () => {
     assert.equal(routine.agreement.detail, copy.contributionDoesNotMove)
     assert.equal(routine.next, "agree")
     assert.equal(routine.stale, null)
+    assert.equal(routineHref(routine.next).href, "/budget/plan?cycle=next")
+  })
+
+  it("sends a missing current plan to this cycle, not the next one", () => {
+    const routine = projectRoutine(
+      source({
+        overview: {
+          current_plan: null,
+          current_version_id: null,
+          reasons: [{ code: "plan_missing" }],
+        },
+      }),
+    )
+
+    assert.equal(routine.next, "create")
+    assert.equal(routineHref(routine.next).href, "/budget/plan?cycle=this")
+    assert.equal(routineHref(routine.next).label, copy.createThisCycle)
+    assert.equal(agreementHref(routine.next).href.includes("cycle=next"), false)
+    assert.match(routine.agreement.sentence, /this cycle/)
+    assert.equal(routine.agreement.sentence.includes(copy.nextCycleKeeps), false)
   })
 })

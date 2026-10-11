@@ -272,4 +272,61 @@ describe("projectFund", () => {
     assert.equal(fromPlanLine.timeline.length, 2)
     assert.equal(fromPlanLine.target, null)
   })
+
+  it("plots effective changes and withholds a chart that cannot explain the balance", () => {
+    const corrected = projectFund(
+      {
+        complete: true,
+        fund: { name: "Gifts" },
+        balances: { balance_cents: "90000", assigned_cents: "100000", restricted_cents: "0" },
+        plan_line: { funding_behaviour: "accumulating" },
+        entries: [
+          {
+            effective_on: "2026-10-01",
+            entry_type: "movement",
+            signed_amount_cents: "100000",
+            effective_delta_cents: "100000",
+            active_effect: true,
+          },
+          {
+            effective_on: "2026-10-02",
+            entry_type: "allocation",
+            effect_kind: "consumption",
+            signed_amount_cents: "-20000",
+            effective_delta_cents: "0",
+            status: "superseded",
+            active_effect: false,
+          },
+          {
+            effective_on: "2026-10-03",
+            entry_type: "allocation",
+            effect_kind: "consumption",
+            signed_amount_cents: "-10000",
+            effective_delta_cents: "-10000",
+            status: "current",
+            active_effect: true,
+          },
+        ],
+      },
+      members,
+    )
+    const incomplete = projectFund(
+      {
+        complete: true,
+        next_cursor: "more",
+        fund: { name: "Gifts" },
+        balances: { balance_cents: "90000", assigned_cents: "100000", restricted_cents: "0" },
+        plan_line: { funding_behaviour: "accumulating" },
+        entries: [
+          { effective_on: "2026-10-01", entry_type: "movement", signed_amount_cents: "100000", effective_delta_cents: "100000" },
+          { effective_on: "2026-10-03", effect_kind: "consumption", signed_amount_cents: "-10000", effective_delta_cents: "-10000" },
+        ],
+      },
+      members,
+    )
+
+    assert.equal(corrected.points.at(-1)?.balance, 90000)
+    assert.equal(corrected.points.some((point) => point.balance === 80000), false)
+    assert.equal(incomplete.points.length, 0)
+  })
 })

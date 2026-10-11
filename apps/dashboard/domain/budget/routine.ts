@@ -6,7 +6,7 @@ import { projectBudget } from "./overview"
 import { oneFormPerSource, projectReviewQueue, type ReviewItem } from "./review"
 import { readArray, readComplete, readReasons, readRecord, readString } from "./wire"
 
-export type RoutineNext = "opening" | "decide" | "agree"
+export type RoutineNext = "opening" | "decide" | "agree" | "create"
 
 export type RoutineAnswer = {
   amount: string | null
@@ -110,6 +110,16 @@ function reservedSentence(names: readonly string[]): string | null {
   return names.length === 1 ? `${joined} stays reserved.` : `${joined} stay reserved.`
 }
 
+function absoluteCents(cents: string): string {
+  return isNegativeCents(cents) ? cents.slice(1) : cents
+}
+
+function shortfallSentence(lines: readonly SpendLine[]): string | null {
+  const short = lines.filter((line) => line.available !== null && isNegativeCents(line.available))
+  if (short.length === 0) return null
+  return short.map((line) => `${line.name} is short by ${formatCents(absoluteCents(line.available ?? "0"))}.`).join(" ")
+}
+
 function unassignedDetail(overview: Record<string, unknown>, complete: boolean): string | null {
   if (!complete) return null
   const cents = parseCents(overview.unassigned_cents)
@@ -128,8 +138,15 @@ function spendAnswer(overview: Record<string, unknown>, complete: boolean, reaso
   }
   const lines = spendLines(overview).filter((line) => line.status !== "retired")
   const everyday = lines.filter((line) => line.kind === "consumption" && line.behaviour === "cycle_allowance")
+  const shortNames = new Set(
+    lines.flatMap((line) => (line.available !== null && isNegativeCents(line.available) ? [line.name] : [])),
+  )
   const reserved = lines.flatMap((line) =>
-    line.kind !== "contribution" && line.kind !== "debt_commitment" && line.behaviour && line.behaviour !== "cycle_allowance"
+    line.kind !== "contribution" &&
+    line.kind !== "debt_commitment" &&
+    line.behaviour &&
+    line.behaviour !== "cycle_allowance" &&
+    !shortNames.has(line.name)
       ? [line.name]
       : [],
   )
@@ -137,6 +154,15 @@ function spendAnswer(overview: Record<string, unknown>, complete: boolean, reaso
   const reservedText = reservedSentence(reserved)
   const unassigned = unassignedDetail(overview, complete)
   const detail = joinSentences([reservedText ?? "", unassigned ?? ""])
+  const shortfall = shortfallSentence(lines)
+  if (shortfall) {
+    const allowance = everydayAllowance(everyday, commitments)
+    return {
+      amount: null,
+      sentence: allowance ? `${shortfall} ${allowance}` : shortfall,
+      detail,
+    }
+  }
   if (everyday.length === 0) {
     return { amount: null, sentence: "Nothing is set aside as everyday spending.", detail }
   }
@@ -164,6 +190,14 @@ function spendAnswer(overview: Record<string, unknown>, complete: boolean, reaso
     sentence: `is still for everyday spending this cycle${after}.`,
     detail,
   }
+}
+
+function everydayAllowance(everyday: readonly SpendLine[], commitments: boolean): string | null {
+  if (everyday.length === 0 || everyday.some((line) => line.available === null)) return null
+  const total = everyday.reduce((sum, line) => sum + BigInt(line.available ?? "0"), BigInt(0)).toString()
+  if (isNegativeCents(total) || total === "0") return null
+  const after = commitments ? ", after commitments" : ""
+  return `${formatCents(total)} is still set aside for everyday spending this cycle${after}. That full amount is not spendable until the shortfall is covered.`
 }
 
 function cashAnswer(view: ReturnType<typeof projectBudget>): RoutineAnswer {
@@ -209,9 +243,31 @@ function attentionAnswer(review: unknown | null, members: readonly MemberRef[]):
 
 function nextAction(codes: readonly string[], review: unknown | null, attentionCount: number): RoutineNext {
   if (codes.some((code) => OPENING_CODES.has(code))) return "opening"
-  if (codes.includes("plan_missing")) return "agree"
+  if (codes.includes("plan_missing")) return "create"
   if (review === null || attentionCount > 0 || codes.some((code) => DECIDE_CODES.has(code))) return "decide"
   return "agree"
+}
+
+export function routineHref(next: RoutineNext): { href: string; label: string } {
+  switch (next) {
+    case "opening":
+      return { href: "/budget/reconcile", label: copy.agreeOpening }
+    case "decide":
+      return { href: "/budget/review", label: copy.decide }
+    case "create":
+      return { href: "/budget/plan?cycle=this", label: copy.createThisCycle }
+    case "agree":
+      return { href: "/budget/plan?cycle=next", label: copy.reviewNextCycle }
+    default: {
+      const unreachable: never = next
+      return unreachable
+    }
+  }
+}
+
+export function agreementHref(next: RoutineNext): { href: string; label: string } {
+  if (next === "create") return routineHref("create")
+  return { href: "/budget/plan?cycle=next", label: copy.reviewNextCycle }
 }
 
 export function projectRoutine(input: {
@@ -232,11 +288,17 @@ export function projectRoutine(input: {
     spend: spendAnswer(overview, complete, reasonLabels),
     cash: cashAnswer(view),
     attention,
-    agreement: {
-      amount: null,
-      sentence: copy.nextCycleKeeps,
-      detail: copy.contributionDoesNotMove,
-    },
+    agreement: codes.includes("plan_missing")
+      ? {
+          amount: null,
+          sentence: "There is no agreed plan for this cycle.",
+          detail: "Create this cycle's budget. A later cycle can wait.",
+        }
+      : {
+          amount: null,
+          sentence: copy.nextCycleKeeps,
+          detail: copy.contributionDoesNotMove,
+        },
     next: nextAction(codes, input.review, attention.items.length),
     stale: /stale/i.test(view.freshness) ? copy.balancesMayBeStale : null,
   }

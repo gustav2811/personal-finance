@@ -200,7 +200,8 @@ export function buildReviewPayload(input: {
   if (input.transactionId) payload.transaction_id = input.transactionId
   if (input.utilityEntryId) payload.utility_entry_id = input.utilityEntryId
   if (input.expectedCurrentSetId) payload.expected_current_set_id = input.expectedCurrentSetId
-  if (input.decisionUpdate) {
+  // Utility review rejects the bank decision envelope. Category stays on the component.
+  if (input.decisionUpdate && !input.utilityEntryId) {
     payload.decision_update = {
       category_id: input.decisionUpdate.categoryId,
       is_transfer: input.decisionUpdate.isTransfer,
@@ -209,6 +210,60 @@ export function buildReviewPayload(input: {
     }
   }
   return payload
+}
+
+export function reviewDecisionForSave(input: {
+  utility: boolean
+  split: boolean
+  decisionsConfirmed: boolean
+  categoryId: string | null
+  isTransfer: boolean
+  excludeFromSpend: boolean
+}): {
+  categoryId: string
+  isTransfer: boolean
+  excludeFromSpend: boolean
+} | undefined {
+  if (input.utility || !input.categoryId) return undefined
+  if (input.split && input.decisionsConfirmed) return undefined
+  return {
+    categoryId: input.categoryId,
+    isTransfer: input.isTransfer,
+    excludeFromSpend: input.excludeFromSpend,
+  }
+}
+
+export function refundComponent(input: {
+  amountCents: string
+  beneficiaryScope: "shared" | "member"
+  beneficiaryMemberId?: string
+  categoryId: string
+  fundId: string | null
+  purchase: { allocationId: string; fundId: string } | null
+  openingReason: string
+}): ReviewComponentInput {
+  const shared = {
+    amountCents: input.amountCents,
+    beneficiaryScope: input.beneficiaryScope,
+    beneficiaryMemberId: input.beneficiaryMemberId,
+    effectKind: "refund" as const,
+    categoryId: input.categoryId,
+  }
+  if (input.purchase) {
+    return {
+      ...shared,
+      fundId: input.purchase.fundId,
+      originalRefundAllocationId: input.purchase.allocationId,
+    }
+  }
+  if (!input.fundId || input.openingReason.trim().length === 0) {
+    throw new Error("budget_invalid: refund")
+  }
+  return {
+    ...shared,
+    fundId: input.fundId,
+    openingRefundReason: input.openingReason.trim(),
+  }
 }
 
 export type DraftLineInput = {

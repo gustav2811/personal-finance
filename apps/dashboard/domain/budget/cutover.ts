@@ -1,4 +1,4 @@
-import { copy } from "./copy"
+import { copy, reasonSentence } from "./copy"
 import { parseCents } from "./money"
 import { readArray, readRecord, readString } from "./wire"
 
@@ -53,6 +53,11 @@ export type CutoverFund = {
   beneficiaryMemberId: string | null
 }
 
+export type CutoverReason = {
+  code: string
+  accountId: string | null
+}
+
 export type CutoverReconciliation = {
   id: string
   storedStatus: string
@@ -60,7 +65,20 @@ export type CutoverReconciliation = {
   asOf: string | null
   openingFundCutover: string | null
   fingerprint: string | null
-  reasons: string[]
+  reasons: CutoverReason[]
+}
+
+export type OpeningFinding = {
+  accountId: string | null
+  accountName: string
+  sentences: string[]
+}
+
+export type OpeningExplanation = {
+  complete: boolean
+  headline: string
+  findings: OpeningFinding[]
+  notice: string
 }
 
 export type CutoverEarmark = {
@@ -192,11 +210,55 @@ function reconciliationOf(value: unknown): CutoverReconciliation | null {
     asOf: text(record, "as_of"),
     openingFundCutover: text(record, "opening_fund_cutover"),
     fingerprint: text(record, "reconciliation_fingerprint"),
-    reasons: readArray(record.reasons).flatMap((entry) => {
-      const reason = readRecord(entry)
-      const code = reason ? text(reason, "code") : null
-      return code ? [code] : []
-    }),
+    reasons: readOpeningReasons(record.reasons),
+  }
+}
+
+export function readOpeningReasons(value: unknown): CutoverReason[] {
+  const seen = new Set<string>()
+  return readArray(value).flatMap((entry) => {
+    const reason = readRecord(entry)
+    const code = reason ? text(reason, "code") : null
+    if (!reason || !code) return []
+    const accountId = text(reason, "account_id")
+    const key = `${accountId ?? ""}:${code}`
+    if (seen.has(key)) return []
+    seen.add(key)
+    return [{ code, accountId }]
+  })
+}
+
+export function explainOpening(input: {
+  status: string
+  reasons: readonly CutoverReason[]
+  accounts: readonly { id: string; name: string }[]
+}): OpeningExplanation {
+  const complete = input.status === "complete" && input.reasons.length === 0
+  const names = new Map(input.accounts.map((account) => [account.id, account.name]))
+  const grouped = new Map<string | null, string[]>()
+  for (const reason of input.reasons) {
+    const sentences = grouped.get(reason.accountId) ?? []
+    const sentence = reasonSentence(reason.code)
+    if (!sentences.includes(sentence)) sentences.push(sentence)
+    grouped.set(reason.accountId, sentences)
+  }
+  const orderedIds = [
+    ...input.accounts.map((account) => account.id).filter((id) => grouped.has(id)),
+    ...[...grouped.keys()].filter((id) => id !== null && !input.accounts.some((account) => account.id === id)),
+    ...(grouped.has(null) ? [null] : []),
+  ]
+  const findings = orderedIds.map((accountId) => ({
+    accountId,
+    accountName: accountId === null ? copy.openingHousehold : (names.get(accountId) ?? copy.openingAccount),
+    sentences: grouped.get(accountId) ?? [],
+  }))
+  const headline = complete ? copy.openingAgreed : copy.openingIncomplete
+  const detail = findings.map((finding) => `${finding.accountName}: ${finding.sentences.join(" ")}`).join(" ")
+  return {
+    complete,
+    headline,
+    findings,
+    notice: detail.length > 0 ? `${headline} ${detail}` : headline,
   }
 }
 

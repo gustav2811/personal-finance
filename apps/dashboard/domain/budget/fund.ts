@@ -15,6 +15,9 @@ export type FundEntry = {
   occurredOn: string | null
   amount: string
   signedCents: string | null
+  effectiveCents: string | null
+  activeEffect: boolean | null
+  superseded: boolean
   sentence: string
   sourceTransactionId: string | null
   correctionOf: string | null
@@ -145,6 +148,9 @@ function entryOf(value: unknown, members: readonly MemberRef[]): FundEntry | nul
     occurredOn: readString(record, "effective_on") ?? readString(record, "occurred_on"),
     amount: formatCents(centsAt(record, "signed_amount_cents") ?? centsAt(record, "amount_cents")),
     signedCents: centsAt(record, "signed_amount_cents") ?? centsAt(record, "amount_cents"),
+    effectiveCents: centsAt(record, "effective_delta_cents"),
+    activeEffect: typeof record.active_effect === "boolean" ? record.active_effect : null,
+    superseded: readString(record, "status") === "superseded",
     sentence: UUID.test(sentence) ? "" : sentence,
     sourceTransactionId: readString(record, "source_transaction_id"),
     correctionOf: readString(record, "correction_of") ?? readString(record, "supersedes_id"),
@@ -190,17 +196,32 @@ function holdingsOf(wire: Record<string, unknown>, context: FundContext | undefi
   })
 }
 
-function balancePoints(entries: readonly FundEntry[]): FundPoint[] {
+function effectiveDelta(entry: FundEntry): string | null {
+  if (entry.effectiveCents !== null) return entry.effectiveCents
+  if (entry.superseded || entry.activeEffect === false) return "0"
+  return entry.signedCents
+}
+
+function balancePoints(
+  entries: readonly FundEntry[],
+  input: { historyComplete: boolean; balanceCents: string | null },
+): FundPoint[] {
+  // A partial page starts at zero and counts superseded purchases. Withhold it
+  // unless effective changes from a zero opening explain the reported balance.
+  if (!input.historyComplete || input.balanceCents === null || !isCents(input.balanceCents)) return []
   const ordered = [...entries].sort((left, right) => (left.occurredOn ?? "").localeCompare(right.occurredOn ?? ""))
   let balance = BigInt(0)
   const points: FundPoint[] = []
   for (const entry of ordered) {
-    if (!entry.signedCents || !isCents(entry.signedCents)) continue
-    balance += BigInt(entry.signedCents)
+    const delta = effectiveDelta(entry)
+    if (delta === null || !isCents(delta)) return []
+    balance += BigInt(delta)
+    if (delta === "0") continue
     const value = Number(balance)
     if (!Number.isSafeInteger(value)) return []
     points.push({ when: entry.when, balance: value, balanceText: formatCents(balance.toString()) })
   }
+  if (balance.toString() !== input.balanceCents) return []
   return points
 }
 
@@ -307,7 +328,13 @@ export function projectFund(wire: unknown, members: readonly MemberRef[], contex
     dueOn,
     holdings: holdingsOf(record, context, asOf),
     timeline: timelineOf(entries, behaviour),
-    points: behaviour === "accumulating" ? balancePoints(entries) : [],
+    points:
+      behaviour === "accumulating"
+        ? balancePoints(entries, {
+            historyComplete: readString(record, "next_cursor") === null,
+            balanceCents,
+          })
+        : [],
     reasons: reasonLabels(record.reasons),
     entries,
     listNote: readString(record, "next_cursor") ? copy.partialList : null,

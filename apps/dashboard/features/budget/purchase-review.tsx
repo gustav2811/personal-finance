@@ -13,11 +13,11 @@ import {
 } from "@/components/ui/select"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { commandFailureIsUncertain, commandFailureText, holdCommand, type HeldCommand } from "@/domain/budget/command-attempt"
-import { buildReviewPayload, newCommandId, type ReviewComponentInput } from "@/domain/budget/commands"
+import { buildReviewPayload, newCommandId, refundComponent, reviewDecisionForSave, type ReviewComponentInput } from "@/domain/budget/commands"
 import { copy } from "@/domain/budget/copy"
 import { memberName, type MemberRef } from "@/domain/budget/members"
 import { randsToCents } from "@/domain/budget/move"
-import type { ReviewFund } from "@/domain/budget/review"
+import type { RefundablePurchase, ReviewFund } from "@/domain/budget/review"
 import { writeBudgetRpc } from "./rpc"
 
 const TOUCH = "pointer-coarse:h-9 pointer-coarse:px-3"
@@ -33,12 +33,16 @@ function message(caught: unknown): string {
 export function PurchaseReview({
   amountCents,
   categories,
+  decisionsConfirmed = false,
   drifted,
   fingerprint,
   fundId: suggestedFundId = null,
   funds,
   members,
   onSaved,
+  purchases,
+  purchasesPartial = false,
+  purchasesUnread = false,
   setId,
   siblingCount = 1,
   sourceTransactionId,
@@ -46,12 +50,16 @@ export function PurchaseReview({
 }: {
   amountCents: string
   categories: CategoryOption[]
+  decisionsConfirmed?: boolean
   drifted: boolean
   fingerprint: string
   fundId?: string | null
   funds: ReviewFund[]
   members: MemberRef[]
   onSaved: () => Promise<void>
+  purchases: RefundablePurchase[]
+  purchasesPartial?: boolean
+  purchasesUnread?: boolean
   setId: string | null
   siblingCount?: number
   sourceTransactionId: string | null
@@ -65,6 +73,7 @@ export function PurchaseReview({
   )
   const [categoryId, setCategoryId] = useState<string | null>(null)
   const [openingRefundReason, setOpeningRefundReason] = useState("")
+  const [refundLink, setRefundLink] = useState<string | null>(null)
   const [debtKind, setDebtKind] = useState<"required_debt_payment" | "extra_debt_payment">("required_debt_payment")
   const [splitReason, setSplitReason] = useState("")
   const [utilityDecision, setUtilityDecision] = useState("")
@@ -78,29 +87,37 @@ export function PurchaseReview({
   const heldRef = useRef<HeldCommand | null>(null)
   const needsSplit = mixed || siblingCount > 1
 
-  async function save(components: ReviewComponentInput[], evidence?: { splitReviewReason?: string; receiptReference?: string }) {
+  async function save(
+    components: ReviewComponentInput[],
+    evidence?: { splitReviewReason?: string; receiptReference?: string },
+    decision?: { categoryId: string; isTransfer: boolean; excludeFromSpend: boolean },
+  ) {
     if (utilityEntryId && utilityDecision.trim().length === 0) {
       setError("A utility review needs the decision reference.")
       return
     }
-    const payload = buildReviewPayload({
-      transactionId: sourceTransactionId ?? undefined,
-      utilityEntryId: utilityEntryId ?? undefined,
-      expectedSourceFingerprint: fingerprint,
-      expectedCurrentSetId: setId ?? undefined,
-      sourceAmountCents: amountCents,
-      mixed,
-      drifted,
-      existingComponentCount: siblingCount,
-      components,
-      evidence: {
-        ...evidence,
-        utilityDecisionReference: utilityEntryId ? utilityDecision : undefined,
-      },
-      decisionUpdate: categoryId
-        ? { categoryId, isTransfer: mode === "transfer", excludeFromSpend: mode === "transfer" }
-        : undefined,
-    })
+    let payload: Record<string, unknown>
+    try {
+      payload = buildReviewPayload({
+        transactionId: sourceTransactionId ?? undefined,
+        utilityEntryId: utilityEntryId ?? undefined,
+        expectedSourceFingerprint: fingerprint,
+        expectedCurrentSetId: setId ?? undefined,
+        sourceAmountCents: amountCents,
+        mixed,
+        drifted,
+        existingComponentCount: siblingCount,
+        components,
+        evidence: {
+          ...evidence,
+          utilityDecisionReference: utilityEntryId ? utilityDecision : undefined,
+        },
+        decisionUpdate: utilityEntryId ? undefined : decision,
+      })
+    } catch (caught: unknown) {
+      setError(message(caught))
+      return
+    }
     const fingerprintKey = JSON.stringify(payload)
     if (outstanding && heldRef.current && heldRef.current.fingerprint !== fingerprintKey) {
       setError(copy.retryOutstandingMovement)
@@ -133,6 +150,17 @@ export function PurchaseReview({
     }
   }
 
+  function bankDecision(split: boolean) {
+    return reviewDecisionForSave({
+      utility: utilityEntryId !== null,
+      split,
+      decisionsConfirmed,
+      categoryId,
+      isTransfer: mode === "transfer",
+      excludeFromSpend: mode === "transfer",
+    })
+  }
+
   function saveSimple() {
     if (!whose || !categoryId) return
     if (mode === "transfer") {
@@ -144,25 +172,30 @@ export function PurchaseReview({
           effectKind: "movement",
           categoryId,
         },
-      ])
+      ], undefined, bankDecision(false))
       return
     }
     if (mode === "refund") {
-      if (!fundId || openingRefundReason.trim().length === 0) {
+      const purchase = purchases.find((entry) => entry.allocationId === refundLink) ?? null
+      if (refundLink !== "opening" && !purchase) {
         setError(copy.refundNeedsLink)
         return
       }
-      void save([
-        {
-          amountCents,
-          beneficiaryScope: whose.kind,
-          beneficiaryMemberId: whose.kind === "member" ? whose.memberId : undefined,
-          effectKind: "refund",
-          fundId,
-          categoryId,
-          openingRefundReason: openingRefundReason.trim(),
-        },
-      ])
+      try {
+        void save([
+          refundComponent({
+            amountCents,
+            beneficiaryScope: whose.kind,
+            beneficiaryMemberId: whose.kind === "member" ? whose.memberId : undefined,
+            categoryId,
+            fundId,
+            purchase: refundLink === "opening" ? null : purchase,
+            openingReason: openingRefundReason,
+          }),
+        ], undefined, bankDecision(false))
+      } catch (caught: unknown) {
+        setError(message(caught))
+      }
       return
     }
     if (mode === "debt") {
@@ -176,7 +209,7 @@ export function PurchaseReview({
           fundId,
           categoryId,
         },
-      ])
+      ], undefined, bankDecision(false))
       return
     }
     if (needsSplit || !fundId) return
@@ -189,7 +222,7 @@ export function PurchaseReview({
         fundId,
         categoryId,
       },
-    ])
+    ], undefined, bankDecision(false))
   }
 
   function saveSplit() {
@@ -212,7 +245,12 @@ export function PurchaseReview({
       setError(copy.mixedNeedsSplit)
       return
     }
-    void save(components, { splitReviewReason: splitReason, receiptReference: splitReason })
+    const decision = bankDecision(true)
+    if (utilityEntryId === null && !decisionsConfirmed && !decision) {
+      setError("Choose a category for this transaction.")
+      return
+    }
+    void save(components, { splitReviewReason: splitReason, receiptReference: splitReason }, decision)
   }
 
   return (
@@ -272,17 +310,34 @@ export function PurchaseReview({
             </div>
           ))}
           <Input aria-label="Split reason" onChange={(event) => setSplitReason(event.target.value)} placeholder="Why this purchase is mixed" value={splitReason} />
+          {utilityEntryId === null && !decisionsConfirmed ? (
+            <CategorySelect categories={categories} categoryId={categoryId} onChange={setCategoryId} />
+          ) : null}
           <Button disabled={saving} onClick={saveSplit} type="button">Save split</Button>
         </div>
       ) : (
         <div className="flex flex-wrap items-end gap-3">
           <Whose members={members} onChange={setWhose} value={whose} />
-          {mode === "transfer" ? null : (
+          {mode === "refund" ? (
+            <Select onValueChange={(next) => { if (next) setRefundLink(next) }} value={refundLink ?? undefined}>
+              <SelectTrigger aria-label="Original purchase" className="pointer-coarse:h-9"><SelectValue placeholder="Original purchase" /></SelectTrigger>
+              <SelectContent>
+                {purchases.map((purchase) => (
+                  <SelectItem key={purchase.allocationId} value={purchase.allocationId}>{purchase.label}</SelectItem>
+                ))}
+                <SelectItem value="opening">Not in the budget yet</SelectItem>
+              </SelectContent>
+            </Select>
+          ) : null}
+          {mode === "transfer" || (mode === "refund" && refundLink !== "opening") ? null : (
             <FundSelect fundId={fundId} funds={funds} onChange={setFundId} />
           )}
           <CategorySelect categories={categories} categoryId={categoryId} onChange={setCategoryId} />
-          {mode === "refund" ? (
-            <Input aria-label="What is this refund for?" onChange={(event) => setOpeningRefundReason(event.target.value)} placeholder="What is this refund for?" value={openingRefundReason} />
+          {mode === "refund" && purchasesUnread ? <p className="type-caption text-muted-foreground">{copy.purchasesUnread}</p> : null}
+          {mode === "refund" && purchasesPartial ? <p className="type-caption text-muted-foreground">{copy.partialList}</p> : null}
+          {mode === "refund" && !purchasesUnread && purchases.length === 0 ? <p className="type-caption text-muted-foreground">{copy.noPurchaseToLink}</p> : null}
+          {mode === "refund" && refundLink === "opening" ? (
+            <Input aria-label="Why is the original purchase not in the budget?" onChange={(event) => setOpeningRefundReason(event.target.value)} placeholder="Why is the original purchase not in the budget?" value={openingRefundReason} />
           ) : null}
           {mode === "debt" ? (
             <ToggleGroup aria-label={copy.commitments} onValueChange={(next) => { if (next === "required_debt_payment" || next === "extra_debt_payment") setDebtKind(next) }} size="sm" type="single" value={debtKind} variant="outline">
