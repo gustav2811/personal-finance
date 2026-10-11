@@ -138,8 +138,15 @@ export function isDriftedReview(item: { kind: string; reasons: readonly { code: 
 
 export function sourceAmountCents(record: Record<string, unknown> | null, fallback: string | null): string | null {
   const provenance = record ? readRecord(record.provenance) : null
+  const live = provenance ? parseCents(provenance.live_source_amount_cents) : null
+  if (live) return live
   const snapshot = provenance ? readRecord(provenance.source_snapshot) : null
-  return (snapshot ? parseCents(snapshot.amount_cents) : null) ?? fallback
+  const fromSnapshot = snapshot ? parseCents(snapshot.amount_cents) : null
+  if (fromSnapshot) return fromSnapshot
+  const kind = record ? readString(record, "kind") : null
+  // A queue row for an existing allocation is one component, not the live source total.
+  if (kind === "source_drift" || kind === "allocation") return null
+  return fallback
 }
 
 export function alreadyApproved(input: { inQueue: boolean; status: string | null; drifted: boolean }): boolean {

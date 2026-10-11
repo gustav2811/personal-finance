@@ -62,9 +62,15 @@ describe("fund detail", () => {
       {
         complete: true,
         as_of: "2026-10-10T10:00:00Z",
-        fund: { fund_id: GIFTS, name: "Gifts", funding_behaviour: "accumulating" },
+        fund: { fund_id: GIFTS, name: "Gifts" },
         balances: { balance_cents: "30000", liquid_cents: "0", restricted_cents: "30000", assigned_cents: "30000" },
-        target: { target_cents: "60000", funded_cents: "30000", due_on: "2026-12-01" },
+        plan_line: { funding_behaviour: "accumulating", target_cents: "60000", due_on: "2026-12-01" },
+        target_suggestion: {
+          shortfall_cents: "30000",
+          remaining_funding_dates: 0,
+          suggested_contribution_cents: "30000",
+          due_now: false,
+        },
         entries: [
           {
             effective_on: "2026-10-02",

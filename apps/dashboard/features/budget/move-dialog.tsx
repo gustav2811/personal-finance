@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { commandFailureIsUncertain, commandFailureText, holdCommand, type HeldCommand } from "@/domain/budget/command-attempt"
 import { buildMoveFundsPayload, newCommandId, type MoveKind } from "@/domain/budget/commands"
 import { copy } from "@/domain/budget/copy"
 import { moveConfirmCopy, moveKindLabel, moveReason, randsToCents } from "@/domain/budget/move"
@@ -142,6 +143,8 @@ export function MoveMoneyDialog({
   onSaved?: () => void
 }) {
   const pendingRef = useRef(false)
+  const heldRef = useRef<HeldCommand | null>(null)
+  const [outstanding, setOutstanding] = useState(false)
   const [open, setOpen] = useState(false)
   const [kind, setKind] = useState<MoveKind | null>(null)
   const [fromId, setFromId] = useState("")
@@ -178,35 +181,72 @@ export function MoveMoneyDialog({
     if (!next) reset()
   }
 
-  async function confirm() {
-    if (pendingRef.current) return
-    if (!canAssign || versionId === null || reconciliationId === null || reconciliationFingerprint === null) return
-    if (!kind || !ends || !amountCents) return
+  async function send(held: HeldCommand) {
     pendingRef.current = true
     setPending(true)
     setError(null)
     try {
-      const payload = buildMoveFundsPayload({
-        kind,
-        fromFundId: ends.fromFundId,
-        toFundId: ends.toFundId,
-        amountCents,
-        effectiveOn: localDateKey(new Date().toISOString()),
-        expectedVersionId: versionId,
-        expectedReconciliationId: reconciliationId,
-        expectedReconciliationFingerprint: reconciliationFingerprint,
-        reason: moveReason(kind),
-      })
-      await writeBudgetRpc("budget_move_funds_v1", newCommandId(), payload)
+      await writeBudgetRpc(held.name, held.id, held.payload)
     } catch (caught) {
+      const uncertain = commandFailureIsUncertain(commandFailureText(caught))
+      if (!uncertain) {
+        heldRef.current = null
+        setOutstanding(false)
+      } else {
+        setOutstanding(true)
+      }
       setError(caught instanceof Error && caught.message ? caught.message : copy.couldNotSave)
-      return
+      return false
     } finally {
       pendingRef.current = false
       setPending(false)
     }
+    heldRef.current = null
+    setOutstanding(false)
     onSaved?.()
     onOpenChange(false)
+    return true
+  }
+
+  async function confirm() {
+    if (pendingRef.current) return
+    const outstandingCommand = heldRef.current
+    if (outstanding && outstandingCommand) {
+      await send(outstandingCommand)
+      return
+    }
+    if (!canAssign || versionId === null || reconciliationId === null || reconciliationFingerprint === null) return
+    if (!kind || !ends || !amountCents) return
+    const fingerprint = JSON.stringify({
+      kind,
+      fromFundId: ends.fromFundId ?? null,
+      toFundId: ends.toFundId ?? null,
+      amountCents,
+      versionId,
+      reconciliationId,
+      reconciliationFingerprint,
+    })
+    const held = holdCommand(
+      null,
+      {
+        name: "budget_move_funds_v1",
+        fingerprint,
+        payload: buildMoveFundsPayload({
+          kind,
+          fromFundId: ends.fromFundId,
+          toFundId: ends.toFundId,
+          amountCents,
+          effectiveOn: localDateKey(new Date().toISOString()),
+          expectedVersionId: versionId,
+          expectedReconciliationId: reconciliationId,
+          expectedReconciliationFingerprint: reconciliationFingerprint,
+          reason: moveReason(kind),
+        }),
+      },
+      newCommandId,
+    )
+    heldRef.current = held
+    await send(held)
   }
 
   return (
@@ -321,14 +361,15 @@ export function MoveMoneyDialog({
             ) : (
               <p className="type-caption text-muted-foreground">{copy.planUnchanged}</p>
             )}
+            {outstanding ? <p className="type-caption text-muted-foreground">{copy.retryOutstandingMovement}</p> : null}
             {error ? (
               <Alert variant="destructive">
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             ) : null}
             <DialogFooter>
-              <Button className={TOUCH} disabled={pending || !sentences} type="submit">
-                {copy.moveBetweenPurposes}
+              <Button className={TOUCH} disabled={pending || (!outstanding && !sentences)} type="submit">
+                {outstanding ? "Retry movement" : copy.moveBetweenPurposes}
               </Button>
             </DialogFooter>
           </form>

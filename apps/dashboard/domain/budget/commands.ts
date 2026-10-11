@@ -345,6 +345,39 @@ export function buildPublishPayload(input: {
   return payload
 }
 
+export function movementInputsReady(input: {
+  moveMoney: boolean
+  amountCents: string | null
+  fromFundId: string
+  toFundId: string
+  reconciliationFingerprint: string | null
+}): boolean {
+  if (!input.moveMoney) return true
+  return Boolean(
+    input.amountCents &&
+      input.fromFundId &&
+      input.toFundId &&
+      input.fromFundId !== input.toFundId &&
+      input.reconciliationFingerprint,
+  )
+}
+
+export function buildPublishWithMovementPayload(input: {
+  publishCommandId: string
+  moveCommandId: string
+  publish: ReturnType<typeof buildPublishPayload>
+  movement: Omit<MoveFundsInput, "expectedVersionId">
+}): Record<string, unknown> {
+  const movement = buildMoveFundsPayload({ ...input.movement, expectedVersionId: input.publishCommandId })
+  delete movement.expected_version_id
+  return {
+    publish_command_id: input.publishCommandId,
+    move_command_id: input.moveCommandId,
+    publish: input.publish,
+    movement,
+  }
+}
+
 const OWNER_SCOPES = ["shared", "member"] as const
 const RESOURCE_CLASSES = ["liquid", "restricted", "mortgage", "card", "tracking_only"] as const
 const SIGN_CONVENTIONS = ["outflow_negative", "outflow_positive", "unknown"] as const

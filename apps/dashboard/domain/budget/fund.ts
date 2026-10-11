@@ -44,6 +44,7 @@ export type FundView = {
   headline: string
   complete: boolean
   available: FundMoney
+  ledger: FundMoney | null
   assigned: FundMoney
   restricted: FundMoney | null
   suggestion: FundMoney | null
@@ -198,7 +199,8 @@ export function projectFund(wire: unknown, members: readonly MemberRef[], contex
   const record = readRecord(wire) ?? {}
   const fund = readRecord(record.fund)
   const balances = readRecord(record.balances)
-  const target = readRecord(record.target) ?? readRecord(record.target_suggestion)
+  const suggestionRecord = readRecord(record.target_suggestion)
+  const planLine = readRecord(record.plan_line)
   const complete = readComplete(record)
   const balanceCents = centsAt(balances, "balance_cents") ?? centsAt(record, "balance_cents")
   const liquidCents = centsAt(balances, "liquid_cents") ?? centsAt(record, "liquid_cents")
@@ -208,11 +210,10 @@ export function projectFund(wire: unknown, members: readonly MemberRef[], contex
   const availableCents = restrictedActive && liquidCents !== null ? liquidCents : balanceCents
   const deficit = deficitSentence(balanceCents) ?? deficitSentence(availableCents)
   const availableAmount = deficit ?? formatCents(availableCents)
-  const behaviour =
-    textAt(target, "funding_behaviour") ?? textAt(fund, "funding_behaviour") ?? textAt(record, "funding_behaviour")
+  const behaviour = textAt(planLine, "funding_behaviour")
   const schedule = scheduleNotice(behaviour)
-  const suggested = centsAt(target, "suggested_contribution_cents")
-  const dueNow = target?.due_now === true
+  const suggested = centsAt(suggestionRecord, "suggested_contribution_cents")
+  const dueNow = suggestionRecord?.due_now === true
   const suggestion: FundMoney | null =
     suggested === null
       ? null
@@ -221,8 +222,8 @@ export function projectFund(wire: unknown, members: readonly MemberRef[], contex
           amount: dueNow ? `${copy.dueNow}. ${formatCents(suggested)}` : formatCents(suggested),
           caption: copy.suggestedNotAssigned,
         }
-  const fundedCents = centsAt(target, "funded_cents") ?? balanceCents
-  const targetCents = centsAt(target, "target_cents")
+  const fundedCents = balanceCents
+  const targetCents = centsAt(planLine, "target_cents")
   const targetView: FundTarget | null =
     fundedCents !== null &&
     targetCents !== null &&
@@ -243,7 +244,7 @@ export function projectFund(wire: unknown, members: readonly MemberRef[], contex
     const row = entryOf(entry, members)
     return row ? [row] : []
   })
-  const dueOn = textAt(target, "due_on") ?? textAt(fund, "due_on")
+  const dueOn = textAt(planLine, "due_on")
   const asOf = textAt(record, "as_of") ?? ""
 
   return {
@@ -252,9 +253,17 @@ export function projectFund(wire: unknown, members: readonly MemberRef[], contex
     complete,
     available: {
       label: copy.available,
-      amount: availableAmount,
+      amount: complete ? availableAmount : copy.withheld,
       caption: complete ? (schedule ?? "") : copy.needsReconciliationDetail,
     },
+    ledger:
+      complete || balanceCents === null
+        ? null
+        : {
+            label: copy.ledger,
+            amount: deficitSentence(balanceCents) ?? formatCents(balanceCents),
+            caption: copy.ledgerNotAvailable,
+          },
     assigned: {
       label: copy.assigned,
       amount: formatCents(assignedCents),

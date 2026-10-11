@@ -15,7 +15,8 @@ import {
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { buildCreateFundPayload, buildDraftPayload, buildMoveFundsPayload, buildPublishPayload, newCommandId } from "@/domain/budget/commands"
+import { commandFailureIsUncertain, commandFailureText, holdCommand, type HeldCommand } from "@/domain/budget/command-attempt"
+import { buildCreateFundPayload, buildDraftPayload, buildPublishPayload, buildPublishWithMovementPayload, movementInputsReady, newCommandId } from "@/domain/budget/commands"
 import { copy } from "@/domain/budget/copy"
 import { readCutover, type CutoverWorkspace } from "@/domain/budget/cutover"
 import { addMonths, currentCycle, cycleLabel } from "@/domain/budget/cycle"
@@ -25,15 +26,14 @@ import { moveReason, randsToCents } from "@/domain/budget/move"
 import { localDateKey } from "@/lib/format/date"
 import {
   blankLine,
-  chosenStartsOn,
   cloneLines,
-  latestPublished,
   planDiff,
   publishReady,
   readDraftReceipt,
   readPublishedPlan,
   readVersionPage,
   replaceLine,
+  selectAgreement,
   toDraftLines,
   type CycleChoice,
   type DraftReceipt,
@@ -50,7 +50,29 @@ function message(caught: unknown, fallback: string): string {
   return caught instanceof Error ? caught.message : fallback
 }
 
-async function loadPublishedPlan(): Promise<PublishedPlan | null> {
+type PublishHold = {
+  fingerprint: string
+  draft: HeldCommand
+  draftReceipt: DraftReceipt | null
+  publishCommandId: string
+  moveCommandId: string
+  wrapperCommandId: string
+  publish: HeldCommand | null
+  uncertain: boolean
+  expectedParentVersionId: string | null
+  expectedLatestVersionNumber: string
+  reason: string
+  move: {
+    cents: string
+    fromFundId: string
+    toFundId: string
+    reconciliationId: string
+    reconciliationFingerprint: string
+    effectiveOn: string
+  } | null
+}
+
+async function loadAgreement(): Promise<{ headers: VersionHeader[]; plans: Map<string, PublishedPlan> }> {
   const headers: VersionHeader[] = []
   let cursor: string | null = null
   do {
@@ -59,9 +81,27 @@ async function loadPublishedPlan(): Promise<PublishedPlan | null> {
     if (page.nextCursor !== null && page.nextCursor === cursor) throw new Error(copy.couldNotRead)
     cursor = page.nextCursor
   } while (cursor)
-  const latest = latestPublished(headers)
-  if (!latest) return null
-  return readPublishedPlan(await readVersion(latest.versionId))
+  if (headers.some((version) => version.state === "published" && !version.startsOnCycle)) {
+    throw new Error(copy.couldNotRead)
+  }
+  const ids = new Set<string>()
+  const today = currentCycle().start
+  for (const cycleChoice of ["this", "next"] as const) {
+    const selected = selectAgreement(headers, today, cycleChoice)
+    if (selected.applicable) ids.add(selected.applicable.versionId)
+  }
+  const plans = new Map<string, PublishedPlan>()
+  for (const id of ids) plans.set(id, readPublishedPlan(await readVersion(id)))
+  return { headers, plans }
+}
+
+function planFor(
+  headers: readonly VersionHeader[],
+  plans: ReadonlyMap<string, PublishedPlan>,
+  choice: CycleChoice,
+): PublishedPlan | null {
+  const selected = selectAgreement(headers, currentCycle().start, choice)
+  return selected.applicable ? plans.get(selected.applicable.versionId) ?? null : null
 }
 
 export function PlanEditor() {
@@ -70,6 +110,8 @@ export function PlanEditor() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [publishFailed, setPublishFailed] = useState(false)
+  const [headers, setHeaders] = useState<VersionHeader[]>([])
+  const [plans, setPlans] = useState<Map<string, PublishedPlan>>(new Map())
   const [published, setPublished] = useState<PublishedPlan | null>(null)
   const [lines, setLines] = useState<PlanLine[]>([])
   const [choice, setChoice] = useState<CycleChoice>("this")
@@ -82,14 +124,18 @@ export function PlanEditor() {
   const [moveTo, setMoveTo] = useState("")
   const [pending, setPending] = useState(false)
   const pendingRef = useRef(false)
+  const publishHold = useRef<PublishHold | null>(null)
 
   useEffect(() => {
     let cancelled = false
     setLoaded(false)
     setLoadError(null)
-    void Promise.all([loadPublishedPlan(), loadCutover().catch(() => null)])
-      .then(([next, cutover]) => {
+    void Promise.all([loadAgreement(), loadCutover().catch(() => null)])
+      .then(([agreement, cutover]) => {
         if (cancelled) return
+        const next = planFor(agreement.headers, agreement.plans, "this")
+        setHeaders(agreement.headers)
+        setPlans(agreement.plans)
         setPublished(next)
         setWorkspace(cutover ? readCutover(cutover) : null)
         setLines(next ? cloneLines(next.lines) : [])
@@ -134,77 +180,154 @@ export function PlanEditor() {
     }
   }
 
-  async function onPublish() {
-    if (!publishReady(reason, lines) || pendingRef.current) return
-    const startsOnCycle = chosenStartsOn(published?.startsOnCycle ?? currentCycle().start, choice)
+  function chooseCycle(next: CycleChoice) {
+    if (publishHold.current?.uncertain) {
+      setActionError(copy.retryOutstandingMovement)
+      return
+    }
+    const plan = planFor(headers, plans, next)
+    setChoice(next)
+    setPublished(plan)
+    setLines(plan ? cloneLines(plan.lines) : [])
+    setDraft(null)
+  }
+
+  function publishCommand(hold: PublishHold, receipt: DraftReceipt): HeldCommand {
+    const publishPayload = buildPublishPayload({
+      draftId: receipt.versionId,
+      expectedDraftRevision: receipt.draftRevision,
+      expectedParentVersionId: hold.expectedParentVersionId ?? undefined,
+      expectedLatestVersionNumber: hold.expectedLatestVersionNumber,
+      reason: hold.reason,
+    })
+    if (!hold.move) {
+      return { id: hold.publishCommandId, name: "budget_publish_v1", fingerprint: hold.fingerprint, payload: publishPayload }
+    }
+    return {
+      id: hold.wrapperCommandId,
+      name: "budget_publish_with_movement_v1",
+      fingerprint: hold.fingerprint,
+      payload: buildPublishWithMovementPayload({
+        publishCommandId: hold.publishCommandId,
+        moveCommandId: hold.moveCommandId,
+        publish: publishPayload,
+        movement: {
+          kind: "reallocate",
+          fromFundId: hold.move.fromFundId,
+          toFundId: hold.move.toFundId,
+          amountCents: hold.move.cents,
+          effectiveOn: hold.move.effectiveOn,
+          expectedReconciliationId: hold.move.reconciliationId,
+          expectedReconciliationFingerprint: hold.move.reconciliationFingerprint,
+          reason: moveReason("reallocate"),
+        },
+      }),
+    }
+  }
+
+  async function runPublish(hold: PublishHold) {
     pendingRef.current = true
     setPending(true)
     setActionError(null)
-    setPublishFailed(false)
+    let current = hold
     try {
-      const saved = readDraftReceipt(
-        await writeBudgetRpc(
-          "budget_save_draft_v1",
-          newCommandId(),
-          buildDraftPayload({
-            draftId: draft?.versionId,
-            expectedDraftRevision: draft?.draftRevision,
+      if (!current.draftReceipt) {
+        const saved = readDraftReceipt(await writeBudgetRpc(current.draft.name, current.draft.id, current.draft.payload))
+        setDraft(saved)
+        current = { ...current, draftReceipt: saved, uncertain: false }
+        publishHold.current = current
+      }
+      const receipt = current.draftReceipt
+      if (!receipt) throw new Error(copy.couldNotSave)
+      const publish = current.publish ?? publishCommand(current, receipt)
+      current = { ...current, publish, uncertain: false }
+      publishHold.current = current
+      await writeBudgetRpc(publish.name, publish.id, publish.payload)
+    } catch (caught) {
+      const uncertain = commandFailureIsUncertain(commandFailureText(caught))
+      publishHold.current = uncertain ? { ...current, uncertain: true } : null
+      setPublishFailed(Boolean(current.draftReceipt))
+      setActionError(uncertain ? copy.retryOutstandingMovement : message(caught, copy.couldNotSave))
+      return
+    } finally {
+      pendingRef.current = false
+      setPending(false)
+    }
+    publishHold.current = null
+    setPublished(null)
+    setLines([])
+    setLoaded(false)
+    setReloadKey((key) => key + 1)
+  }
+
+  async function onPublish() {
+    if (pendingRef.current) return
+    if (publishHold.current?.uncertain) {
+      await runPublish(publishHold.current)
+      return
+    }
+    if (!publishReady(reason, lines)) return
+    const selected = selectAgreement(headers, currentCycle().start, choice)
+    const moveCents = moveMoney ? randsToCents(moveAmount) : null
+    const reconciliation = workspace?.reconciliation ?? null
+    if (!movementInputsReady({
+      moveMoney,
+      amountCents: moveCents,
+      fromFundId: moveFrom,
+      toFundId: moveTo,
+      reconciliationFingerprint: reconciliation?.fingerprint ?? null,
+    })) {
+      setActionError(copy.couldNotSave)
+      return
+    }
+    const fingerprint = JSON.stringify({
+      startsOnCycle: selected.cycleStart,
+      reason: reason.trim(),
+      lines,
+      parent: published?.versionId ?? null,
+      latest: selected.latestVersionNumber,
+      move: moveMoney ? { moveCents, moveFrom, moveTo, reconciliationId: reconciliation?.id ?? null } : null,
+    })
+    const hold: PublishHold = {
+      fingerprint,
+      draft: holdCommand(
+        null,
+        {
+          name: "budget_save_draft_v1",
+          fingerprint,
+          payload: buildDraftPayload({
             parentVersionId: published?.versionId,
-            startsOnCycle,
+            startsOnCycle: selected.cycleStart,
             reason,
             lines: toDraftLines(lines),
             incomeAssumptions: published?.incomeAssumptions ?? [],
             sourceReferences: published?.sourceReferences ?? [],
           }),
-        ),
-      )
-      setDraft(saved)
-      try {
-        const publishedResult = await writeBudgetRpc(
-          "budget_publish_v1",
-          newCommandId(),
-          buildPublishPayload({
-            draftId: saved.versionId,
-            expectedDraftRevision: saved.draftRevision,
-            expectedParentVersionId: published?.versionId,
-            expectedLatestVersionNumber: published?.versionNumber ?? 0,
-            reason,
-          }),
-        )
-        if (moveMoney) {
-          const cents = randsToCents(moveAmount)
-          const versionId = publishedResult && typeof publishedResult === "object" ? (publishedResult as { version_id?: string }).version_id : null
-          const reconciliation = workspace?.reconciliation
-          if (!cents || !moveFrom || !moveTo || moveFrom === moveTo || !versionId || !reconciliation?.fingerprint) {
-            throw new Error(`${copy.couldNotSave} The version was published. The money was not moved.`)
-          }
-          await writeBudgetRpc("budget_move_funds_v1", newCommandId(), buildMoveFundsPayload({
-            kind: "reallocate",
+        },
+        newCommandId,
+      ),
+      draftReceipt: null,
+      publishCommandId: newCommandId(),
+      moveCommandId: newCommandId(),
+      wrapperCommandId: newCommandId(),
+      publish: null,
+      uncertain: false,
+      expectedParentVersionId: published?.versionId ?? null,
+      expectedLatestVersionNumber: selected.latestVersionNumber,
+      reason,
+      move: moveMoney && moveCents && reconciliation?.fingerprint
+        ? {
+            cents: moveCents,
             fromFundId: moveFrom,
             toFundId: moveTo,
-            amountCents: cents,
+            reconciliationId: reconciliation.id,
+            reconciliationFingerprint: reconciliation.fingerprint,
             effectiveOn: localDateKey(new Date().toISOString()),
-            expectedVersionId: versionId,
-            expectedReconciliationId: reconciliation.id,
-            expectedReconciliationFingerprint: reconciliation.fingerprint,
-            reason: moveReason("reallocate"),
-          }))
-        }
-      } catch (caught) {
-        setPublishFailed(true)
-        setActionError(message(caught, copy.couldNotSave))
-        return
-      }
-      setPublished(null)
-      setLines([])
-      setLoaded(false)
-      setReloadKey((key) => key + 1)
-    } catch (caught) {
-      setActionError(message(caught, copy.couldNotSave))
-    } finally {
-      pendingRef.current = false
-      setPending(false)
+          }
+        : null,
     }
+    publishHold.current = hold
+    await runPublish(hold)
   }
 
   return (
@@ -236,6 +359,7 @@ export function PlanEditor() {
         <PlanBody
           choice={choice}
           lines={lines}
+          startsOn={selectAgreement(headers, currentCycle().start, choice).cycleStart}
           moveAmount={moveAmount}
           moveFrom={moveFrom}
           moveMoney={moveMoney}
@@ -244,7 +368,7 @@ export function PlanEditor() {
           published={published}
           reason={reason}
           workspace={workspace}
-          onChoice={setChoice}
+          onChoice={chooseCycle}
           onCreateFund={(name) => void onCreateFund(name)}
           onLines={setLines}
           onMoveAmount={setMoveAmount}
@@ -263,6 +387,7 @@ function PlanBody({
   choice,
   lines,
   moveAmount,
+  startsOn,
   moveFrom,
   moveMoney,
   moveTo,
@@ -283,6 +408,7 @@ function PlanBody({
   choice: CycleChoice
   lines: PlanLine[]
   moveAmount: string
+  startsOn: string
   moveFrom: string
   moveMoney: boolean
   moveTo: string
@@ -301,7 +427,6 @@ function PlanBody({
   workspace: CutoverWorkspace | null
 }) {
   const [fundName, setFundName] = useState("")
-  const startsOn = chosenStartsOn(published?.startsOnCycle ?? currentCycle().start, choice)
   const diff = planDiff(published?.lines ?? [], lines)
   const ready = publishReady(reason, lines)
   const reasonMissing = reason.trim().length === 0

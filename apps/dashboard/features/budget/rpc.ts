@@ -67,8 +67,18 @@ export function readCutover(): Promise<unknown> {
   return readBudgetRpc("budget_get_cutover_v1", {})
 }
 
+export class BudgetRpcError extends Error {
+  readonly raw: string
+
+  constructor(raw: string) {
+    super(friendlyBudgetError(raw).message)
+    this.name = "BudgetRpcError"
+    this.raw = raw
+  }
+}
+
 export async function writeBudgetRpc(name: string, commandId: string, payload: Record<string, unknown>): Promise<unknown> {
   const { data, error } = await clientRpc(name, { p_command_id: commandId, p_payload: payload })
-  if (error) throw friendlyBudgetError(error.message)
+  if (error) throw new BudgetRpcError(error.message)
   return data
 }

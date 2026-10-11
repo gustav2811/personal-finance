@@ -7,6 +7,7 @@ import {
   chosenStartsOn,
   cloneLines,
   latestPublished,
+  selectAgreement,
   planDiff,
   publishReady,
   readDraftReceipt,
@@ -211,6 +212,16 @@ describe("published plan", () => {
   })
 
   it("uses this cycle or the following cycle and does not block a larger contribution", () => {
+    const standing = { versionId: "standing", state: "published" as const, versionNumber: "1", startsOnCycle: "2026-08-23" }
+    const future = { versionId: "future", state: "published" as const, versionNumber: "2", startsOnCycle: "2026-10-23" }
+    const thisCycle = selectAgreement([standing, future], "2026-09-23", "this")
+    const nextCycle = selectAgreement([standing, future], "2026-09-23", "next")
+    assert.equal(thisCycle.cycleStart, "2026-09-23")
+    assert.equal(thisCycle.applicable?.versionId, "standing")
+    assert.equal(thisCycle.latestVersionNumber, "2")
+    assert.equal(nextCycle.cycleStart, "2026-10-23")
+    assert.equal(nextCycle.applicable?.versionId, "future")
+    assert.notEqual(thisCycle.cycleStart, standing.startsOnCycle)
     assert.equal(chosenStartsOn("2026-09-23", "this"), "2026-09-23")
     assert.equal(chosenStartsOn("2026-09-23", "next"), "2026-10-23")
     assert.equal(chosenStartsOn("2026-12-23", "next"), "2027-01-23")

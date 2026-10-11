@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { PageHeader } from "@/components/patterns/page-header"
 import { Section } from "@/components/patterns/section"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -24,6 +24,7 @@ import {
   newCommandId,
   type CoverageAccountInput,
 } from "@/domain/budget/commands"
+import { commandFailureIsUncertain, commandFailureText, holdCommand, type HeldCommand } from "@/domain/budget/command-attempt"
 import { copy } from "@/domain/budget/copy"
 import { readCutover, type CutoverAccount, type CutoverWorkspace } from "@/domain/budget/cutover"
 import { memberName } from "@/domain/budget/members"
@@ -39,6 +40,8 @@ export function CutoverView() {
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
+  const heldRef = useRef<HeldCommand | null>(null)
+  const [outstanding, setOutstanding] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -55,13 +58,33 @@ export function CutoverView() {
   }, [reloadKey])
 
   async function run(name: string, payload: Record<string, unknown>) {
+    const heldNow = heldRef.current
+    if (outstanding && heldNow && (heldNow.name !== name || JSON.stringify(heldNow.payload) !== JSON.stringify(payload))) {
+      setError(copy.retryOutstandingMovement)
+      return
+    }
+    const held = holdCommand(
+      outstanding ? heldNow : null,
+      { name, fingerprint: JSON.stringify({ name, payload }), payload },
+      newCommandId,
+    )
+    heldRef.current = held
     setError(null)
     setNotice(null)
     try {
-      const result = await writeBudgetRpc(name, newCommandId(), payload)
+      const result = await writeBudgetRpc(held.name, held.id, held.payload)
+      heldRef.current = null
+      setOutstanding(false)
       setNotice(JSON.stringify(result))
       setReloadKey((key) => key + 1)
     } catch (caught: unknown) {
+      const uncertain = commandFailureIsUncertain(commandFailureText(caught))
+      if (!uncertain) {
+        heldRef.current = null
+        setOutstanding(false)
+      } else {
+        setOutstanding(true)
+      }
       setError(message(caught))
     }
   }
@@ -73,6 +96,14 @@ export function CutoverView() {
         description={copy.needsReconciliationDetail}
         title={copy.reconcile}
       />
+      {outstanding ? (
+        <Alert>
+          <AlertTitle>{copy.retryOutstandingMovement}</AlertTitle>
+          <AlertDescription>
+            <Button onClick={() => { const held = heldRef.current; if (held) void run(held.name, held.payload) }} type="button">Retry</Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
       {error ? <Alert><AlertTitle>{copy.couldNotSave}</AlertTitle><AlertDescription>{error}</AlertDescription></Alert> : null}
       {notice ? <Alert><AlertDescription>{notice}</AlertDescription></Alert> : null}
       {!workspace && !error ? <p className="type-body text-muted-foreground">Reading the budget.</p> : null}
@@ -221,7 +252,7 @@ function ReconciliationForm({
   const [utilityStatus, setUtilityStatus] = useState<"not_required" | "verified" | "unknown">("unknown")
   const [utilityEvidence, setUtilityEvidence] = useState("")
   const [cutoff, setCutoff] = useState("")
-  const [rows, setRows] = useState<Record<string, { status: "included" | "excluded" | "missing"; convention: CoverageAccountInput["balanceConvention"]; evidence: string; activityThrough: string; restricted: string; restrictedEvidence: string }>>({})
+  const [rows, setRows] = useState<Record<string, { status: "included" | "excluded" | "missing"; convention: CoverageAccountInput["balanceConvention"]; evidence: string; activityThrough: string; restricted: string; restrictedEvidence: string; pending: string[] }>>({})
 
   function row(account: CutoverAccount) {
     return rows[account.id] ?? {
@@ -231,6 +262,7 @@ function ReconciliationForm({
       activityThrough: account.latestSnapshot?.observedAt ?? "",
       restricted: "",
       restrictedEvidence: "",
+      pending: [],
     }
   }
 
@@ -258,7 +290,7 @@ function ReconciliationForm({
                 snapshotFingerprint: account.latestSnapshot?.snapshotFingerprint,
                 balanceConvention: current.convention,
                 activityThrough: current.activityThrough || undefined,
-                pendingIncludedIds: [],
+                pendingIncludedIds: current.pending,
                 eligibleRestrictedCents: current.restricted || undefined,
                 restrictedEvidence: current.restrictedEvidence || undefined,
                 evidence: current.evidence,
@@ -290,6 +322,27 @@ function ReconciliationForm({
             </p>
             <Input aria-label={`${account.name} evidence`} onChange={(event) => setRows({ ...rows, [account.id]: { ...current, evidence: event.target.value } })} value={current.evidence} />
             <Input aria-label={`${account.name} activity`} onChange={(event) => setRows({ ...rows, [account.id]: { ...current, activityThrough: event.target.value } })} placeholder="Activity through" value={current.activityThrough} />
+            {account.pendingIds.length > 0 ? (
+              <ul className="space-y-1">
+                {account.pendingIds.map((pendingId) => (
+                  <li key={pendingId}>
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        checked={current.pending.includes(pendingId)}
+                        onChange={(event) => {
+                          const pending = event.target.checked
+                            ? [...current.pending, pendingId]
+                            : current.pending.filter((id) => id !== pendingId)
+                          setRows({ ...rows, [account.id]: { ...current, pending } })
+                        }}
+                        type="checkbox"
+                      />
+                      Pending {pendingId} is already in this balance
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
             {(account.settings?.resourceClass === "restricted" || account.settings?.resourceClass === "mortgage") ? (
               <>
                 <Input aria-label="Eligible restricted cents" onChange={(event) => setRows({ ...rows, [account.id]: { ...current, restricted: event.target.value } })} placeholder="Eligible cents" value={current.restricted} />

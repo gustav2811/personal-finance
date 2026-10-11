@@ -120,6 +120,60 @@ describe("projectReviewQueue", () => {
     assert.equal(byKey.get("utility-only")?.submittable, false)
   })
 
+  it("uses the live source amount, not the old component, when a purchase changed", () => {
+    const view = projectReviewQueue({
+      queue: {
+        items: [
+          item({
+            review_key: "drift:set:component-a",
+            kind: "source_drift",
+            amount_cents: "-40000",
+            impact_cents: "-40000",
+            source_transaction_id: "changed-tx",
+            provenance: {
+              set_id: "set-1",
+              allocation_id: "component-a",
+              frozen_fingerprint: "old",
+              current_fingerprint: "live",
+              live_source_amount_cents: "-90000",
+            },
+            reasons: [{ code: "source_fingerprint_drift" }],
+          }),
+          item({
+            review_key: "drift:set:component-b",
+            kind: "source_drift",
+            amount_cents: "-20000",
+            impact_cents: "-20000",
+            source_transaction_id: "changed-tx",
+            provenance: {
+              set_id: "set-1",
+              allocation_id: "component-b",
+              frozen_fingerprint: "old",
+              current_fingerprint: "live",
+              live_source_amount_cents: "-90000",
+            },
+            reasons: [{ code: "source_fingerprint_drift" }],
+          }),
+          item({
+            review_key: "drift:missing-live",
+            kind: "source_drift",
+            amount_cents: "-60000",
+            source_transaction_id: "other-tx",
+            provenance: { current_fingerprint: "live", frozen_fingerprint: "old" },
+            reasons: [{ code: "source_fingerprint_drift" }],
+          }),
+        ],
+      },
+      members,
+    })
+    const kept = view.items.find((row) => row.sourceTransactionId === "changed-tx")
+    const missing = view.items.find((row) => row.reviewKey === "drift:missing-live")
+    assert.equal(kept?.sourceAmountCents, "-90000")
+    assert.notEqual(kept?.sourceAmountCents, "-40000")
+    assert.equal(missing?.sourceAmountCents, null)
+    assert.equal(missing?.submittable, false)
+  })
+
   it("does not call an account owner a shared expense before that is decided", () => {
     const view = projectReviewQueue({
       queue: {

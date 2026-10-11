@@ -89,6 +89,9 @@ export const copy = {
   notAMember: "This Google account is not on the household budget.",
   couldNotRead: "The budget could not be read.",
   couldNotSave: "The budget could not save that.",
+  retryOutstandingMovement: "The last movement may have landed. Retry it before starting another.",
+  ledger: "Ledger",
+  ledgerNotAvailable: "Reviewed ledger balance. Not available money.",
   signIn: "Sign in to keep this decision.",
 } as const
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { commandFailureIsUncertain, commandFailureText, holdCommand, type HeldCommand } from "@/domain/budget/command-attempt"
 import { buildReviewPayload, newCommandId, type ReviewComponentInput } from "@/domain/budget/commands"
 import { copy } from "@/domain/budget/copy"
 import { memberName, type MemberRef } from "@/domain/budget/members"
@@ -67,33 +68,52 @@ export function PurchaseReview({
   ])
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [outstanding, setOutstanding] = useState(false)
+  const heldRef = useRef<HeldCommand | null>(null)
   const needsSplit = mixed || siblingCount > 1
 
   async function save(components: ReviewComponentInput[], evidence?: { splitReviewReason?: string; receiptReference?: string }) {
+    const payload = buildReviewPayload({
+      transactionId: sourceTransactionId,
+      expectedSourceFingerprint: fingerprint,
+      expectedCurrentSetId: setId ?? undefined,
+      sourceAmountCents: amountCents,
+      mixed,
+      drifted,
+      existingComponentCount: siblingCount,
+      components,
+      evidence,
+      decisionUpdate: categoryId
+        ? { categoryId, isTransfer: mode === "transfer", excludeFromSpend: mode === "transfer" }
+        : undefined,
+    })
+    const fingerprintKey = JSON.stringify(payload)
+    if (outstanding && heldRef.current && heldRef.current.fingerprint !== fingerprintKey) {
+      setError(copy.retryOutstandingMovement)
+      return
+    }
+    const held = holdCommand(
+      outstanding ? heldRef.current : null,
+      { name: "budget_review_allocation_v1", fingerprint: fingerprintKey, payload },
+      newCommandId,
+    )
+    heldRef.current = held
     setSaving(true)
     setError(null)
     try {
-      await writeBudgetRpc(
-        "budget_review_allocation_v1",
-        newCommandId(),
-        buildReviewPayload({
-          transactionId: sourceTransactionId,
-          expectedSourceFingerprint: fingerprint,
-          expectedCurrentSetId: setId ?? undefined,
-          sourceAmountCents: amountCents,
-          mixed,
-          drifted,
-          existingComponentCount: siblingCount,
-          components,
-          evidence,
-          decisionUpdate: categoryId
-            ? { categoryId, isTransfer: mode === "transfer", excludeFromSpend: mode === "transfer" }
-            : undefined,
-        }),
-      )
+      await writeBudgetRpc(held.name, held.id, held.payload)
+      heldRef.current = null
+      setOutstanding(false)
       await onSaved()
     } catch (caught: unknown) {
-      setError(message(caught))
+      const uncertain = commandFailureIsUncertain(commandFailureText(caught))
+      if (!uncertain) {
+        heldRef.current = null
+        setOutstanding(false)
+      } else {
+        setOutstanding(true)
+      }
+      setError(uncertain ? copy.retryOutstandingMovement : message(caught))
     } finally {
       setSaving(false)
     }

@@ -37,7 +37,7 @@ function Fact({ fact }: { fact: FundMoney }) {
 }
 
 function FundBody({ view }: { view: FundDetail }) {
-  const facts = [view.available, view.assigned, view.restricted, view.suggestion].flatMap((fact) =>
+  const facts = [view.available, view.ledger, view.assigned, view.restricted, view.suggestion].flatMap((fact) =>
     fact ? [fact] : [],
   )
   const shown = new Set(facts.map((fact) => fact.caption).filter((caption) => caption.length > 0))

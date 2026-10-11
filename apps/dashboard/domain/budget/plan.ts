@@ -32,6 +32,13 @@ export type VersionHeader = {
   versionId: string
   state: "draft" | "published"
   versionNumber: string | null
+  startsOnCycle: string | null
+}
+
+export type AgreementSelection = {
+  cycleStart: string
+  applicable: VersionHeader | null
+  latestVersionNumber: string
 }
 
 export type PublishedPlan = {
@@ -128,7 +135,13 @@ function versionHeader(value: unknown): VersionHeader {
   if (!versionId || (state !== "draft" && state !== "published")) throw unreadable()
   const versionNumber = countString(record.version_number)
   if (state === "published" && !versionNumber) throw unreadable()
-  return { versionId, state, versionNumber }
+  const startsOnCycle = readString(record, "starts_on_cycle")
+  return {
+    versionId,
+    state,
+    versionNumber,
+    startsOnCycle: startsOnCycle ? requireDate(startsOnCycle) : null,
+  }
 }
 
 function lineOf(value: unknown): PlanLine {
@@ -256,6 +269,53 @@ export function replaceContribution(
 ): PlanLine[] {
   if (!lines.some((line) => line.stableLineId === stableLineId)) throw new Error(copy.couldNotSave)
   return lines.map((line) => (line.stableLineId === stableLineId ? { ...line, contributionCents } : line))
+}
+
+export function intendedCycleStart(todayCycleStart: string, choice: CycleChoice): string {
+  const today = assertIsoDate(todayCycleStart)
+  switch (choice) {
+    case "this":
+      return today
+    case "next":
+      return addMonths(today, 1)
+    default: {
+      const neverChoice: never = choice
+      return neverChoice
+    }
+  }
+}
+
+export function applicablePublished(versions: readonly VersionHeader[], cycleStart: string): VersionHeader | null {
+  const cycle = assertIsoDate(cycleStart)
+  let best: VersionHeader | null = null
+  let bestStart: string | null = null
+  let bestNumber: bigint | null = null
+  for (const version of versions) {
+    if (version.state !== "published" || !version.startsOnCycle || !version.versionNumber) continue
+    if (version.startsOnCycle > cycle) continue
+    const number = BigInt(version.versionNumber)
+    const laterStart = bestStart === null || version.startsOnCycle > bestStart
+    const sameStartHigherNumber = version.startsOnCycle === bestStart && (bestNumber === null || number > bestNumber)
+    if (laterStart || sameStartHigherNumber) {
+      best = version
+      bestStart = version.startsOnCycle
+      bestNumber = number
+    }
+  }
+  return best
+}
+
+export function selectAgreement(
+  versions: readonly VersionHeader[],
+  todayCycleStart: string,
+  choice: CycleChoice,
+): AgreementSelection {
+  const cycleStart = intendedCycleStart(todayCycleStart, choice)
+  return {
+    cycleStart,
+    applicable: applicablePublished(versions, cycleStart),
+    latestVersionNumber: latestPublished(versions)?.versionNumber ?? "0",
+  }
 }
 
 export function chosenStartsOn(startsOnCycle: string, choice: CycleChoice): string {
