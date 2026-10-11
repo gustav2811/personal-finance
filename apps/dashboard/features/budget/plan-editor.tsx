@@ -16,13 +16,14 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { commandFailureIsUncertain, commandFailureText, holdCommand, type HeldCommand } from "@/domain/budget/command-attempt"
-import { buildCreateFundPayload, buildDraftPayload, buildPublishPayload, buildPublishWithMovementPayload, movementInputsReady, newCommandId } from "@/domain/budget/commands"
+import { buildCreateFundPayload, buildDraftPayload, buildPublishPayload, buildPublishWithMovementPayload, movementInputsReady, newCommandId, type IncomeAssumptionInput } from "@/domain/budget/commands"
 import { copy } from "@/domain/budget/copy"
 import { readCutover, type CutoverWorkspace } from "@/domain/budget/cutover"
 import { addMonths, currentCycle, cycleLabel } from "@/domain/budget/cycle"
 import { memberName } from "@/domain/budget/members"
-import { centsToRandsInput, isCents } from "@/domain/budget/money"
+import { centsToRandsInput, formatCents, isCents } from "@/domain/budget/money"
 import { moveReason, randsToCents } from "@/domain/budget/move"
+import { forecastGap } from "@/domain/budget/v1"
 import { localDateKey } from "@/lib/format/date"
 import {
   blankLine,
@@ -114,6 +115,7 @@ export function PlanEditor() {
   const [plans, setPlans] = useState<Map<string, PublishedPlan>>(new Map())
   const [published, setPublished] = useState<PublishedPlan | null>(null)
   const [lines, setLines] = useState<PlanLine[]>([])
+  const [income, setIncome] = useState<IncomeAssumptionInput[]>([])
   const [choice, setChoice] = useState<CycleChoice>("this")
   const [reason, setReason] = useState("")
   const [draft, setDraft] = useState<DraftReceipt | null>(null)
@@ -139,6 +141,7 @@ export function PlanEditor() {
         setPublished(next)
         setWorkspace(cutover ? readCutover(cutover) : null)
         setLines(next ? cloneLines(next.lines) : [])
+        setIncome(next ? next.incomeAssumptions.map((entry) => ({ ...entry })) : [])
         setChoice("this")
         setReason("")
         setDraft(null)
@@ -189,6 +192,7 @@ export function PlanEditor() {
     setChoice(next)
     setPublished(plan)
     setLines(plan ? cloneLines(plan.lines) : [])
+    setIncome(plan ? plan.incomeAssumptions.map((entry) => ({ ...entry })) : [])
     setDraft(null)
   }
 
@@ -266,7 +270,7 @@ export function PlanEditor() {
       await runPublish(publishHold.current)
       return
     }
-    if (!publishReady(reason, lines)) return
+    if (!publishReady(reason, lines) || income.some((entry) => !isCents(entry.expectedNetCents))) return
     const selected = selectAgreement(headers, currentCycle().start, choice)
     const moveCents = moveMoney ? randsToCents(moveAmount) : null
     const reconciliation = workspace?.reconciliation ?? null
@@ -284,6 +288,7 @@ export function PlanEditor() {
       startsOnCycle: selected.cycleStart,
       reason: reason.trim(),
       lines,
+      income,
       parent: published?.versionId ?? null,
       latest: selected.latestVersionNumber,
       move: moveMoney ? { moveCents, moveFrom, moveTo, reconciliationId: reconciliation?.id ?? null } : null,
@@ -300,7 +305,7 @@ export function PlanEditor() {
             startsOnCycle: selected.cycleStart,
             reason,
             lines: toDraftLines(lines),
-            incomeAssumptions: published?.incomeAssumptions ?? [],
+            incomeAssumptions: income,
             sourceReferences: published?.sourceReferences ?? [],
           }),
         },
@@ -358,6 +363,7 @@ export function PlanEditor() {
       {loaded && !loadError ? (
         <PlanBody
           choice={choice}
+          income={income}
           lines={lines}
           startsOn={selectAgreement(headers, currentCycle().start, choice).cycleStart}
           moveAmount={moveAmount}
@@ -370,6 +376,7 @@ export function PlanEditor() {
           workspace={workspace}
           onChoice={chooseCycle}
           onCreateFund={(name) => void onCreateFund(name)}
+          onIncome={setIncome}
           onLines={setLines}
           onMoveAmount={setMoveAmount}
           onMoveFrom={setMoveFrom}
@@ -385,6 +392,7 @@ export function PlanEditor() {
 
 function PlanBody({
   choice,
+  income,
   lines,
   moveAmount,
   startsOn,
@@ -393,6 +401,7 @@ function PlanBody({
   moveTo,
   onChoice,
   onCreateFund,
+  onIncome,
   onLines,
   onMoveAmount,
   onMoveFrom,
@@ -406,6 +415,7 @@ function PlanBody({
   workspace,
 }: {
   choice: CycleChoice
+  income: IncomeAssumptionInput[]
   lines: PlanLine[]
   moveAmount: string
   startsOn: string
@@ -414,6 +424,7 @@ function PlanBody({
   moveTo: string
   onChoice: (choice: CycleChoice) => void
   onCreateFund: (name: string) => void
+  onIncome: (income: IncomeAssumptionInput[]) => void
   onLines: (lines: PlanLine[]) => void
   onMoveAmount: (value: string) => void
   onMoveFrom: (value: string) => void
@@ -427,6 +438,14 @@ function PlanBody({
   workspace: CutoverWorkspace | null
 }) {
   const [fundName, setFundName] = useState("")
+  const beforeGap = forecastGap(
+    published?.incomeAssumptions.map((entry) => entry.expectedNetCents) ?? [],
+    published?.lines.map((line) => line.contributionCents) ?? [],
+  )
+  const afterGap = forecastGap(
+    income.map((entry) => entry.expectedNetCents),
+    lines.map((line) => (isCents(line.contributionCents) ? line.contributionCents : "0")),
+  )
   const diff = planDiff(published?.lines ?? [], lines)
   const ready = publishReady(reason, lines)
   const reasonMissing = reason.trim().length === 0
@@ -488,6 +507,33 @@ function PlanBody({
         </ul>
       </Section>
 
+      <p className="type-caption text-muted-foreground">
+        {copy.forecast}: {beforeGap ? formatCents(beforeGap) : copy.withheld} to {afterGap ? formatCents(afterGap) : copy.withheld}. {copy.forecastDetail}
+      </p>
+      <Section title="Expected income">
+        <ul className="space-y-2">
+          {income.map((entry, index) => (
+            <li className="grid gap-2" key={`${entry.memberId}-${entry.expectedOn}-${index}`}>
+              <IncomeAmount
+                cents={entry.expectedNetCents}
+                onCents={(next) => onIncome(income.map((row, rowIndex) => rowIndex === index ? { ...row, expectedNetCents: next } : row))}
+              />
+              <Input
+                aria-label="Income date"
+                onChange={(event) => onIncome(income.map((row, rowIndex) => rowIndex === index ? { ...row, expectedOn: event.target.value } : row))}
+                value={entry.expectedOn}
+              />
+            </li>
+          ))}
+        </ul>
+        <Button
+          onClick={() => onIncome([...income, { memberId: workspace?.members[0]?.id ?? "", expectedNetCents: "0", expectedOn: startsOn, provenance: "household" }])}
+          type="button"
+          variant="outline"
+        >
+          Add income
+        </Button>
+      </Section>
       <Section title={copy.originalPlan}>
         {diff.length > 0 && diff.every((row) => row.unchanged) ? (
           <p className="type-caption text-muted-foreground">{copy.planUnchanged}</p>
@@ -540,6 +586,21 @@ function PlanBody({
         </Button>
       </div>
     </>
+  )
+}
+
+function IncomeAmount({ cents, onCents }: { cents: string; onCents: (next: string) => void }) {
+  const [text, setText] = useState(() => (isCents(cents) ? centsToRandsInput(cents) : cents))
+  return (
+    <Input
+      aria-label="Expected income"
+      onChange={(event) => {
+        const next = event.target.value
+        setText(next)
+        onCents(randsToCents(next) ?? next)
+      }}
+      value={text}
+    />
   )
 }
 
@@ -604,6 +665,26 @@ function AgreementFields({
           <SelectTrigger aria-label={copy.plannedPayer}><SelectValue placeholder={copy.plannedPayer} /></SelectTrigger>
           <SelectContent>
             {(workspace?.members ?? []).map((member) => <SelectItem key={member.id} value={member.id}>{memberName(workspace?.members ?? [], member.id)}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select onValueChange={(next) => {
+          if (next === "consumption" || next === "contribution" || next === "debt_commitment") patch({ kind: next })
+        }} value={line.kind}>
+          <SelectTrigger aria-label="Kind"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="consumption">Consumption</SelectItem>
+            <SelectItem value="contribution">Contribution</SelectItem>
+            <SelectItem value="debt_commitment">Debt commitment</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select onValueChange={(next) => {
+          if (next === "cycle" || next === "annual" || next === "once") patch({ recurrence: next })
+        }} value={line.recurrence}>
+          <SelectTrigger aria-label="Recurrence"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="cycle">Each cycle</SelectItem>
+            <SelectItem value="annual">Annual</SelectItem>
+            <SelectItem value="once">Once</SelectItem>
           </SelectContent>
         </Select>
         <Select onValueChange={(next) => {

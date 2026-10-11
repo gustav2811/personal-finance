@@ -32,6 +32,8 @@ export type ReviewItem = {
   siblingCount: number
   submittable: boolean
   unresolved: string | null
+  provisional: boolean
+  excluded: string | null
 }
 
 export type ReviewQueue = {
@@ -85,7 +87,7 @@ function itemOf(value: unknown, index: number, members: readonly MemberRef[]): R
   const paidBy = memberName(members, payerId(record, provenance))
   const reviewKey =
     present(readString(record, "review_key")) ?? sourceTransactionId ?? utilityEntryId ?? `item:${index}`
-  const bankSource = sourceTransactionId !== null && utilityEntryId === null
+  const bankSource = (sourceTransactionId !== null) !== (utilityEntryId !== null)
   const drifted = kindIsDrifted(readString(record, "kind"), sentences(record.reasons))
   const sourceAmount = sourceAmountCents(record, amountCents)
   return {
@@ -107,6 +109,8 @@ function itemOf(value: unknown, index: number, members: readonly MemberRef[]): R
     siblingCount: 1,
     submittable: bankSource && fingerprint !== null && sourceAmount !== null,
     unresolved: fingerprint === null || sourceAmount === null ? copy.somethingUnresolved : null,
+    provisional: provenance ? readString(provenance, "status") === "needs_review" : false,
+    excluded: readString(record, "kind") === "resource_reason" ? "Excluded from spend until the missing fact is reconciled." : null,
   }
 }
 

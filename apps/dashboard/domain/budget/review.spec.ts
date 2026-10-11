@@ -117,7 +117,7 @@ describe("projectReviewQueue", () => {
     assert.equal(byKey.get("current-fingerprint")?.fingerprint, "current")
     assert.equal(byKey.get("frozen-fingerprint")?.submittable, true)
     assert.equal(byKey.get("frozen-fingerprint")?.fingerprint, "frozen")
-    assert.equal(byKey.get("utility-only")?.submittable, false)
+    assert.equal(byKey.get("utility-only")?.submittable, true)
   })
 
   it("uses the live source amount, not the old component, when a purchase changed", () => {

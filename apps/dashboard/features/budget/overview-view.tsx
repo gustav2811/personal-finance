@@ -178,7 +178,7 @@ function BudgetBody({
         <div className="space-y-1">
           <p className="type-label text-muted-foreground">{view.cycleLabel}</p>
           <p className="type-caption text-muted-foreground">
-            {view.revisionLabel} · {view.asOfLabel}
+            {view.revisionLabel} · {view.asOfLabel} · {view.freshness}
           </p>
           <div className="flex gap-2">
             <Button className={TOUCH} onClick={() => onCycle(addMonths(cycleStart, -1))} size="sm" type="button" variant="outline">
@@ -295,9 +295,38 @@ function BudgetBody({
             ) : null}
           </div>
         </dl>
+        {view.provisional ? <p className="type-caption text-muted-foreground">{view.provisional}</p> : null}
+        <div className="space-y-1">
+          <p className="type-label text-muted-foreground">
+            {view.cashNeed.incomeKnown ? `Before ${view.cashNeed.nextIncome}` : copy.liquidity}
+          </p>
+          <ul className="space-y-1">
+            {view.cashNeed.needs.map((need) => (
+              <li key={need.id}>
+                <span className="type-numeric">{need.owner}</span>
+                {need.shortfall ? <span className="type-numeric"> · short {need.shortfall}</span> : null}
+                <span className="type-caption text-muted-foreground"> · {need.sentence}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
         <p className="type-body">
           {view.moveCash.label}. {view.moveCash.detail}
         </p>
+        {view.transfers.length > 0 ? (
+          <ul className="space-y-1">
+            {view.transfers.map((transfer) => (
+              <li key={transfer.id}>
+                {transfer.sentence} <span className="type-numeric">{transfer.amount}</span>
+                {transfer.sourceTransactionId ? (
+                  <Link className="ml-2 underline-offset-4 hover:underline" href={`/transactions?transaction=${transfer.sourceTransactionId}`}>
+                    Source
+                  </Link>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        ) : null}
         {view.calendar.length > 0 ? (
           <div className="space-y-2">
             <p className="type-label text-muted-foreground">{copy.expectedPayments}</p>

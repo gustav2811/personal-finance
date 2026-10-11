@@ -4,10 +4,11 @@ import { useEffect, useState } from "react"
 import { copy } from "@/domain/budget/copy"
 import type { MemberRef } from "@/domain/budget/members"
 import { alreadyApproved, projectReviewQueue, reviewFunds, type ReviewFund } from "@/domain/budget/review"
+import { readSavedReview } from "@/domain/budget/v1"
 import { readArray, readRecord, readString } from "@/domain/budget/wire"
 import { readMemberDirectory } from "./members"
 import { AlreadyApproved, PurchaseReview } from "./purchase-review"
-import { readCutover, readOverview, readReviewQueue } from "./rpc"
+import { readCutover, readOverview, readReviewQueue, readSourceReview } from "./rpc"
 import { currentCycle } from "@/domain/budget/cycle"
 
 type Ready = {
@@ -34,8 +35,9 @@ export function TransactionBudget({ transactionId }: { transactionId: string }) 
       readOverview(currentCycle().start),
       readCutover(),
       readMemberDirectory(),
+      readSourceReview(transactionId).catch(() => null),
     ])
-      .then(([queue, overview, cutover, members]) => {
+      .then(([queue, overview, cutover, members, saved]) => {
         if (cancelled) return
         const projected = projectReviewQueue({ queue, members })
         const item = projected.items.find((entry) => entry.sourceTransactionId === transactionId) ?? null
@@ -46,10 +48,11 @@ export function TransactionBudget({ transactionId }: { transactionId: string }) 
           const name = record ? readString(record, "name") : null
           return id && name ? [{ id, name }] : []
         })
+        const savedReview = saved ? readSavedReview(saved, members) : null
         const payer = item?.payerSentence
         setReady({
-          ask: !alreadyApproved({ inQueue: item !== null, status: item ? "needs_review" : "current", drifted }),
-          sentence: payer ?? copy.purchase,
+          ask: !alreadyApproved({ inQueue: item !== null, status: savedReview?.status ?? (item ? "needs_review" : null), drifted }),
+          sentence: savedReview?.found ? [savedReview.sentence, ...savedReview.trail].join(" ") : (payer ?? copy.purchase),
           amountCents: item?.sourceAmountCents ?? null,
           fingerprint: item?.fingerprint ?? null,
           setId: item?.setId ?? null,

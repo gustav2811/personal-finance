@@ -1,4 +1,5 @@
 import { copy, planChangedSentence } from "./copy"
+import { correctionChain, groupActualsByMonth, type CorrectionHop, type MonthActual } from "./v1"
 import type { BeneficiaryFilter } from "./overview"
 import { formatCents, isCents } from "./money"
 import { readArray, readRecord, readString } from "./wire"
@@ -33,6 +34,8 @@ export type HistoryProjection = {
   listPartial: boolean
   partialList: string | null
   corrections: CorrectionTrail[]
+  chain: CorrectionHop[]
+  months: MonthActual[]
   planChangeNote: string
   correctionNote: string
 }
@@ -229,6 +232,8 @@ export function projectHistory(input: HistoryInput): HistoryProjection {
     listPartial: partial,
     partialList: partial ? copy.partialList : null,
     corrections,
+    chain: correctionChain(entries),
+    months: partial ? [] : groupActualsByMonth(entries),
     planChangeNote: copy.planChangeIsNotCorrection,
     correctionNote: copy.correctedSpend,
   }

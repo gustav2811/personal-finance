@@ -2,6 +2,7 @@ import { copy, paidBySentence, personalExpense, reasonSentence, sharedExpensePai
 import { cycleLabel, formatAsOf } from "./cycle"
 import { memberName, type MemberRef } from "./members"
 import { formatCents, isNegativeCents, parseCents } from "./money"
+import { coverageFreshness, freshnessSentence, projectCashNeed, projectTransfers, provisionalSentence, type CashNeedProjection, type TransferRow } from "./v1"
 import { readArray, readComplete, readReasons, readRecord, readString } from "./wire"
 
 export type BeneficiaryFilter =
@@ -83,6 +84,10 @@ export type BudgetOverview = {
   calendar: CalendarEntry[]
   payers: PayerFact[]
   moveCash: { label: string; detail: string }
+  cashNeed: CashNeedProjection
+  freshness: string
+  provisional: string | null
+  transfers: TransferRow[]
   canAssign: boolean
   versionId: string | null
   reconciliationId: string | null
@@ -484,6 +489,43 @@ export function projectBudget(input: {
     calendar,
     payers,
     moveCash: { label: copy.moveCash, detail: copy.moveCashDetail },
+    cashNeed: projectCashNeed({
+      complete: liquidityComplete,
+      accounts: readArray(liquidity.accounts).flatMap((entry) => {
+        const record = readRecord(entry)
+        const id = record ? readString(record, "account_id") : null
+        if (!record || !id) return []
+        return [
+          {
+            id,
+            ownerId: readString(record, "owner_member_id"),
+            ownerScope: readString(record, "owner_scope"),
+            resourceClass: readString(record, "resource_class"),
+            cashCents: parseCents(record.normalized_cash_cents),
+          },
+        ]
+      }),
+      expected: calendarSource.flatMap((entry) => {
+        const record = readRecord(entry)
+        if (!record) return []
+        return [
+          {
+            kind: readString(record, "kind"),
+            date: readString(record, "date"),
+            amountCents: parseCents(record.amount_cents),
+            payerId: readString(record, "planned_payer_member_id"),
+            accountId: readString(record, "account_id"),
+          },
+        ]
+      }),
+      members: input.members,
+    }),
+    freshness: freshnessSentence({
+      asOf: readString(overview, "as_of"),
+      accounts: coverageFreshness(resources),
+    }),
+    provisional: provisionalSentence(parseCents(overview.provisional_unassigned_cents)),
+    transfers: projectTransfers(entries, input.members),
     canAssign: complete && versionId !== null && reconciliationId !== null && reconciliationFingerprint !== null && unassignedCents !== null,
     versionId,
     reconciliationId,
