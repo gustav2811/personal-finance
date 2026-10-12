@@ -1,5 +1,5 @@
-import { BudgetView } from "@/features/budget/overview-view"
+import { AgreementView } from "@/features/budget/agreement-view"
 
 export default function BudgetPage() {
-  return <BudgetView />
+  return <AgreementView />
 }

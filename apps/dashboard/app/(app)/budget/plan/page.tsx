@@ -1,4 +1,4 @@
-import { PlanEditor } from "@/features/budget/plan-editor"
+import { AgreementView } from "@/features/budget/agreement-view"
 
 export default async function BudgetPlanPage({
   searchParams,
@@ -7,5 +7,5 @@ export default async function BudgetPlanPage({
 }) {
   const params = await searchParams
   const cycle = Array.isArray(params.cycle) ? params.cycle[0] : params.cycle
-  return <PlanEditor initialChoice={cycle === "next" ? "next" : "this"} />
+  return <AgreementView initialCycle={cycle === "next" ? "next" : "this"} />
 }
