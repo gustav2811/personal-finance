@@ -104,7 +104,14 @@ export const copy = {
   alreadyApproved: "Already approved. Do not ask again.",
   mixedNeedsSplit: "A mixed purchase needs a split. One consumption line would be the wrong economics.",
   driftedNeedsSplit: "This purchase changed after you reviewed it. Do not replace it with one line.",
-  refundNeedsLink: "A refund has to name the original purpose.",
+  refundNeedsLink: "Choose the original purchase, or say why it is not in the budget.",
+  createThisCycle: "Create this cycle's budget",
+  openingAgreed: "Opening balances are agreed.",
+  openingIncomplete: "Saved, but these opening balances are still incomplete.",
+  openingAccount: "An account",
+  openingHousehold: "This opening",
+  purchasesUnread: "Earlier purchases could not be read.",
+  noPurchaseToLink: "No earlier purchase is available to link.",
   increasedPlan: "We increased the plan.",
   decreasedPlan: "We decreased the plan.",
   correctedSpend: "A corrected transaction changed the spend.",
@@ -119,7 +126,42 @@ export const copy = {
   ledger: "Ledger",
   ledgerNotAvailable: "Reviewed ledger balance. Not available money.",
   signIn: "Sign in to keep this decision.",
+  editBudget: "Edit budget",
+  createBudget: "Create this cycle's budget",
+  resumeDraft: "Resume draft",
+  reviewChanges: "Review changes",
+  saveDraft: "Save draft",
+  discardDraft: "Discard draft",
+  publishBudget: "Publish budget",
+  viewAllChecks: "View all checks",
+  noIssues: "No issues found in the checks available.",
+  agreedContributions: "Agreed contributions",
+  proposedContributions: "Proposed contributions",
+  planCompares: "This compares planned income and contributions, not bank cash.",
+  changed: "Changed",
+  viewFunding: "View current funding and paying accounts",
+  ourPlan: "Our plan",
+  budgetChecks: "Budget checks",
+  needsDecision: "Needs a decision",
+  worthReviewing: "Worth reviewing",
+  supporting: "Supporting information",
+  unavailableCheck: "Not available",
+  forWhom: "For whom",
+  addPurpose: "Add purpose",
+  versionHistory: "Version history",
+  calculationPending: "Calculation pending.",
+  notCash: "A positive remainder is not cash available to spend.",
+  receivingAccountUnknown: "Receiving account unknown. The agreement does not store one.",
+  groupNotStored: "This group is for this visit. The agreement does not store a separate group, and choosing one does not change how the purpose is accounted.",
+  discardNotStored: "Unsaved edits are dropped. A saved draft stays, because there is no command to delete it.",
+  projectionMissing: "A projection to the due date is not available. Saved and target are the figures on hand.",
+  contributionNotMove: "Changing the contribution does not move money already saved.",
+  noSpreadsheet: "Enter the plan here. Nothing is imported from a spreadsheet.",
 } as const
+
+export function publishedSentence(versionNumber: string, cycle: string): string {
+  return `Version ${versionNumber} published for ${cycle}.`
+}
 
 export function sharedExpensePaidBy(name: string): string {
   return `Shared expense · Paid by ${name}`
@@ -154,6 +196,66 @@ export function reasonSentence(code: string): string {
       return "Money left an account without a purpose."
     case "utilities_unverified":
       return "A utility charge is not confirmed."
+    case "inventory_account_missing_or_foreign":
+      return "This account is not in the household."
+    case "settings_missing":
+      return "This account is not set up."
+    case "settings_fingerprint_stale":
+      return "Account setup changed. Save the account again."
+    case "excluded_account_not_configured":
+      return "This excluded account is not set up."
+    case "account_not_included":
+      return "This account is not included."
+    case "snapshot_missing":
+      return "There is no balance to agree."
+    case "snapshot_fingerprint_stale":
+      return "The balance changed. Look again before saving."
+    case "snapshot_unverified_or_stale":
+      return "The balance is not verified."
+    case "sign_convention_unknown":
+      return "The sign of money in and out is unknown."
+    case "balance_convention_invalid":
+      return "The balance sign is not agreed."
+    case "card_debt_sign_contradiction":
+      return "Card debt does not match the balance sign."
+    case "restricted_resources_unverified":
+      return "Money that cannot pay a bill today is not verified."
+    case "restricted_eligibility_exceeds_balance":
+      return "The restricted amount is larger than the balance."
+    case "activity_through_missing":
+      return "Say how far account activity has been checked."
+    case "activity_through_after_as_of":
+      return "Activity is marked after this opening."
+    case "source_activity_unreconciled":
+      return "Account activity is not covered."
+    case "pending_source_unverified":
+      return "A pending movement is not confirmed."
+    case "pending_source_drift":
+      return "A pending movement changed after it was saved."
+    case "inventory_incomplete":
+      return "An account is missing from this opening."
+    case "inventory_empty":
+      return "No accounts are in this opening."
+    case "inventory_drift":
+      return "The list of accounts changed after this opening was saved."
+    case "historic_incomplete":
+      return "This opening was saved incomplete and stays incomplete."
+    case "source_time_unknown":
+      return "A movement has no time, so it cannot be checked against this opening."
+    case "source_unverified":
+      return "A movement is not verified against this opening."
+    case "source_balance_inclusion_unknown":
+      return "It is not clear whether a movement is already in the balance."
+    case "source_identity_ambiguous":
+      return "Two movements look like the same one."
+    case "pending_identity_ambiguous":
+      return "A pending movement cannot be matched."
+    case "purpose_exposure_unresolved":
+      return "A movement is not tied to a purpose."
+    case "income_after_observation_unreconciled":
+      return "Income arrived after the balance was observed."
+    case "fund_location_unknown":
+      return "Saved money is not tied to an account."
     case "resource_balance_unknown":
       return "An account balance is missing."
     case "income_assumption_unknown":

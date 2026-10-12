@@ -12,6 +12,7 @@ const DEFINITE_REJECTION = [
   "budget_not_found",
   "budget_incomplete",
   "budget_conflict",
+  "budget_insufficient",
 ] as const
 
 export function holdCommand(

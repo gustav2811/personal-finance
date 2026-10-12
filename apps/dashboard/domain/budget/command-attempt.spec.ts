@@ -34,6 +34,7 @@ describe("commandFailureIsUncertain", () => {
   it("treats a validation rejection as definite and a lost response as uncertain", () => {
     assert.equal(commandFailureIsUncertain("budget_invalid: amount"), false)
     assert.equal(commandFailureIsUncertain("budget_stale: reconciliation"), false)
+    assert.equal(commandFailureIsUncertain("budget_insufficient: source fund balance"), false)
     assert.equal(commandFailureIsUncertain("Failed to fetch"), true)
     assert.equal(commandFailureIsUncertain(""), true)
   })

@@ -1,6 +1,7 @@
 import { copy, reasonSentence } from "./copy"
+import { formatDayMonth } from "./cycle"
 import { memberName, type MemberRef } from "./members"
-import { compareCents, formatCents, parseCents } from "./money"
+import { compareCents, formatCents, isNegativeCents, parseCents } from "./money"
 import { readArray, readReasons, readRecord, readString } from "./wire"
 
 export type ReviewReason = {
@@ -35,6 +36,13 @@ export type ReviewItem = {
   unresolved: string | null
   provisional: boolean
   excluded: string | null
+  decisionsConfirmed: boolean
+}
+
+export type RefundablePurchase = {
+  allocationId: string
+  fundId: string
+  label: string
 }
 
 export type ReviewQueue = {
@@ -113,7 +121,78 @@ function itemOf(value: unknown, index: number, members: readonly MemberRef[]): R
     unresolved: fingerprint === null || sourceAmount === null ? copy.somethingUnresolved : null,
     provisional: provenance ? readString(provenance, "status") === "needs_review" : false,
     excluded: readString(record, "kind") === "resource_reason" ? "Excluded from spend until the missing fact is reconciled." : null,
+    decisionsConfirmed: decisionsConfirmedOf(record, provenance),
   }
+}
+
+const REFUNDABLE_EFFECTS = new Set(["consumption", "contribution", "required_debt_payment", "extra_debt_payment"])
+const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i
+
+function decisionsConfirmedOf(record: Record<string, unknown>, provenance: Record<string, unknown> | null): boolean {
+  if (present(readString(record, "utility_entry_id")) && !present(readString(record, "source_transaction_id"))) return true
+  const snapshot = provenance ? readRecord(provenance.source_snapshot) : null
+  if (snapshot && ("classification_id" in snapshot || "treatment_id" in snapshot)) {
+    return present(readString(snapshot, "classification_id")) !== null && present(readString(snapshot, "treatment_id")) !== null
+  }
+  const kind = readString(record, "kind")
+  return kind === "allocation" || kind === "source_drift"
+}
+
+function purchaseLabel(input: {
+  name: string
+  occurredOn: string | null
+  amountCents: string
+  payer: string | null
+}): string {
+  let when = ""
+  if (input.occurredOn) {
+    try {
+      when = formatDayMonth(input.occurredOn)
+    } catch {
+      when = ""
+    }
+  }
+  const paid = input.payer ? `Paid by ${input.payer}` : ""
+  return [input.name, when, formatCents(input.amountCents), paid].filter((part) => part.length > 0).join(" · ")
+}
+
+export function refundablePurchases(input: {
+  entries: readonly unknown[]
+  funds: readonly { id: string; name: string }[]
+  members: readonly MemberRef[]
+}): RefundablePurchase[] {
+  const fundNames = new Map(input.funds.map((fund) => [fund.id, fund.name]))
+  const seen = new Set<string>()
+  return input.entries.flatMap((entry) => {
+    const record = readRecord(entry)
+    if (!record) return []
+    const allocationId = present(readString(record, "allocation_id"))
+    const fundId = present(readString(record, "fund_id"))
+    const effect = readString(record, "effect_kind")
+    const amount = parseCents(record.amount_cents)
+    const status = readString(record, "status")
+    if (!allocationId || !fundId || !effect || !amount || !REFUNDABLE_EFFECTS.has(effect)) return []
+    if (!isNegativeCents(amount) || status === "superseded" || seen.has(allocationId)) return []
+    seen.add(allocationId)
+    const snapshot = readString(record, "category_name_snapshot")
+    const name = snapshot && !UUID.test(snapshot) ? snapshot : (fundNames.get(fundId) ?? "Purchase")
+    return [
+      {
+        allocationId,
+        fundId,
+        label: purchaseLabel({
+          name,
+          occurredOn: readString(record, "occurred_on"),
+          amountCents: absolutePurchase(amount),
+          payer: memberName(input.members, readString(record, "paid_by_member_id")),
+        }),
+      },
+    ]
+  })
+}
+
+function absolutePurchase(cents: string): string {
+  return isNegativeCents(cents) ? cents.slice(1) : cents
 }
 
 function kindIsDrifted(kind: string | null, reasons: readonly ReviewReason[]): boolean {

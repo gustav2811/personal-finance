@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 import { copy, reasonSentence } from "./copy"
 import { formatCents } from "./money"
-import { projectReviewQueue } from "./review"
+import { projectReviewQueue, refundablePurchases } from "./review"
 
 const CARA = "00000000-0000-0000-0000-000000000011"
 const GUSTAV = "00000000-0000-0000-0000-000000000012"
@@ -200,5 +200,76 @@ describe("projectReviewQueue", () => {
     assert.equal(sentence?.toLowerCase().includes("overspent"), false)
     assert.equal(sentence?.includes(CARA), false)
     assert.equal(JSON.stringify(view.items[0]?.reasons).includes(CARA), false)
+  })
+
+  it("treats a source without confirmed decisions as unreviewed", () => {
+    const unreviewed = projectReviewQueue({
+      queue: {
+        items: [
+          item({
+            provenance: {
+              source_snapshot: { classification_id: null, treatment_id: null, source_fingerprint: "live" },
+            },
+          }),
+        ],
+      },
+      members,
+    })
+    const confirmed = projectReviewQueue({
+      queue: {
+        items: [
+          item({
+            provenance: {
+              source_snapshot: {
+                classification_id: "00000000-0000-4000-8000-0000000000c1",
+                treatment_id: "00000000-0000-4000-8000-0000000000c2",
+                source_fingerprint: "live",
+              },
+            },
+          }),
+        ],
+      },
+      members,
+    })
+
+    assert.equal(unreviewed.items[0]?.decisionsConfirmed, false)
+    assert.equal(confirmed.items[0]?.decisionsConfirmed, true)
+  })
+})
+
+describe("refundablePurchases", () => {
+  it("names a purchase without exposing the allocation id", () => {
+    const allocationId = "00000000-0000-4000-8000-0000000000a1"
+    const purchases = refundablePurchases({
+      entries: [
+        {
+          allocation_id: allocationId,
+          fund_id: "00000000-0000-4000-8000-0000000000f1",
+          effect_kind: "consumption",
+          amount_cents: "-60000",
+          occurred_on: "2026-10-02",
+          category_name_snapshot: "Groceries",
+          paid_by_member_id: CARA,
+          status: "current",
+        },
+        {
+          allocation_id: "00000000-0000-4000-8000-0000000000a2",
+          fund_id: "00000000-0000-4000-8000-0000000000f1",
+          effect_kind: "consumption",
+          amount_cents: "-10000",
+          status: "superseded",
+          category_name_snapshot: "Old",
+        },
+      ],
+      funds: [{ id: "00000000-0000-4000-8000-0000000000f1", name: "Groceries fund" }],
+      members,
+    })
+
+    assert.equal(purchases.length, 1)
+    assert.equal(purchases[0]?.allocationId, allocationId)
+    assert.equal(purchases[0]?.fundId, "00000000-0000-4000-8000-0000000000f1")
+    assert.match(purchases[0]?.label ?? "", /Groceries/)
+    assert.match(purchases[0]?.label ?? "", /Paid by Cara/)
+    assert.equal(purchases[0]?.label.includes(allocationId), false)
   })
 })

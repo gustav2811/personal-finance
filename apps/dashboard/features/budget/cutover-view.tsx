@@ -26,7 +26,15 @@ import {
 } from "@/domain/budget/commands"
 import { commandFailureIsUncertain, commandFailureText, holdCommand, type HeldCommand } from "@/domain/budget/command-attempt"
 import { copy } from "@/domain/budget/copy"
-import { readCutover, type CutoverAccount, type CutoverWorkspace } from "@/domain/budget/cutover"
+import {
+  explainOpening,
+  readCutover,
+  readOpeningReasons,
+  type CutoverAccount,
+  type CutoverWorkspace,
+  type OpeningExplanation,
+} from "@/domain/budget/cutover"
+import { readRecord, readString } from "@/domain/budget/wire"
 import { memberName } from "@/domain/budget/members"
 import { randsToCents } from "@/domain/budget/move"
 import { formatCents } from "@/domain/budget/money"
@@ -80,7 +88,7 @@ export function CutoverView() {
       const result = await writeBudgetRpc(held.name, held.id, held.payload)
       heldRef.current = null
       setOutstanding(false)
-      setNotice(copy.saved)
+      setNotice(savedNotice(held.name, result, workspace?.accounts ?? []))
       setReloadKey((key) => key + 1)
     } catch (caught: unknown) {
       const uncertain = commandFailureIsUncertain(commandFailureText(caught))
@@ -125,6 +133,38 @@ const EVIDENCE_GATES = [
   "Say which utility charges count.",
 ] as const
 
+function savedNotice(name: string, result: unknown, accounts: readonly CutoverAccount[]): string {
+  if (name !== "budget_record_reconciliation_v1") return copy.saved
+  const record = readRecord(result)
+  const status = record ? readString(record, "status") : null
+  if (!record || !status) return copy.saved
+  return explainOpening({ status, reasons: readOpeningReasons(record.reasons), accounts }).notice
+}
+
+function OpeningStatus({ explanation }: { explanation: OpeningExplanation }) {
+  return (
+    <Alert>
+      <AlertTitle>{explanation.headline}</AlertTitle>
+      {explanation.findings.length > 0 ? (
+        <AlertDescription>
+          <ul className="space-y-2">
+            {explanation.findings.map((finding) => (
+              <li key={finding.accountId ?? "opening"}>
+                <p>{finding.accountName}</p>
+                <ul className="list-disc pl-4">
+                  {finding.sentences.map((sentence) => (
+                    <li key={sentence}>{sentence}</li>
+                  ))}
+                </ul>
+              </li>
+            ))}
+          </ul>
+        </AlertDescription>
+      ) : null}
+    </Alert>
+  )
+}
+
 function CutoverBody({
   devices,
   onRun,
@@ -134,13 +174,27 @@ function CutoverBody({
   onRun: (name: string, payload: Record<string, unknown>) => Promise<void>
   workspace: CutoverWorkspace
 }) {
+  const opening = workspace.reconciliation
+    ? explainOpening({
+        status: workspace.reconciliation.status,
+        reasons: workspace.reconciliation.reasons,
+        accounts: workspace.accounts,
+      })
+    : null
   return (
     <>
+      {opening ? <OpeningStatus explanation={opening} /> : null}
       <Section title="Accounts">
         <ul className="space-y-6">
           {workspace.accounts.map((account) => (
             <li key={account.id}>
-              <AccountForm account={account} devices={devices} members={workspace.members} onRun={onRun} />
+              <AccountForm
+                account={account}
+                devices={devices}
+                findings={opening?.findings.find((finding) => finding.accountId === account.id)?.sentences ?? []}
+                members={workspace.members}
+                onRun={onRun}
+              />
             </li>
           ))}
         </ul>
@@ -164,11 +218,13 @@ function CutoverBody({
 function AccountForm({
   account,
   devices,
+  findings,
   members,
   onRun,
 }: {
   account: CutoverAccount
   devices: Array<{ id: string; name: string }>
+  findings: readonly string[]
   members: CutoverWorkspace["members"]
   onRun: (name: string, payload: Record<string, unknown>) => Promise<void>
 }) {
@@ -213,6 +269,13 @@ function AccountForm({
       <p className="type-caption text-muted-foreground">
         {settings ? copy.accountSetUp : copy.accountNotSetUp}
       </p>
+      {findings.length > 0 ? (
+        <ul className="list-disc pl-4 text-sm">
+          {findings.map((sentence) => (
+            <li key={sentence}>{sentence}</li>
+          ))}
+        </ul>
+      ) : null}
       <Select onValueChange={(next) => { if (next === "shared" || next === "member") setOwnerScope(next) }} value={ownerScope}>
         <SelectTrigger aria-label={copy.beneficiary}><SelectValue /></SelectTrigger>
         <SelectContent>

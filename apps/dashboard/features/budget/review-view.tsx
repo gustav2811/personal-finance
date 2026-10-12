@@ -18,6 +18,7 @@ import { readArray, readRecord, readString } from "@/domain/budget/wire"
 import { readCutover as parseCutover } from "@/domain/budget/cutover"
 import { readMemberDirectory } from "./members"
 import { PurchaseReview } from "./purchase-review"
+import { loadRefundablePurchases, type PurchaseList } from "./purchases"
 import { readCutover, readOverview, readReviewQueue } from "./rpc"
 
 const PAGE_CAP = 20
@@ -32,6 +33,7 @@ type Ready = {
   funds: ReviewFund[]
   categories: CategoryOption[]
   members: MemberRef[]
+  purchases: PurchaseList
 }
 
 function dayLabel(iso: string | null): string | null {
@@ -92,13 +94,21 @@ export function ReviewView() {
   useEffect(() => {
     let cancelled = false
     void Promise.all([readQueuePages(), readOverview(currentCycle().start), readCategories(), readMemberDirectory()])
-      .then(([pages, overview, categories, members]) => {
+      .then(async ([pages, overview, categories, members]) => {
+        if (cancelled) return
+        const funds = reviewFunds(overview)
+        const purchases = await loadRefundablePurchases({ funds, members }).catch(() => ({
+          purchases: [],
+          partial: false,
+          unread: true,
+        }))
         if (cancelled) return
         setReady({
           queue: projectPages(pages, members),
-          funds: reviewFunds(overview),
+          funds,
           categories,
           members,
+          purchases,
         })
       })
       .catch((caught: unknown) => {
@@ -139,6 +149,7 @@ export function ReviewView() {
           funds={ready.funds}
           members={ready.members}
           onSaved={reloadQueue}
+          purchases={ready.purchases}
           queue={ready.queue}
         />
       ) : null}
@@ -151,12 +162,14 @@ function ReviewList({
   funds,
   members,
   onSaved,
+  purchases,
   queue,
 }: {
   categories: CategoryOption[]
   funds: ReviewFund[]
   members: MemberRef[]
   onSaved: () => Promise<void>
+  purchases: PurchaseList
   queue: ReviewQueue
 }) {
   return (
@@ -200,12 +213,16 @@ function ReviewList({
                 <PurchaseReview
                   amountCents={item.sourceAmountCents}
                   categories={categories}
+                  decisionsConfirmed={item.decisionsConfirmed}
                   drifted={item.drifted}
                   fingerprint={item.fingerprint}
                   fundId={item.fundId}
                   funds={funds}
                   members={members}
                   onSaved={onSaved}
+                  purchases={purchases.purchases}
+                  purchasesPartial={purchases.partial}
+                  purchasesUnread={purchases.unread}
                   setId={item.setId}
                   siblingCount={item.siblingCount}
                   sourceTransactionId={item.sourceTransactionId}

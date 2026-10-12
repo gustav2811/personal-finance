@@ -338,9 +338,9 @@ export function PlanEditor({ initialChoice = "this" }: { initialChoice?: CycleCh
   return (
     <div className="space-y-10">
       <PageHeader
-        breadcrumbs={[{ href: "/budget", label: copy.pageTitle }, { label: copy.reviewNextCycle }]}
+        breadcrumbs={[{ href: "/budget", label: copy.pageTitle }, { label: choice === "next" ? copy.reviewNextCycle : copy.thisCycle }]}
         description={copy.contributionDoesNotMove}
-        title={copy.agreementQuestion}
+        title={!loaded || published || choice === "next" ? copy.agreementQuestion : copy.createThisCycle}
       />
       {loadError ? (
         <Alert>
