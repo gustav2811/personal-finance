@@ -2,9 +2,6 @@ import * as Sentry from "@sentry/cloudflare";
 import { sentryOptions } from "./sentry.js";
 import type { IngestQueueMessageV1 } from "@investments/ingest-core";
 
-/** Raw MIME `email` field larger than this is stored in R2 to keep queue messages smaller. */
-const EMAIL_R2_THRESHOLD_BYTES = 256 * 1024;
-
 export interface IngestEnv {
   INGEST_BUCKET: R2Bucket;
   INGEST_QUEUE: Queue<IngestQueueMessageV1>;
@@ -61,7 +58,6 @@ const handler = {
     const formData = await request.formData();
     const fields: Record<string, string> = {};
     const attachments: IngestQueueMessageV1["attachments"] = [];
-    let email: string | undefined;
     let email_r2_key: string | undefined;
 
     let fileIdx = 0;
@@ -85,15 +81,25 @@ const handler = {
       } else {
         const s = typeof value === "string" ? value : String(value);
         if (key === "email") {
-          if (s.length >= EMAIL_R2_THRESHOLD_BYTES) {
-            const ek = `${prefix}email.raw`;
-            await env.INGEST_BUCKET.put(ek, s, {
-              httpMetadata: { contentType: "message/rfc822" },
-            });
-            email_r2_key = ek;
-          } else {
-            email = s;
-          }
+          // Keep every original message replayable from the same durable source,
+          // regardless of size. Inline messages were previously omitted from
+          // some recovery metadata, making their evidence unavailable on replay.
+          const ek = `${prefix}email.raw`;
+          const digest = await crypto.subtle.digest(
+            "SHA-256",
+            new TextEncoder().encode(s),
+          );
+          const sha256 = Array.from(new Uint8Array(digest))
+            .map((byte) => byte.toString(16).padStart(2, "0"))
+            .join("");
+          await env.INGEST_BUCKET.put(ek, s, {
+            httpMetadata: { contentType: "message/rfc822" },
+            customMetadata: {
+              sha256,
+              received_at: new Date().toISOString(),
+            },
+          });
+          email_r2_key = ek;
         } else {
           fields[key] = s;
         }
@@ -105,7 +111,6 @@ const handler = {
       job_id,
       fields,
       attachments,
-      ...(email !== undefined ? { email } : {}),
       ...(email_r2_key !== undefined ? { email_r2_key } : {}),
     };
 
