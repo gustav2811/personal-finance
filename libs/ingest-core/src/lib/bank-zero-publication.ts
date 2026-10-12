@@ -201,12 +201,21 @@ async function updateTransaction(
     current.amount?.currencyCode !== currencyCode
   ) throw new BankZeroUpdateConflictError("FinWise transaction identity no longer matches the recorded movement");
 
-  const isAlreadyUpdated = current.description === patchFields.description &&
-    (current.notes ?? null) === (patchFields.notes ?? null);
-  const matchesExpected = current.description === expectedFields.description &&
-    (current.notes ?? null) === (expectedFields.notes ?? null);
+  const supportedPatchKeys = new Set(["description", "notes", "isTransfer"]);
+  if (Object.keys(patchFields).some((key) => !supportedPatchKeys.has(key))) {
+    throw new Error("FinWise update request contains an unsupported field");
+  }
+  const remoteField = (key: string): unknown => {
+    if (key === "notes") return current.notes ?? null;
+    if (key === "isTransfer") return current.isTransfer ?? null;
+    return current.description ?? "";
+  };
+  const isAlreadyUpdated = Object.entries(patchFields)
+    .every(([key, value]) => remoteField(key) === value);
+  const matchesExpected = Object.entries(expectedFields)
+    .every(([key, value]) => remoteField(key) === value);
   if (!isAlreadyUpdated && !matchesExpected) {
-    throw new BankZeroUpdateConflictError("FinWise description or notes changed outside the importer; review is required");
+    throw new BankZeroUpdateConflictError("FinWise fields changed outside the importer; review is required");
   }
   const updated = isAlreadyUpdated
     ? current

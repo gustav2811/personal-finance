@@ -32,6 +32,16 @@ const updateClaim = {
   },
   attempt_count: 1,
 };
+const transferUpdateClaim = {
+  outbox_id: "outbox-transfer", operation_id: "operation-transfer", operation: "update",
+  household_id: "household-1", movement_id: "movement-transfer", finwise_transaction_id: "finwise-transfer",
+  exact_request: {
+    finwise_transaction_id: "finwise-transfer", account_id: "account-1", amount: -12,
+    currency_code: "ZAR", expected: { description: "Transfer", notes: null, isTransfer: null },
+    patch: { isTransfer: true },
+  },
+  attempt_count: 1,
+};
 
 const finwiseTransaction = {
   id: "finwise-1", accountId: "account-1", date: "2026-10-12T10:00:00+02:00",
@@ -134,6 +144,28 @@ describe("Bank Zero publication recovery", () => {
     expect(update).not.toHaveBeenCalled();
     expect(rpc).toHaveBeenCalledWith("bank_zero_finish_publication_v1", expect.objectContaining({
       p_operation_id: "operation-2", p_state: "needs_review",
+    }));
+  });
+
+  it("sets isTransfer on the retained FinWise identity after confirmed pairing", async () => {
+    rpc.mockImplementation(async (name: string) => {
+      if (name === "bank_zero_claim_publication_v1") return { data: [transferUpdateClaim], error: null };
+      if (name === "finance_start_sync_run") return { data: "sync-transfer", error: null };
+      return { data: null, error: null };
+    });
+    const current = { ...finwiseTransaction, id: "finwise-transfer", description: "Transfer", isTransfer: null, notes: null };
+    const list = vi.fn().mockResolvedValue([current]);
+    const update = vi.fn().mockResolvedValue({ ...current, isTransfer: true });
+    const create = vi.fn();
+    const finwise = { transactions: { list, update, create } } as unknown as FinWiseClient;
+
+    const result = await processBankZeroPublicationBatch(config, finwise, "worker-1", logger);
+
+    expect(result).toEqual({ claimed: 1, published: 1, deferred: 0 });
+    expect(update).toHaveBeenCalledWith("finwise-transfer", { isTransfer: true });
+    expect(create).not.toHaveBeenCalled();
+    expect(rpc).toHaveBeenCalledWith("bank_zero_record_finwise_update_v1", expect.objectContaining({
+      p_operation_id: "operation-transfer", p_finwise_transaction_id: "finwise-transfer",
     }));
   });
 });

@@ -1,6 +1,6 @@
 begin;
 
-select plan(56);
+select plan(59);
 
 insert into finance.households (id) values
   ('00000000-0000-4000-8000-00000000b201'),
@@ -10,19 +10,27 @@ insert into finance.household_members (id, household_id, auth_user_id, email, ro
   ('00000000-0000-4000-8000-00000000b212', '00000000-0000-4000-8000-00000000b202', '00000000-0000-4000-8000-00000000b212', 'bz-b@test.invalid', 'member');
 insert into public.accounts (account_id, source_account_id, name, household_id, source_system, currency_code) values
   ('00000000-0000-4000-8000-00000000b221', 'bz-account-a', 'Transactional A', '00000000-0000-4000-8000-00000000b201', 'finwise', 'ZAR'),
-  ('00000000-0000-4000-8000-00000000b222', 'bz-account-b', 'Transactional B', '00000000-0000-4000-8000-00000000b202', 'finwise', 'ZAR');
+  ('00000000-0000-4000-8000-00000000b222', 'bz-account-b', 'Transactional B', '00000000-0000-4000-8000-00000000b202', 'finwise', 'ZAR'),
+  ('00000000-0000-4000-8000-00000000b223', 'bz-account-a2', 'Savings Transfer', '00000000-0000-4000-8000-00000000b201', 'finwise', 'ZAR');
 insert into finance.bank_zero_routes (household_id, route_key, member_id, forwarding_address) values
   ('00000000-0000-4000-8000-00000000b201', 'profile-a', '00000000-0000-4000-8000-00000000b211', 'profile-a@test.invalid'),
-  ('00000000-0000-4000-8000-00000000b202', 'profile-b', '00000000-0000-4000-8000-00000000b212', 'profile-b@test.invalid');
+  ('00000000-0000-4000-8000-00000000b202', 'profile-b', '00000000-0000-4000-8000-00000000b212', 'profile-b@test.invalid'),
+  ('00000000-0000-4000-8000-00000000b201', 'profile-a2', '00000000-0000-4000-8000-00000000b211', 'profile-a2@test.invalid');
 update finance.bank_zero_routes set status = 'active'
-where household_id = '00000000-0000-4000-8000-00000000b201' and route_key = 'profile-a';
+where household_id = '00000000-0000-4000-8000-00000000b201' and route_key in ('profile-a', 'profile-a2');
 insert into finance.bank_zero_route_capabilities (household_id, route_key, message_class, enabled)
 values
   ('00000000-0000-4000-8000-00000000b201', 'profile-a', 'paid', true),
   ('00000000-0000-4000-8000-00000000b201', 'profile-a', 'card_purchase', true),
-  ('00000000-0000-4000-8000-00000000b201', 'profile-a', 'payment_returned', true);
+  ('00000000-0000-4000-8000-00000000b201', 'profile-a', 'payment_returned', true),
+  ('00000000-0000-4000-8000-00000000b201', 'profile-a2', 'paid', true),
+  ('00000000-0000-4000-8000-00000000b201', 'profile-a2', 'money_received', true);
 insert into finance.bank_zero_account_aliases (household_id, route_key, account_id, alias_normalized, alias_display, account_number, status) values
   ('00000000-0000-4000-8000-00000000b201', 'profile-a', '00000000-0000-4000-8000-00000000b221', 'transactional', 'Transactional', '80200000001', 'active'),
+  ('00000000-0000-4000-8000-00000000b201', 'profile-a', '00000000-0000-4000-8000-00000000b221', 'gustav transactional', 'Gustav Transactional', null, 'active'),
+  ('00000000-0000-4000-8000-00000000b201', 'profile-a', '00000000-0000-4000-8000-00000000b223', 'savings transfer', 'Savings Transfer', null, 'active'),
+  ('00000000-0000-4000-8000-00000000b201', 'profile-a2', '00000000-0000-4000-8000-00000000b223', 'savings transfer', 'Savings Transfer', null, 'active'),
+  ('00000000-0000-4000-8000-00000000b201', 'profile-a2', '00000000-0000-4000-8000-00000000b221', 'gustav transactional', 'Gustav Transactional', null, 'active'),
   ('00000000-0000-4000-8000-00000000b202', 'profile-b', '00000000-0000-4000-8000-00000000b222', 'transactional', 'Transactional', '80200000002', 'active'),
   ('00000000-0000-4000-8000-00000000b202', 'profile-b', '00000000-0000-4000-8000-00000000b222', 'wedding gifts savings', 'Wedding Gifts Savings', null, 'active'),
   ('00000000-0000-4000-8000-00000000b202', 'profile-b', '00000000-0000-4000-8000-00000000b222', 'gifts', 'Gifts', null, 'active');
@@ -296,6 +304,27 @@ select is(:'return_result'::jsonb->>'status', 'observed', 'supported returned pa
 select is((select refund_of_movement_id from finance.bank_zero_movements where movement_type = 'return' and payment_reference = 'return-ref-1'), (select id from finance.bank_zero_movements where movement_type = 'payment' and payment_reference = 'return-ref-1'), 'returned payment links to its original debit');
 select is((select relation from finance.bank_zero_evidence_links where observation_id = (:'return_result'::jsonb->>'observation_id')::uuid and movement_id = (select id from finance.bank_zero_movements where movement_type = 'payment' and payment_reference = 'return-ref-1')), 'return_of', 'return evidence records its original-payment relationship');
 select is((select count(*)::integer from finance.bank_zero_movements where movement_type = 'return' and payment_reference = 'return-ref-1'), 1, 'returned payment does not overwrite the original movement');
+
+select public.bank_zero_record_observation_v1(
+  'profile-a', 'transfer-out', '<transfer-out@test.invalid>',
+  'ingest/00000000-0000-4000-8000-00000000b285/email.raw', repeat('c', 64), now(), '{}'::jsonb,
+  jsonb_build_object('evidenceKey', 'message', 'messageClass', 'paid', 'outcome', 'movement_candidate',
+    'parserVersion', 'bank-zero-email-v1',
+    'parsedValues', jsonb_build_object('amountMinor', 12500, 'direction', 'debit', 'accountAlias', 'Transactional',
+      'accountNumber', '80200000001', 'currency', 'ZAR', 'eventAt', '2026-10-12T10:00:00+02:00',
+      'counterparty', 'Savings Transfer', 'reference', 'transfer-1'))
+);
+select public.bank_zero_record_observation_v1(
+  'profile-a2', 'transfer-in', '<transfer-in@test.invalid>',
+  'ingest/00000000-0000-4000-8000-00000000b286/email.raw', repeat('d', 64), now(), '{}'::jsonb,
+  jsonb_build_object('evidenceKey', 'message', 'messageClass', 'money_received', 'outcome', 'movement_candidate',
+    'parserVersion', 'bank-zero-email-v1',
+    'parsedValues', jsonb_build_object('amountMinor', 12500, 'direction', 'credit', 'accountAlias', 'Savings Transfer',
+      'currency', 'ZAR', 'eventAt', '2026-10-12T10:01:00+02:00', 'counterparty', 'Gustav Transactional', 'reference', 'transfer-1'))
+);
+select is((select count(*)::integer from finance.bank_zero_transfer_pairs where household_id = '00000000-0000-4000-8000-00000000b201' and state = 'confirmed'), 1, 'equal opposite legs pair only after both registered accounts confirm the transfer');
+select is((select count(distinct transfer_group_id)::integer from finance.bank_zero_movements where transfer_group_id = (select id from finance.bank_zero_transfer_pairs where household_id = '00000000-0000-4000-8000-00000000b201')), 1, 'paired transfer legs share one household transfer identity');
+select is((select count(*)::integer from finance.bank_zero_publication_outbox where movement_id in (select debit_movement_id from finance.bank_zero_transfer_pairs union select credit_movement_id from finance.bank_zero_transfer_pairs) and operation = 'create' and exact_request->>'isTransfer' = 'true'), 2, 'both unposted confirmed legs carry FinWise transfer classification');
 
 select public.bank_zero_record_observation_v1(
   'profile-a', 'unknown-delivery', '<unknown@test.invalid>',
