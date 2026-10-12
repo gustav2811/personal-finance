@@ -29,6 +29,26 @@ export type BankZeroReviewItem = {
   candidate_movements: BankZeroCandidate[]
 }
 
+export type BankZeroOpsSummary = {
+  receipt_processing_p95_seconds: number | null
+  unclassified_templates: number
+  unresolved_account_routes: number
+  match_outcomes: { matched: number; needs_review: number; deferred: number }
+  reconciliation_older_than_24h: number
+  publication_backlog: number
+  unknown_publication_outcomes: number
+  exhausted_publication_retries: number
+  statement_balance_gaps: number | null
+  routes: Array<{ route_key: string; status: string; unresolved_observations: number }>
+}
+
+export async function getBankZeroOpsSummary(): Promise<BankZeroOpsSummary> {
+  const { data, error } = await getBrowserClient().rpc("bank_zero_ops_summary_v1" as never, {} as never)
+  if (error) throw new Error(error.message)
+  if (!data || typeof data !== "object") throw new Error("Could not load Bank Zero operational summary")
+  return data as BankZeroOpsSummary
+}
+
 export async function listBankZeroReview(): Promise<BankZeroReviewItem[]> {
   const { data, error } = await getBrowserClient().rpc("bank_zero_list_review_v1" as never, { p_limit: 50 } as never)
   if (error) throw new Error(error.message)

@@ -1,6 +1,6 @@
 begin;
 
-select plan(59);
+select plan(62);
 
 insert into finance.households (id) values
   ('00000000-0000-4000-8000-00000000b201'),
@@ -335,6 +335,9 @@ select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-8000-0000000
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-00000000b211', true);
 set local role authenticated;
 select ok(not (public.bank_zero_list_review_v1(50)->'items' @> '[{"route_key":"profile-b"}]'::jsonb), 'review queue excludes another household');
+select is(jsonb_typeof(public.bank_zero_ops_summary_v1()->'match_outcomes'), 'object', 'member can read the operational summary for their household');
+select ok(not (public.bank_zero_ops_summary_v1()->'routes' @> '[{"route_key":"profile-b"}]'::jsonb), 'operational summary excludes routes from another household');
+select is(public.bank_zero_ops_summary_v1()->>'statement_balance_gaps', null, 'summary reports statement gaps as untracked rather than claiming zero');
 select ok(exists (
   select 1 from jsonb_array_elements(public.bank_zero_list_review_v1(50)->'items') item
   where item->>'observation_id' = (:'changed_card_settlement_result'::jsonb->>'observation_id')

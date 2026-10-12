@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { PageHeader } from "@/components/patterns/page-header"
 import { Section } from "@/components/patterns/section"
-import { listBankZeroReview, reviewBankZeroObservation, type BankZeroReviewItem } from "./rpc"
+import { getBankZeroOpsSummary, listBankZeroReview, reviewBankZeroObservation, type BankZeroOpsSummary, type BankZeroReviewItem } from "./rpc"
 
 function displayValue(value: unknown): string {
   if (typeof value === "string") return value
@@ -20,6 +20,7 @@ function amountLabel(values: Record<string, unknown>): string {
 
 export function BankZeroReviewView() {
   const [items, setItems] = useState<BankZeroReviewItem[]>([])
+  const [summary, setSummary] = useState<BankZeroOpsSummary | null>(null)
   const [selected, setSelected] = useState<Record<string, string>>({})
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -28,7 +29,9 @@ export function BankZeroReviewView() {
   const refresh = useCallback(async () => {
     setError(null)
     try {
-      setItems(await listBankZeroReview())
+      const [nextItems, nextSummary] = await Promise.all([listBankZeroReview(), getBankZeroOpsSummary()])
+      setItems(nextItems)
+      setSummary(nextSummary)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not load Bank Zero review work")
     } finally {
@@ -71,6 +74,26 @@ export function BankZeroReviewView() {
       />
       {error ? <p role="alert" className="rounded-xl border border-destructive/30 p-4 text-sm text-destructive">{error}</p> : null}
       {!loaded ? <p className="type-body text-muted-foreground">Loading unresolved work…</p> : null}
+      {summary ? (
+        <Section title="Pipeline health" description="Recent receipt, reconciliation, and publication work for this household.">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <p className="rounded-lg border p-3 text-sm"><strong>Receipt p95:</strong> {summary.receipt_processing_p95_seconds === null ? "No recent sample" : `${Math.round(summary.receipt_processing_p95_seconds)} seconds`}</p>
+            <p className="rounded-lg border p-3 text-sm"><strong>Unclassified:</strong> {summary.unclassified_templates}</p>
+            <p className="rounded-lg border p-3 text-sm"><strong>Unresolved routes:</strong> {summary.unresolved_account_routes}</p>
+            <p className="rounded-lg border p-3 text-sm"><strong>Matches:</strong> {summary.match_outcomes.matched} matched · {summary.match_outcomes.needs_review} review · {summary.match_outcomes.deferred} deferred</p>
+            <p className="rounded-lg border p-3 text-sm"><strong>Open reconciliation &gt;24h:</strong> {summary.reconciliation_older_than_24h}</p>
+            <p className="rounded-lg border p-3 text-sm"><strong>Publication backlog:</strong> {summary.publication_backlog}</p>
+            <p className="rounded-lg border p-3 text-sm"><strong>Unknown outcomes:</strong> {summary.unknown_publication_outcomes}</p>
+            <p className="rounded-lg border p-3 text-sm"><strong>Exhausted retries:</strong> {summary.exhausted_publication_retries}</p>
+            <p className="rounded-lg border p-3 text-sm"><strong>Statement balance gaps:</strong> {summary.statement_balance_gaps ?? "Not tracked yet"}</p>
+          </div>
+          {summary.routes.length > 0 ? (
+            <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
+              {summary.routes.map((route) => <li key={route.route_key}>{route.route_key}: {route.status} · {route.unresolved_observations} unresolved</li>)}
+            </ul>
+          ) : null}
+        </Section>
+      ) : null}
       {loaded && items.length === 0 ? (
         <Section title="All caught up" description="There are no deferred or uncertain Bank Zero observations to review." />
       ) : null}
