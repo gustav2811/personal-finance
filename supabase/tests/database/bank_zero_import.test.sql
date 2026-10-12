@@ -1,6 +1,6 @@
 begin;
 
-select plan(49);
+select plan(56);
 
 insert into finance.households (id) values
   ('00000000-0000-4000-8000-00000000b201'),
@@ -266,6 +266,20 @@ select is((select refund_of_movement_id from finance.bank_zero_movements where m
 select is((select relation from finance.bank_zero_evidence_links where observation_id = (:'refund_statement_result'::jsonb->>'observation_id')::uuid and movement_id = (select id from finance.bank_zero_movements where movement_type = 'card_purchase' and counterparty = 'Test Cafe')), 'refund_of', 'refund evidence records its original-purchase relationship');
 select is((select count(*)::integer from finance.bank_zero_movements where movement_type = 'card_refund' and counterparty = 'Test Cafe'), 1, 'statement refund remains its own credit movement');
 select public.bank_zero_record_observation_v1(
+  'profile-a', 'original-payment', '<original-payment@test.invalid>',
+  'ingest/00000000-0000-4000-8000-00000000b284/email.raw', repeat('b', 64), now(), '{}'::jsonb,
+  jsonb_build_object(
+    'evidenceKey', 'message', 'messageClass', 'paid', 'outcome', 'movement_candidate',
+    'parserVersion', 'bank-zero-email-v1',
+    'parsedValues', jsonb_build_object(
+      'amountMinor', 2500, 'direction', 'debit', 'accountAlias', 'Transactional',
+      'accountNumber', '80200000001', 'currency', 'ZAR', 'eventAt', '2026-10-12T08:30:00+02:00',
+      'counterparty', 'Return Merchant', 'reference', 'return-ref-1'
+    )
+  )
+) as original_payment_result \gset
+select is(:'original_payment_result'::jsonb->>'status', 'observed', 'original payment is observed before its later return');
+select public.bank_zero_record_observation_v1(
   'profile-a', 'return-alert', '<return-alert@test.invalid>',
   'ingest/00000000-0000-4000-8000-00000000b283/email.raw', repeat('a', 64), now(), '{}'::jsonb,
   jsonb_build_object(
@@ -274,14 +288,14 @@ select public.bank_zero_record_observation_v1(
     'parsedValues', jsonb_build_object(
       'amountMinor', 2500, 'direction', 'credit', 'accountAlias', 'Transactional',
       'accountNumber', '80200000001', 'currency', 'ZAR', 'eventAt', '2026-10-12T09:00:00+02:00',
-      'counterparty', 'Test Merchant', 'reference', 'ref-1'
+      'counterparty', 'Return Merchant', 'reference', 'return-ref-1'
     )
   )
 ) as return_result \gset
 select is(:'return_result'::jsonb->>'status', 'observed', 'supported returned payment is stored as a separate credit');
-select is((select refund_of_movement_id from finance.bank_zero_movements where movement_type = 'return' and payment_reference = 'ref-1'), (select id from finance.bank_zero_movements where movement_type = 'payment' and payment_reference = 'ref-1'), 'returned payment links to its original debit');
-select is((select relation from finance.bank_zero_evidence_links where observation_id = (:'return_result'::jsonb->>'observation_id')::uuid and movement_id = (select id from finance.bank_zero_movements where movement_type = 'payment' and payment_reference = 'ref-1')), 'return_of', 'return evidence records its original-payment relationship');
-select is((select count(*)::integer from finance.bank_zero_movements where movement_type = 'return' and payment_reference = 'ref-1'), 1, 'returned payment does not overwrite the original movement');
+select is((select refund_of_movement_id from finance.bank_zero_movements where movement_type = 'return' and payment_reference = 'return-ref-1'), (select id from finance.bank_zero_movements where movement_type = 'payment' and payment_reference = 'return-ref-1'), 'returned payment links to its original debit');
+select is((select relation from finance.bank_zero_evidence_links where observation_id = (:'return_result'::jsonb->>'observation_id')::uuid and movement_id = (select id from finance.bank_zero_movements where movement_type = 'payment' and payment_reference = 'return-ref-1')), 'return_of', 'return evidence records its original-payment relationship');
+select is((select count(*)::integer from finance.bank_zero_movements where movement_type = 'return' and payment_reference = 'return-ref-1'), 1, 'returned payment does not overwrite the original movement');
 
 select public.bank_zero_record_observation_v1(
   'profile-a', 'unknown-delivery', '<unknown@test.invalid>',
@@ -299,27 +313,51 @@ select ok(exists (
 ), 'review queue shows the plausible purchase candidate for a changed card settlement');
 select public.bank_zero_review_observation_v1((:'conflict_result'::jsonb->>'observation_id')::uuid, 'associate', '00000000-0000-4000-8000-00000000b251'::uuid);
 select is((select status from finance.bank_zero_observations where id = (:'conflict_result'::jsonb->>'observation_id')::uuid), 'matched', 'member association action updates the evidence state');
+select public.bank_zero_review_observation_v1((:'changed_card_settlement_result'::jsonb->>'observation_id')::uuid, 'replay', null) as replay_result \gset
+select is(:'replay_result'::jsonb->>'status', 'pending', 're-evaluation enqueues current-parser replay instead of reusing stored values');
+select is((select status from finance.bank_zero_replay_requests where id = (:'replay_result'::jsonb->>'replay_request_id')::uuid), 'pending', 'household replay request is durable and scoped to the source observation');
 select public.bank_zero_review_observation_v1((:'unknown_result'::jsonb->>'observation_id')::uuid, 'dismiss', null);
 select is((select status from finance.bank_zero_observations where id = (:'unknown_result'::jsonb->>'observation_id')::uuid), 'ignored', 'member dismissal action records the decision');
 reset role;
+
+set local role service_role;
+select coalesce(jsonb_agg(claim), '[]'::jsonb) as replay_claims
+from public.bank_zero_claim_review_replays_v1('test-worker', 2) as claims(claim) \gset
+reset role;
+select is(jsonb_array_length(:'replay_claims'::jsonb), 1, 'review replay dispatcher claims the durable replay request once');
+select is(:'replay_claims'::jsonb->0->>'raw_r2_key', 'ingest/00000000-0000-4000-8000-00000000b281/email.raw', 'replay claim contains the original R2 source pointer');
+set local role service_role;
+select public.bank_zero_finish_review_replay_v1((:'replay_result'::jsonb->>'replay_request_id')::uuid, 'test-worker', true, '{"parser":"current"}'::jsonb);
+reset role;
+select is((select status from finance.bank_zero_replay_requests where id = (:'replay_result'::jsonb->>'replay_request_id')::uuid), 'completed', 'replay completion is persisted separately from the original observation');
 
 insert into finance.bank_zero_received_emails (
   id, household_id, route_key, dedupe_key, raw_r2_key, raw_sha256,
   receipt_metadata, received_at, processing_outcome
 ) values
   ('00000000-0000-4000-8000-00000000b233', '00000000-0000-4000-8000-00000000b201', 'profile-a', 'old-closed', 'ingest/00000000-0000-4000-8000-00000000b233/email.raw', repeat('3',64), jsonb_build_object('attachmentPointers', jsonb_build_array(jsonb_build_object('r2Key','ingest/00000000-0000-4000-8000-00000000b233/files/0'))), now() - interval '181 days', 'processed'),
-  ('00000000-0000-4000-8000-00000000b234', '00000000-0000-4000-8000-00000000b201', 'profile-a', 'old-open', 'ingest/00000000-0000-4000-8000-00000000b234/email.raw', repeat('4',64), '{}'::jsonb, now() - interval '181 days', 'needs_review');
+  ('00000000-0000-4000-8000-00000000b234', '00000000-0000-4000-8000-00000000b201', 'profile-a', 'old-open', 'ingest/00000000-0000-4000-8000-00000000b234/email.raw', repeat('4',64), '{}'::jsonb, now() - interval '181 days', 'needs_review'),
+  ('00000000-0000-4000-8000-00000000b235', '00000000-0000-4000-8000-00000000b201', 'profile-a', 'old-replay', 'ingest/00000000-0000-4000-8000-00000000b235/email.raw', repeat('5',64), '{}'::jsonb, now() - interval '181 days', 'processed');
 insert into finance.bank_zero_observations (
   household_id, received_email_id, evidence_key, observation_kind, parser_version, status
 ) values
   ('00000000-0000-4000-8000-00000000b201', '00000000-0000-4000-8000-00000000b233', 'closed', 'non_transaction', 'test-v1', 'ignored'),
-  ('00000000-0000-4000-8000-00000000b201', '00000000-0000-4000-8000-00000000b234', 'open', 'unknown', 'test-v1', 'needs_review');
+  ('00000000-0000-4000-8000-00000000b201', '00000000-0000-4000-8000-00000000b234', 'open', 'unknown', 'test-v1', 'needs_review'),
+  ('00000000-0000-4000-8000-00000000b201', '00000000-0000-4000-8000-00000000b235', 'replay-open', 'alert', 'test-v1', 'matched');
+insert into finance.bank_zero_replay_requests (
+  household_id, observation_id, received_email_id, status
+) values (
+  '00000000-0000-4000-8000-00000000b201',
+  (select id from finance.bank_zero_observations where received_email_id = '00000000-0000-4000-8000-00000000b235'),
+  '00000000-0000-4000-8000-00000000b235', 'pending'
+);
 set local role service_role;
 select coalesce(jsonb_agg(claim), '[]'::jsonb) as expiration_claims
 from public.bank_zero_claim_source_expiration_v1(100) as claims(claim) \gset
 reset role;
 select is(jsonb_array_length(:'expiration_claims'::jsonb), 1, 'retention claims only closed email sources older than 180 days');
 select is(:'expiration_claims'::jsonb->0->>'received_email_id', '00000000-0000-4000-8000-00000000b233', 'retention claim includes the eligible closed source');
+select ok(not (:'expiration_claims'::jsonb @> '[{"received_email_id":"00000000-0000-4000-8000-00000000b235"}]'::jsonb), 'source retention protects active replay work');
 set local role service_role;
 select public.bank_zero_finish_source_expiration_v1('00000000-0000-4000-8000-00000000b233', true);
 reset role;

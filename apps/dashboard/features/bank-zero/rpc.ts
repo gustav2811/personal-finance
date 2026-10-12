@@ -20,6 +20,8 @@ export type BankZeroReviewItem = {
   status: string
   kind: string
   reason: string | null
+  replay_status: string | null
+  replay_error: string | null
   received_at: string
   source_expired_at: string | null
   raw_values: Record<string, unknown>

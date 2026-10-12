@@ -19,8 +19,10 @@ import { TuyaSubscriptionExpiredError } from "./tuya/errors.js";
 import {
   attachmentToPayload,
   ChunkIncomplete,
+  claimBankZeroReviewReplayBatch,
   expireBankZeroSourceBatch,
   finalizeIngestPayload,
+  finishBankZeroReviewReplay,
   processIngestJob,
   type IngestQueueMessageV1,
   type ProcessJobLogger,
@@ -176,6 +178,66 @@ async function processEmailIngestMessage(
   });
 }
 
+async function processBankZeroReviewReplayBatch(env: ConsumerEnv, limit = 1): Promise<void> {
+  const config = getConsumerConfig(env);
+  const workerId = `bank-zero-review:${crypto.randomUUID()}`;
+  const claims = await claimBankZeroReviewReplayBatch(config, workerId, limit);
+  for (const claim of claims) {
+    try {
+      const pointers = claim.receipt_metadata.attachmentPointers;
+      if (pointers !== undefined && !Array.isArray(pointers)) {
+        throw new Error("Replay source attachment pointers are invalid");
+      }
+      const attachments = (Array.isArray(pointers) ? pointers : []).map((value, index) => {
+        if (!isRecord(value) || typeof value.r2Key !== "string") {
+          throw new Error("Replay source contains an invalid attachment pointer");
+        }
+        return {
+          fieldname: typeof value.fieldname === "string" ? value.fieldname : `attachment-${index}`,
+          filename: typeof value.filename === "string" ? value.filename : `attachment-${index}`,
+          mimetype: typeof value.mimetype === "string" ? value.mimetype : "application/octet-stream",
+          r2_key: value.r2Key,
+          ...(typeof value.sha256 === "string" ? { sha256: value.sha256 } : {}),
+        };
+      });
+      const replay: IngestQueueMessageV1 = {
+        v: 1,
+        job_id: `bank-zero-manual-replay:${claim.replay_request_id}`,
+        delivery_id: `manual-replay:${claim.replay_request_id}`,
+        received_at: claim.received_at,
+        route_key: claim.route_key,
+        fields: {},
+        attachments,
+        email_r2_key: claim.raw_r2_key,
+        raw_email_sha256: claim.raw_sha256,
+      };
+      await processEmailIngestMessage(replay, env);
+      await finishBankZeroReviewReplay(config, claim.replay_request_id, workerId, {
+        succeeded: true,
+        details: { parser: "current", completedAt: new Date().toISOString() },
+      });
+      console.log(JSON.stringify({
+        level: "info", msg: "bank_zero_review_replay_completed",
+        component: "ingest-consumer", replay_request_id: claim.replay_request_id,
+        observation_id: claim.observation_id,
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const terminal = claim.attempt_count >= 5 || message.startsWith("Missing R2 object:");
+      const retryDelaySeconds = Math.min(60 * 2 ** Math.max(claim.attempt_count - 1, 0), 3600);
+      await finishBankZeroReviewReplay(config, claim.replay_request_id, workerId, {
+        succeeded: false, error: message, retryDelaySeconds, terminal,
+      });
+      console.log(JSON.stringify({
+        level: terminal ? "error" : "warn", msg: "bank_zero_review_replay_failed",
+        component: "ingest-consumer", replay_request_id: claim.replay_request_id,
+        observation_id: claim.observation_id, attempt: claim.attempt_count,
+        outcome: terminal ? "terminal_failure" : "retryable_failure", error: message,
+      }));
+    }
+  }
+}
+
 async function sha256Hex(value: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -224,6 +286,15 @@ const handler = {
           } catch (error) {
             console.log(JSON.stringify({
               level: "warn", msg: "r2_recovery_scan_failed",
+              component: "ingest-consumer",
+              error: error instanceof Error ? error.message : String(error),
+            }));
+          }
+          try {
+            await processBankZeroReviewReplayBatch(env, 1);
+          } catch (error) {
+            console.log(JSON.stringify({
+              level: "warn", msg: "bank_zero_review_replay_scan_failed",
               component: "ingest-consumer",
               error: error instanceof Error ? error.message : String(error),
             }));

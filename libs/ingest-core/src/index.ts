@@ -46,6 +46,11 @@ export {
 } from "./lib/bank-zero-publication.js";
 export { expireBankZeroSourceBatch } from "./lib/bank-zero-retention.js";
 export {
+  claimBankZeroReviewReplayBatch,
+  finishBankZeroReviewReplay,
+  type BankZeroReplayClaim,
+} from "./lib/bank-zero-review-replay.js";
+export {
   categoriseTransactions,
   type CategorisationLogger,
 } from "./lib/categorisation/pipeline.js";

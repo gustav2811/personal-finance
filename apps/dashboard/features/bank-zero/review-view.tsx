@@ -38,6 +38,13 @@ export function BankZeroReviewView() {
 
   useEffect(() => { void refresh() }, [refresh])
 
+  useEffect(() => {
+    const hasActiveReplay = items.some((item) => item.replay_status === "pending" || item.replay_status === "in_progress")
+    if (!hasActiveReplay) return
+    const timer = window.setInterval(() => void refresh(), 3000)
+    return () => window.clearInterval(timer)
+  }, [items, refresh])
+
   async function act(item: BankZeroReviewItem, action: "associate" | "dismiss" | "replay") {
     const movementId = selected[item.observation_id] ?? item.candidate_movements[0]?.movement_id
     if (action === "associate" && !movementId) {
@@ -60,7 +67,7 @@ export function BankZeroReviewView() {
     <div className="space-y-6">
       <PageHeader
         title="Bank Zero review"
-        description="Resolve uncertain message matches, inspect the evidence, and safely re-evaluate stored observations."
+        description="Resolve uncertain message matches, inspect the evidence, and re-run retained email through the current parser."
       />
       {error ? <p role="alert" className="rounded-xl border border-destructive/30 p-4 text-sm text-destructive">{error}</p> : null}
       {!loaded ? <p className="type-body text-muted-foreground">Loading unresolved work…</p> : null}
@@ -80,6 +87,7 @@ export function BankZeroReviewView() {
                 <p><strong>Evidence type:</strong> {item.kind}</p>
                 <p><strong>Subject:</strong> {displayValue(raw.subject)}</p>
                 <p><strong>Source:</strong> {item.source_expired_at ? "Expired" : "Available for replay"}</p>
+                {item.replay_status ? <p><strong>Latest re-evaluation:</strong> {item.replay_error ?? item.replay_status}</p> : null}
                 <p className="whitespace-pre-wrap text-muted-foreground">{displayValue(raw.bodySnippet)}</p>
                 <p><strong>Reference:</strong> {displayValue(parsed.reference)}</p>
                 <p><strong>Event:</strong> {displayValue(parsed.eventAt ?? parsed.postedOn)}</p>

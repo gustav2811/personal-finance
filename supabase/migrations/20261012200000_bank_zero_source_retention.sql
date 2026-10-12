@@ -59,6 +59,12 @@ begin
         where attempt.household_id = email.household_id
           and attempt.received_email_id = email.id
       )
+      and not exists (
+        select 1 from finance.bank_zero_replay_requests request
+        where request.household_id = email.household_id
+          and request.received_email_id = email.id
+          and request.status in ('pending', 'in_progress', 'retryable_failure')
+      )
     order by email.received_at, email.id
     for update skip locked
     limit p_limit

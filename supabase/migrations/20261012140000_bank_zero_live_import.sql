@@ -126,6 +126,35 @@ create table if not exists finance.bank_zero_observations (
 create unique index if not exists bank_zero_observations_household_id_key
   on finance.bank_zero_observations (household_id, id);
 
+create table if not exists finance.bank_zero_replay_requests (
+  id uuid primary key default gen_random_uuid(),
+  household_id uuid not null references finance.households(id),
+  observation_id uuid not null,
+  received_email_id uuid not null,
+  requested_by uuid,
+  status text not null default 'pending' check (status in (
+    'pending', 'in_progress', 'retryable_failure', 'completed', 'terminal_failure'
+  )),
+  attempt_count integer not null default 0 check (attempt_count >= 0),
+  next_attempt_at timestamptz not null default now(),
+  lease_owner text,
+  lease_expires_at timestamptz,
+  result jsonb,
+  last_error text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  completed_at timestamptz,
+  foreign key (household_id, observation_id)
+    references finance.bank_zero_observations(household_id, id),
+  foreign key (household_id, received_email_id)
+    references finance.bank_zero_received_emails(household_id, id),
+  foreign key (household_id, requested_by)
+    references finance.household_members(household_id, id)
+);
+create index if not exists bank_zero_replay_claim
+  on finance.bank_zero_replay_requests (next_attempt_at, created_at)
+  where status in ('pending', 'retryable_failure');
+
 create table if not exists finance.bank_zero_movements (
   id uuid primary key default gen_random_uuid(),
   household_id uuid not null references finance.households(id),
@@ -326,6 +355,7 @@ on conflict do nothing;
 alter table finance.bank_zero_received_emails enable row level security;
 alter table finance.bank_zero_delivery_attempts enable row level security;
 alter table finance.bank_zero_observations enable row level security;
+alter table finance.bank_zero_replay_requests enable row level security;
 alter table finance.bank_zero_movements enable row level security;
 alter table finance.bank_zero_evidence_links enable row level security;
 alter table finance.bank_zero_publication_outbox enable row level security;
@@ -341,6 +371,8 @@ create policy bank_zero_emails_household_read on finance.bank_zero_received_emai
 create policy bank_zero_delivery_household_read on finance.bank_zero_delivery_attempts
   for select to authenticated using (finance.is_household_member(household_id));
 create policy bank_zero_observations_household_read on finance.bank_zero_observations
+  for select to authenticated using (finance.is_household_member(household_id));
+create policy bank_zero_replay_household_read on finance.bank_zero_replay_requests
   for select to authenticated using (finance.is_household_member(household_id));
 create policy bank_zero_movements_household_read on finance.bank_zero_movements
   for select to authenticated using (finance.is_household_member(household_id));
@@ -359,6 +391,7 @@ grant select on
   finance.bank_zero_received_emails,
   finance.bank_zero_delivery_attempts,
   finance.bank_zero_observations,
+  finance.bank_zero_replay_requests,
   finance.bank_zero_movements,
   finance.bank_zero_evidence_links,
   finance.bank_zero_publication_outbox,
@@ -374,6 +407,7 @@ grant all on
   finance.bank_zero_received_emails,
   finance.bank_zero_delivery_attempts,
   finance.bank_zero_observations,
+  finance.bank_zero_replay_requests,
   finance.bank_zero_movements,
   finance.bank_zero_evidence_links,
   finance.bank_zero_publication_outbox,

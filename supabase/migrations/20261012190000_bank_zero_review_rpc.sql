@@ -21,6 +21,8 @@ begin
         'status', observation.status,
         'kind', observation.observation_kind,
         'reason', coalesce(observation.review_reason, publication_issue.last_error),
+        'replay_status', replay_issue.status,
+        'replay_error', replay_issue.last_error,
         'received_at', email.received_at,
         'source_expired_at', email.source_expired_at,
         'raw_values', observation.raw_values,
@@ -42,6 +44,14 @@ begin
       order by outbox.updated_at desc
       limit 1
     ) publication_issue on true
+    left join lateral (
+      select request.status, request.last_error
+      from finance.bank_zero_replay_requests request
+      where request.household_id = observation.household_id
+        and request.observation_id = observation.id
+      order by request.created_at desc
+      limit 1
+    ) replay_issue on true
     left join lateral (
       select jsonb_agg(jsonb_build_object(
         'movement_id', candidate.id,
@@ -114,6 +124,7 @@ declare
   v_email finance.bank_zero_received_emails%rowtype;
   v_actor uuid;
   v_result jsonb;
+  v_replay_id uuid;
 begin
   if auth.uid() is null then raise exception 'bank_zero_forbidden: sign in required'; end if;
   if p_action not in ('associate', 'dismiss', 'replay') then raise exception 'bank_zero_invalid: unsupported review action'; end if;
@@ -177,35 +188,35 @@ begin
     set processing_outcome = 'ignored', outcome_reason = 'Dismissed by a household member', updated_at = now()
     where id = v_email.id;
   else
-    if v_email.source_expired_at is not null then
+    if v_email.source_expired_at is not null or v_email.source_expiration_claimed_at is not null then
       raise exception 'bank_zero_source_expired: the original email source has expired';
     end if;
-    v_result := public.bank_zero_record_observation_v1(
-      v_email.route_key,
-      'manual-replay:' || gen_random_uuid()::text,
-      v_email.original_message_id,
-      v_email.raw_r2_key,
-      v_email.raw_sha256,
-      v_email.received_at,
-      v_email.receipt_metadata || jsonb_build_object('manualReplay', true),
-      jsonb_build_object(
-        'evidenceKey', v_observation.evidence_key,
-        'messageClass', coalesce(v_observation.parsed_values->>'messageClass', case v_observation.observation_kind when 'statement' then 'statement' when 'proof' then 'proof_of_payment' when 'balance_snapshot' then 'banking_status' when 'non_transaction' then 'non_transaction' else 'unknown' end),
-        'outcome', v_observation.parsed_values->>'outcome',
-        'parserVersion', v_observation.parser_version,
-        'rawValues', v_observation.raw_values,
-        'parsedValues', v_observation.parsed_values,
-        'fieldProvenance', v_observation.field_provenance,
-        'reason', null
-      )
-    );
+    select request.id into v_replay_id
+    from finance.bank_zero_replay_requests request
+    where request.household_id = v_observation.household_id
+      and request.observation_id = v_observation.id
+      and request.status in ('pending', 'in_progress', 'retryable_failure')
+    order by request.created_at desc
+    limit 1;
+    if v_replay_id is null then
+      insert into finance.bank_zero_replay_requests (
+        household_id, observation_id, received_email_id, requested_by
+      ) values (
+        v_observation.household_id, v_observation.id, v_email.id, v_actor
+      ) returning id into v_replay_id;
+    end if;
     insert into finance.bank_zero_observation_audit (
       household_id, observation_id, actor_member_id, action, details
     ) values (
       v_observation.household_id, v_observation.id, v_actor, 'manual_replay_requested',
-      jsonb_build_object('result', v_result)
+      jsonb_build_object('replay_request_id', v_replay_id)
     );
-    return jsonb_build_object('action', p_action, 'result', v_result);
+    return jsonb_build_object(
+      'action', p_action,
+      'observation_id', v_observation.id,
+      'replay_request_id', v_replay_id,
+      'status', 'pending'
+    );
   end if;
 
   insert into finance.bank_zero_observation_audit (
