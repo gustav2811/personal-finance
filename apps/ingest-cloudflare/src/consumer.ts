@@ -19,6 +19,7 @@ import { TuyaSubscriptionExpiredError } from "./tuya/errors.js";
 import {
   attachmentToPayload,
   ChunkIncomplete,
+  expireBankZeroSourceBatch,
   finalizeIngestPayload,
   processIngestJob,
   type IngestQueueMessageV1,
@@ -251,6 +252,18 @@ const handler = {
           ]);
           }
           return;
+        case "0 2 * * *": {
+          const result = await expireBankZeroSourceBatch(
+            getConsumerConfig(env),
+            (key) => env.INGEST_BUCKET.delete(key),
+            20,
+          );
+          console.log(JSON.stringify({
+            level: "info", msg: "bank_zero_source_retention_completed",
+            component: "ingest-consumer", ...result,
+          }));
+          return;
+        }
         default:
           throw new Error(`Unknown consumer cron: ${event.cron}`);
       }
@@ -478,7 +491,10 @@ async function processOtherDeadLetterBatch(
 /** R2 is the durable fallback when a DLQ drain cannot reach Supabase. */
 async function drainR2RecoveryRecords(env: ConsumerEnv, limit: number): Promise<void> {
   const config = getConsumerConfig(env);
-  const listed = await env.INGEST_BUCKET.list({ prefix: "recovery/", limit });
+  const cursorKey = "recovery-control/email-ingest-cursor";
+  const cursorObject = await env.INGEST_BUCKET.get(cursorKey);
+  const cursor = cursorObject ? (await cursorObject.text()).trim() || undefined : undefined;
+  const listed = await env.INGEST_BUCKET.list({ prefix: "recovery/", limit, ...(cursor ? { cursor } : {}) });
   for (const item of listed.objects) {
     const object = await env.INGEST_BUCKET.get(item.key);
     if (!object) continue;
@@ -507,8 +523,15 @@ async function drainR2RecoveryRecords(env: ConsumerEnv, limit: number): Promise<
         component: "ingest-consumer", recovery_r2_key: item.key,
         error: error instanceof Error ? error.message : String(error),
       }));
-      break;
     }
+  }
+  if (listed.truncated) {
+    if (!listed.cursor) throw new Error("R2 recovery scan is truncated without a continuation cursor");
+    await env.INGEST_BUCKET.put(cursorKey, listed.cursor, {
+      httpMetadata: { contentType: "text/plain" },
+    });
+  } else {
+    await env.INGEST_BUCKET.delete(cursorKey);
   }
 }
 

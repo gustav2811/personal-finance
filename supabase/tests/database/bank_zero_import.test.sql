@@ -1,6 +1,6 @@
 begin;
 
-select plan(34);
+select plan(42);
 
 insert into finance.households (id) values
   ('00000000-0000-4000-8000-00000000b201'),
@@ -17,7 +17,9 @@ insert into finance.bank_zero_routes (household_id, route_key, member_id, forwar
 update finance.bank_zero_routes set status = 'active'
 where household_id = '00000000-0000-4000-8000-00000000b201' and route_key = 'profile-a';
 insert into finance.bank_zero_route_capabilities (household_id, route_key, message_class, enabled)
-values ('00000000-0000-4000-8000-00000000b201', 'profile-a', 'paid', true);
+values
+  ('00000000-0000-4000-8000-00000000b201', 'profile-a', 'paid', true),
+  ('00000000-0000-4000-8000-00000000b201', 'profile-a', 'card_purchase', true);
 insert into finance.bank_zero_account_aliases (household_id, route_key, account_id, alias_normalized, alias_display, account_number, status) values
   ('00000000-0000-4000-8000-00000000b201', 'profile-a', '00000000-0000-4000-8000-00000000b221', 'transactional', 'Transactional', '80200000001', 'active'),
   ('00000000-0000-4000-8000-00000000b202', 'profile-b', '00000000-0000-4000-8000-00000000b222', 'transactional', 'Transactional', '80200000002', 'active'),
@@ -215,6 +217,38 @@ select is(:'pending_result'::jsonb->>'status', 'deferred', 'pending receiving ro
 select is((:'pending_result'::jsonb->>'account_id')::uuid, '00000000-0000-4000-8000-00000000b222'::uuid, 'deferred route still records its profile-scoped exact account resolution');
 
 select public.bank_zero_record_observation_v1(
+  'profile-a', 'card-alert', '<card-alert@test.invalid>',
+  'ingest/00000000-0000-4000-8000-00000000b280/email.raw', repeat('5', 64), now(), '{}'::jsonb,
+  jsonb_build_object(
+    'evidenceKey', 'message', 'messageClass', 'card_purchase', 'outcome', 'movement_candidate',
+    'parserVersion', 'bank-zero-email-v1',
+    'parsedValues', jsonb_build_object(
+      'amountMinor', 5000, 'direction', 'debit', 'accountAlias', 'Transactional',
+      'accountNumber', '80200000001', 'currency', 'ZAR', 'eventAt', '2026-10-10T08:00:00+02:00',
+      'counterparty', 'Test Cafe'
+    )
+  )
+) as card_alert_result \gset
+select is(:'card_alert_result'::jsonb->>'status', 'observed', 'enabled card alert creates a provisional bank movement');
+select public.bank_zero_record_observation_v1(
+  'profile-a', 'card-statement', '<card-statement@test.invalid>',
+  'ingest/00000000-0000-4000-8000-00000000b281/email.raw', repeat('6', 64), now(), '{}'::jsonb,
+  jsonb_build_object(
+    'evidenceKey', 'statement:' || repeat('7',64) || ':Transactions:2',
+    'messageClass', 'statement', 'outcome', 'movement_candidate', 'parserVersion', 'bank-zero-statement-v2',
+    'parsedValues', jsonb_build_object(
+      'messageClass', 'statement', 'outcome', 'movement_candidate', 'movementType', 'card_purchase',
+      'direction', 'debit', 'amountMinor', 5500, 'currency', 'ZAR', 'accountAlias', 'Transactional',
+      'accountNumber', '80200000001', 'counterparty', 'Test Cafe', 'postedOn', '2026-10-11',
+      'statementContentSha256', repeat('7',64), 'statementSheet', 'Transactions', 'statementRow', 2
+    )
+  )
+) as changed_card_settlement_result \gset
+select is(:'changed_card_settlement_result'::jsonb->>'status', 'needs_review', 'amount-changing card settlement is held for review');
+select is((select count(*)::integer from finance.bank_zero_movements where household_id = '00000000-0000-4000-8000-00000000b201' and movement_type = 'card_purchase' and counterparty = 'Test Cafe'), 1, 'amount-changing card settlement does not create a duplicate purchase');
+select is((select state from finance.bank_zero_publication_outbox where movement_id = (select id from finance.bank_zero_movements where counterparty = 'Test Cafe') and operation = 'create'), 'needs_review', 'unpublished card purchase pauses before a changed settlement can be published');
+
+select public.bank_zero_record_observation_v1(
   'profile-a', 'unknown-delivery', '<unknown@test.invalid>',
   'ingest/00000000-0000-4000-8000-00000000b278/email.raw', repeat('2', 64), now(), '{}'::jsonb,
   jsonb_build_object('evidenceKey', 'message', 'messageClass', 'unknown', 'outcome', 'review', 'parserVersion', 'bank-zero-email-v1', 'reason', 'Unknown template')
@@ -223,11 +257,38 @@ select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-8000-0000000
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-00000000b211', true);
 set local role authenticated;
 select ok(not (public.bank_zero_list_review_v1(50)->'items' @> '[{"route_key":"profile-b"}]'::jsonb), 'review queue excludes another household');
+select ok(exists (
+  select 1 from jsonb_array_elements(public.bank_zero_list_review_v1(50)->'items') item
+  where item->>'observation_id' = (:'changed_card_settlement_result'::jsonb->>'observation_id')
+    and item->'candidate_movements' @> jsonb_build_array(jsonb_build_object('movement_id', (select id::text from finance.bank_zero_movements where counterparty = 'Test Cafe')))
+), 'review queue shows the plausible purchase candidate for a changed card settlement');
 select public.bank_zero_review_observation_v1((:'conflict_result'::jsonb->>'observation_id')::uuid, 'associate', '00000000-0000-4000-8000-00000000b251'::uuid);
 select is((select status from finance.bank_zero_observations where id = (:'conflict_result'::jsonb->>'observation_id')::uuid), 'matched', 'member association action updates the evidence state');
 select public.bank_zero_review_observation_v1((:'unknown_result'::jsonb->>'observation_id')::uuid, 'dismiss', null);
 select is((select status from finance.bank_zero_observations where id = (:'unknown_result'::jsonb->>'observation_id')::uuid), 'ignored', 'member dismissal action records the decision');
 reset role;
+
+insert into finance.bank_zero_received_emails (
+  id, household_id, route_key, dedupe_key, raw_r2_key, raw_sha256,
+  receipt_metadata, received_at, processing_outcome
+) values
+  ('00000000-0000-4000-8000-00000000b233', '00000000-0000-4000-8000-00000000b201', 'profile-a', 'old-closed', 'ingest/00000000-0000-4000-8000-00000000b233/email.raw', repeat('3',64), jsonb_build_object('attachmentPointers', jsonb_build_array(jsonb_build_object('r2Key','ingest/00000000-0000-4000-8000-00000000b233/files/0'))), now() - interval '181 days', 'processed'),
+  ('00000000-0000-4000-8000-00000000b234', '00000000-0000-4000-8000-00000000b201', 'profile-a', 'old-open', 'ingest/00000000-0000-4000-8000-00000000b234/email.raw', repeat('4',64), '{}'::jsonb, now() - interval '181 days', 'needs_review');
+insert into finance.bank_zero_observations (
+  household_id, received_email_id, evidence_key, observation_kind, parser_version, status
+) values
+  ('00000000-0000-4000-8000-00000000b201', '00000000-0000-4000-8000-00000000b233', 'closed', 'non_transaction', 'test-v1', 'ignored'),
+  ('00000000-0000-4000-8000-00000000b201', '00000000-0000-4000-8000-00000000b234', 'open', 'unknown', 'test-v1', 'needs_review');
+set local role service_role;
+select coalesce(jsonb_agg(claim), '[]'::jsonb) as expiration_claims
+from public.bank_zero_claim_source_expiration_v1(100) as claims(claim) \gset
+reset role;
+select is(jsonb_array_length(:'expiration_claims'::jsonb), 1, 'retention claims only closed email sources older than 180 days');
+select is(:'expiration_claims'::jsonb->0->>'received_email_id', '00000000-0000-4000-8000-00000000b233', 'retention claim includes the eligible closed source');
+set local role service_role;
+select public.bank_zero_finish_source_expiration_v1('00000000-0000-4000-8000-00000000b233', true);
+reset role;
+select ok((select source_expired_at is not null from finance.bank_zero_received_emails where id = '00000000-0000-4000-8000-00000000b233'), 'source pointer is explicitly marked expired after deletion');
 
 select * from finish();
 rollback;

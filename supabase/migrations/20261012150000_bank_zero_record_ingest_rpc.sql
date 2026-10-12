@@ -42,6 +42,7 @@ declare
   v_policy_enabled boolean;
   v_candidate_ids uuid[];
   v_candidate_count integer;
+  v_plausible_count integer;
   v_movement_id uuid;
   v_description text;
   v_notes text;
@@ -347,6 +348,37 @@ begin
               or abs(extract(epoch from (candidate.occurred_at - v_event_at))) <= 120);
           v_candidate_count := coalesce(cardinality(v_candidate_ids), 0);
 
+          if v_candidate_count = 0 and v_message_class = 'statement'
+             and v_movement_type in ('card_purchase', 'card_refund') then
+            select count(*), coalesce(array_agg(candidate.id), '{}'::uuid[])
+              into v_plausible_count, v_candidate_ids
+            from finance.bank_zero_movements candidate
+            where candidate.household_id = v_route.household_id
+              and candidate.account_id = v_account_id
+              and candidate.currency_code = coalesce(nullif(p_observation->'parsedValues'->>'currency', ''), 'ZAR')
+              and candidate.movement_type = v_movement_type
+              and candidate.amount <> v_signed_amount
+              and candidate.reconciliation_state <> 'needs_review'
+              and (v_reference is not null and candidate.payment_reference is not null
+                   and lower(candidate.payment_reference) = lower(v_reference)
+                or v_counterparty is not null and candidate.counterparty is not null
+                   and lower(candidate.counterparty) = lower(v_counterparty))
+              and coalesce(candidate.occurred_at::date, candidate.posted_on) between
+                coalesce(v_event_at::date, v_posted_on) - 7 and coalesce(v_event_at::date, v_posted_on) + 7;
+            if v_plausible_count > 0 then
+              v_status := 'needs_review';
+              v_conflict := 'Card statement amount differs from a plausible alert; settlement reconciliation requires review';
+              update finance.bank_zero_publication_outbox
+              set state = 'needs_review', last_error = v_conflict,
+                  lease_owner = null, lease_expires_at = null, updated_at = now()
+              where movement_id = any(v_candidate_ids)
+                and operation = 'create' and state in ('pending', 'retryable_failure');
+              update finance.bank_zero_movements
+              set publication_state = 'deferred', updated_at = now()
+              where id = any(v_candidate_ids) and publication_state in ('pending', 'retryable_failure');
+            end if;
+          end if;
+
           if v_candidate_count > 1 then
             v_status := 'needs_review';
             v_conflict := 'More than one compatible movement candidate';
@@ -420,6 +452,8 @@ begin
               v_route.household_id, v_observation_id, v_movement_id, v_link_relation,
               'exact_amount_and_counterparty_or_reference_v1', 'Unique account-scoped candidate inside the class window'
             ) on conflict (household_id, observation_id, movement_id) do nothing;
+          elsif v_status = 'needs_review' then
+            null;
           else
             if v_message_class = 'statement' then
               v_movement_type := coalesce(nullif(p_observation->'parsedValues'->>'movementType', ''), 'statement_movement');

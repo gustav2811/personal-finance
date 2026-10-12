@@ -44,6 +44,7 @@ export {
   processBankZeroPublicationBatch,
   type BankZeroPublicationLogger,
 } from "./lib/bank-zero-publication.js";
+export { expireBankZeroSourceBatch } from "./lib/bank-zero-retention.js";
 export {
   categoriseTransactions,
   type CategorisationLogger,

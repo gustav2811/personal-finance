@@ -87,7 +87,7 @@ max_retries = 20
 # Crons only enqueue jobs onto investments-jobs; each job has separate external
 # and internal subrequest budgets below the Cloudflare free-plan ceilings.
 [triggers]
-crons = ["* * * * *", "0 7 * * *", "0 10 * * *"]
+crons = ["* * * * *", "0 2 * * *", "0 7 * * *", "0 10 * * *"]
 
 # Dashboard secrets: FINWISE_API_KEY, SUPABASE_*, BANK_ZERO_ACCOUNT_ID, SENTRY_DSN.
 # Bank Zero routing is src/bank-zero-accounts.ts, not a dashboard variable.

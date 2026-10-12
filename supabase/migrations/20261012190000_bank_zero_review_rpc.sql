@@ -59,11 +59,16 @@ begin
       where candidate.household_id = observation.household_id
         and (observation.parsed_values->>'accountId' is null or candidate.account_id = (observation.parsed_values->>'accountId')::uuid)
         and candidate.currency_code = coalesce(observation.parsed_values->>'currency', 'ZAR')
-        and candidate.amount = case observation.parsed_values->>'direction'
-          when 'credit' then nullif(observation.parsed_values->>'amountMinor', '')::numeric / 100
-          when 'debit' then -nullif(observation.parsed_values->>'amountMinor', '')::numeric / 100
-          else candidate.amount
-        end
+        and (
+          candidate.amount = case observation.parsed_values->>'direction'
+            when 'credit' then nullif(observation.parsed_values->>'amountMinor', '')::numeric / 100
+            when 'debit' then -nullif(observation.parsed_values->>'amountMinor', '')::numeric / 100
+            else candidate.amount
+          end
+          or (observation.observation_kind = 'statement'
+            and observation.parsed_values->>'movementType' in ('card_purchase', 'card_refund')
+            and candidate.movement_type = observation.parsed_values->>'movementType')
+        )
         and candidate.reconciliation_state <> 'needs_review'
         and (
           nullif(observation.parsed_values->>'reference', '') is not null
