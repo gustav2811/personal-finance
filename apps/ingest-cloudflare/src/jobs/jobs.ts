@@ -1,4 +1,5 @@
 import { TUYA_CODES, type TuyaCode } from "../tuya/day.js";
+import type { IngestQueueMessageV1 } from "@investments/ingest-core";
 
 export type DlqReportJob = {
   v: 1;
@@ -36,12 +37,29 @@ export type HealthCheckJob = {
   scheduledTime: string;
 };
 
+export type BankZeroPublishJob = {
+  v: 1;
+  jobId: string;
+  type: "bank-zero-publish";
+  scheduledTime: string;
+};
+
+export type BankZeroStatementJob = {
+  v: 1;
+  jobId: string;
+  type: "bank-zero-statement";
+  source: IngestQueueMessageV1;
+  startRow: number;
+};
+
 export type JobV1 =
   | DlqReportJob
   | IsmrtSyncJob
   | TuyaPlanJob
   | TuyaDayJob
-  | HealthCheckJob;
+  | HealthCheckJob
+  | BankZeroPublishJob
+  | BankZeroStatementJob;
 export type Job = JobV1;
 
 export class InvalidJobError extends Error {
@@ -103,6 +121,34 @@ export function createHealthCheckJob(
   };
 }
 
+export function createBankZeroPublishJob(
+  scheduledTime: Date | string,
+): BankZeroPublishJob {
+  const scheduledTimeValue = scheduledTimeString(scheduledTime);
+  return {
+    v: 1,
+    jobId: `bank-zero-publish:${scheduledTimeValue}`,
+    type: "bank-zero-publish",
+    scheduledTime: scheduledTimeValue,
+  };
+}
+
+export function createBankZeroStatementJob(
+  source: IngestQueueMessageV1,
+  startRow: number,
+): BankZeroStatementJob {
+  if (!Number.isSafeInteger(startRow) || startRow < 0) {
+    throw new InvalidJobError("statement startRow must be a non-negative integer");
+  }
+  return {
+    v: 1,
+    jobId: `bank-zero-statement:${source.job_id}:${startRow}`,
+    type: "bank-zero-statement",
+    source,
+    startRow,
+  };
+}
+
 export function createTuyaDayJob(
   deviceId: string,
   date: string,
@@ -158,6 +204,10 @@ export function upgradeLegacyJob(value: Record<string, unknown>): JobV1 {
       return createTuyaPlanJob(requiredScheduledTime(value.scheduledTime));
     case "health-check":
       throw new InvalidJobError("health-check has no legacy form");
+    case "bank-zero-publish":
+      throw new InvalidJobError("bank-zero-publish has no legacy form");
+    case "bank-zero-statement":
+      throw new InvalidJobError("bank-zero-statement has no legacy form");
     case "tuya-day":
       return createTuyaDayJob(
         requiredString(value.deviceId, "deviceId"),
@@ -200,6 +250,18 @@ function parseV1Job(value: Record<string, unknown>): JobV1 {
       const job = createHealthCheckJob(
         requiredScheduledTime(value.scheduledTime),
       );
+      if (job.jobId !== jobId) throw new InvalidJobError("jobId is not deterministic");
+      return job;
+    }
+    case "bank-zero-publish": {
+      const job = createBankZeroPublishJob(requiredScheduledTime(value.scheduledTime));
+      if (job.jobId !== jobId) throw new InvalidJobError("jobId is not deterministic");
+      return job;
+    }
+    case "bank-zero-statement": {
+      const source = requiredIngestSource(value.source);
+      const startRow = value.startRow;
+      const job = createBankZeroStatementJob(source, requiredNonNegativeInteger(startRow, "startRow"));
       if (job.jobId !== jobId) throw new InvalidJobError("jobId is not deterministic");
       return job;
     }
@@ -273,6 +335,33 @@ function requiredString(value: unknown, name: string): string {
     throw new InvalidJobError(`${name} must be a non-empty string`);
   }
   return requiredStringValue(value, name);
+}
+
+function requiredNonNegativeInteger(value: unknown, name: string): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    throw new InvalidJobError(`${name} must be a non-negative integer`);
+  }
+  return value;
+}
+
+function requiredIngestSource(value: unknown): IngestQueueMessageV1 {
+  if (!isRecord(value) || value.v !== 1 || typeof value.job_id !== "string" || !value.job_id.trim()) {
+    throw new InvalidJobError("statement source must be an ingest queue message");
+  }
+  if (value.email !== undefined || typeof value.email_r2_key !== "string" || !value.email_r2_key.trim()) {
+    throw new InvalidJobError("statement source must use a durable raw email pointer");
+  }
+  if (!isRecord(value.fields) || !Object.values(value.fields).every((field) => typeof field === "string")) {
+    throw new InvalidJobError("statement source fields are invalid");
+  }
+  if (!Array.isArray(value.attachments) || !value.attachments.every((attachment) =>
+    isRecord(attachment) && typeof attachment.fieldname === "string" &&
+    typeof attachment.filename === "string" && typeof attachment.mimetype === "string" &&
+    typeof attachment.r2_key === "string" &&
+    (attachment.sha256 === undefined || typeof attachment.sha256 === "string"))) {
+    throw new InvalidJobError("statement source attachments are invalid");
+  }
+  return value as unknown as IngestQueueMessageV1;
 }
 
 function requiredStringValue(value: string, name: string): string {

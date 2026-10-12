@@ -9,6 +9,8 @@ export interface CanonicalTransaction {
   account_id: string;
   date: string;
   amount: number;
+  /** Separate statement fee amount when the bank supplies it as a distinct column. */
+  fee?: number;
   currency: string;
   description: string;
   counterparty?: string;
@@ -20,6 +22,11 @@ export interface CanonicalTransaction {
     bank: string;
     source_email: string;
     filename: string;
+    /** Bank-local event timestamp when the statement supplies time precision. */
+    bank_event_at?: string;
+    event_precision?: "minute" | "day";
+    statement_sheet?: string;
+    statement_row?: number;
   };
   /** FinWise UUID when categorisation assigned a category above confidence threshold */
   transaction_category_id?: string;

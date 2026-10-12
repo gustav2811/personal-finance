@@ -10,6 +10,7 @@ const TRANSACTIONS_SHEET_KEYWORD = "Transactions";
 
 const DEFAULT_COLUMNS = {
   date: ["Date", "Transaction Date", "Posting Date"],
+  time: ["Time", "Transaction Time", "Posting Time"],
   type: ["Type"],
   description1: ["Description 1", "Description1"],
   description2: ["Description 2", "Description2"],
@@ -45,6 +46,28 @@ function parseDate(val: unknown): string | null {
     }
   }
   return null;
+}
+
+function parseLocalEventTime(dateValue: unknown, timeValue: unknown): string | undefined {
+  const date = parseDate(dateValue);
+  if (!date || timeValue == null || timeValue === "") return undefined;
+  let hour: number;
+  let minute: number;
+  let second = 0;
+  if (typeof timeValue === "number" && timeValue >= 0 && timeValue < 1) {
+    const seconds = Math.round(timeValue * 86400) % 86400;
+    hour = Math.floor(seconds / 3600);
+    minute = Math.floor((seconds % 3600) / 60);
+    second = seconds % 60;
+  } else {
+    const match = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(String(timeValue).trim());
+    if (!match) return undefined;
+    hour = Number(match[1]);
+    minute = Number(match[2]);
+    second = Number(match[3] ?? "0");
+  }
+  if (hour > 23 || minute > 59 || second > 59) return undefined;
+  return `${date}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:${String(second).padStart(2, "0")}+02:00`;
 }
 
 function parseAmount(val: unknown): number | null {
@@ -90,7 +113,7 @@ function mapBankZeroRowFields(
     const description = d1 ? `[TRANSFER] ${d1}` : "[TRANSFER]";
     return {
       description,
-      counterparty: "Bank Zero",
+      ...(d1 ? { counterparty: d1 } : {}),
       ...(d2 ? { notes: d2 } : {}),
     };
   }
@@ -120,6 +143,7 @@ export function bankZeroParser(
   const results: CanonicalTransaction[] = [];
   const first = data[0] as Record<string, unknown>;
   const dateCol = findColumn(first, DEFAULT_COLUMNS.date);
+  const timeCol = findColumn(first, DEFAULT_COLUMNS.time);
   const typeCol = findColumn(first, DEFAULT_COLUMNS.type);
   const desc1Col = findColumn(first, DEFAULT_COLUMNS.description1);
   const desc2Col = findColumn(first, DEFAULT_COLUMNS.description2);
@@ -141,6 +165,7 @@ export function bankZeroParser(
     const desc1 = desc1Col ? String(row[desc1Col] ?? "").trim() : "";
     const desc2 = desc2Col ? String(row[desc2Col] ?? "").trim() : "";
     const typeStr = typeCol ? String(row[typeCol] ?? "").trim() : "";
+    const eventAt = timeCol ? parseLocalEventTime(row[dateCol], row[timeCol]) : undefined;
     const { description, counterparty, notes } = mapBankZeroRowFields(
       typeStr,
       desc1,
@@ -149,13 +174,15 @@ export function bankZeroParser(
     const balance = balanceCol
       ? (parseAmount(row[balanceCol]) ?? undefined)
       : undefined;
+    const feeCol = findColumn(row, DEFAULT_COLUMNS.fee);
+    const fee = feeCol ? parseAmount(row[feeCol]) ?? undefined : undefined;
 
     const external_id = buildExternalId(
       BANK_CODE,
       ctx.account_id,
       date,
       amount,
-      [typeStr, desc1, desc2].filter(Boolean).join("|"),
+      [typeStr, desc1, desc2, `row:${i + 2}`].filter(Boolean).join("|"),
     );
 
     results.push({
@@ -163,6 +190,7 @@ export function bankZeroParser(
       account_id: ctx.account_id,
       date,
       amount,
+      ...(fee !== undefined && fee !== 0 ? { fee } : {}),
       currency,
       description,
       counterparty,
@@ -173,6 +201,9 @@ export function bankZeroParser(
         bank: BANK_CODE,
         source_email: ctx.source_email,
         filename: ctx.filename,
+        ...(eventAt ? { bank_event_at: eventAt, event_precision: "minute" as const } : { event_precision: "day" as const }),
+        statement_sheet: workbook.SheetNames.find((name) => name.toLowerCase().includes(TRANSACTIONS_SHEET_KEYWORD.toLowerCase())) ?? TRANSACTIONS_SHEET_KEYWORD,
+        statement_row: i + 2,
       },
     });
   }

@@ -1,6 +1,8 @@
 import {
   createDlqReportJob,
   createHealthCheckJob,
+  createBankZeroPublishJob,
+  createBankZeroStatementJob,
   createIsmrtSyncJob,
   createTuyaPlanJob,
   parseJob,
@@ -21,6 +23,7 @@ import {
   processIngestJob,
   type IngestQueueMessageV1,
   type ProcessJobLogger,
+  sendToDlq,
 } from "@investments/ingest-core";
 
 export type { ConsumerEnv } from "./config.js";
@@ -55,6 +58,7 @@ function createCfLogger(bindings: Record<string, unknown>): ProcessJobLogger {
 async function processEmailIngestMessage(
   body: IngestQueueMessageV1,
   env: ConsumerEnv,
+  statementStartRow = 0,
 ): Promise<void> {
   if (body.v !== 1) {
     throw new Error(
@@ -89,6 +93,25 @@ async function processEmailIngestMessage(
     fields.email = body.email;
   }
 
+  // v1 jobs created before every-email R2 retention may still carry the MIME
+  // body inline. Promote it before processing so evidence writes and replay
+  // always refer to durable content.
+  let rawR2Key = body.email_r2_key;
+  let rawSha256 = body.raw_email_sha256;
+  if (!rawR2Key && fields.email) {
+    rawR2Key = `ingest/${body.job_id}/email.raw`;
+    rawSha256 = await sha256Hex(fields.email);
+    await env.INGEST_BUCKET.put(rawR2Key, fields.email, {
+      httpMetadata: { contentType: "message/rfc822" },
+      customMetadata: {
+        sha256: rawSha256,
+        received_at: body.received_at ?? new Date().toISOString(),
+        delivery_id: body.delivery_id ?? body.job_id,
+        ...(body.route_key ? { route_key: body.route_key } : {}),
+      },
+    });
+  }
+
   const attachments = [];
   for (const att of body.attachments) {
     const obj = await env.INGEST_BUCKET.get(att.r2_key);
@@ -112,9 +135,49 @@ async function processEmailIngestMessage(
     job_id: body.job_id,
   });
 
+  let envelope: unknown = {};
+  const envelopeRaw = fields.envelope;
+  if (envelopeRaw) {
+    try {
+      envelope = JSON.parse(envelopeRaw);
+    } catch {
+      envelope = { unparsed: true };
+    }
+  }
+
+  const continuationSource: IngestQueueMessageV1 = { ...body };
+  if (rawR2Key) continuationSource.email_r2_key = rawR2Key;
+  if (rawSha256) continuationSource.raw_email_sha256 = rawSha256;
+  delete continuationSource.email;
+
   await processIngestJob(config, payload, logger, {
     replayPayload: dlqReplayPayload(body),
+    statementStartRow,
+    bankZeroReceipt: {
+      // Missing trusted route metadata is explicitly unresolved. It must never
+      // be inferred from the visible To header or account alias.
+      routeKey: body.route_key ?? "unverified",
+      deliveryId: body.delivery_id ?? body.job_id,
+      receivedAt: body.received_at ?? new Date().toISOString(),
+      rawR2Key: rawR2Key ?? `ingest/${body.job_id}/email.raw`,
+      rawSha256: rawSha256 ?? await sha256Hex(JSON.stringify(fields)),
+      envelope,
+      attachments: body.attachments.map((attachment) => ({
+        filename: attachment.filename,
+        mimetype: attachment.mimetype,
+        ...(attachment.sha256 ? { sha256: attachment.sha256 } : {}),
+        r2Key: attachment.r2_key,
+      })),
+    },
+    scheduleStatementContinuation: async (nextStartRow) => {
+      await env.JOBS_QUEUE.send(createBankZeroStatementJob(continuationSource, nextStartRow));
+    },
   });
+}
+
+async function sha256Hex(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 /** Keep only durable R2 pointers and metadata needed to reconstruct a queue message. */
@@ -122,9 +185,13 @@ function dlqReplayPayload(body: IngestQueueMessageV1): Record<string, unknown> {
   return {
     v: body.v,
     job_id: body.job_id,
+    ...(body.route_key ? { route_key: body.route_key } : {}),
+    ...(body.delivery_id ? { delivery_id: body.delivery_id } : {}),
+    ...(body.received_at ? { received_at: body.received_at } : {}),
     fields: body.fields,
     attachments: body.attachments,
     ...(body.email_r2_key ? { email_r2_key: body.email_r2_key } : {}),
+    ...(body.raw_email_sha256 ? { raw_email_sha256: body.raw_email_sha256 } : {}),
   };
 }
 
@@ -150,6 +217,20 @@ const handler = {
     try {
       const scheduledTime = new Date(event.scheduledTime).toISOString();
       switch (event.cron) {
+        case "* * * * *":
+          try {
+            await drainR2RecoveryRecords(env, 10);
+          } catch (error) {
+            console.log(JSON.stringify({
+              level: "warn", msg: "r2_recovery_scan_failed",
+              component: "ingest-consumer",
+              error: error instanceof Error ? error.message : String(error),
+            }));
+          }
+          await env.BANK_ZERO_PUBLISH_QUEUE.send({
+            body: createBankZeroPublishJob(scheduledTime),
+          });
+          return;
         case "0 7 * * *":
           {
             const budget = new SubrequestBudget();
@@ -195,7 +276,19 @@ const handler = {
       await processEmailQueueBatch(batch, env);
       return;
     }
+    if (batch.queue === "investments-email-ingest-dlq") {
+      await processEmailDeadLetterBatch(batch, env);
+      return;
+    }
+    if (batch.queue.endsWith("-dlq") || batch.queue.endsWith("-dlq-recovery")) {
+      await processOtherDeadLetterBatch(batch, env);
+      return;
+    }
     if (batch.queue === "investments-jobs") {
+      await processJobsQueueBatch(batch, env);
+      return;
+    }
+    if (batch.queue === "investments-bank-zero-publish") {
       await processJobsQueueBatch(batch, env);
       return;
     }
@@ -272,6 +365,157 @@ async function processEmailQueueBatch(
   }
 }
 
+async function processEmailDeadLetterBatch(
+  batch: MessageBatch<unknown>,
+  env: ConsumerEnv,
+): Promise<void> {
+  const config = getConsumerConfig(env);
+  for (const message of batch.messages) {
+    const original = message.body;
+    let jobId = `cloudflare-email-dlq:${message.id}`;
+    try {
+      let replay: Record<string, unknown> | undefined;
+      let messageId = jobId;
+      let recoveryId = `cloudflare-email:${message.id}`;
+      if (isIngestQueueMessage(original)) {
+        jobId = original.job_id;
+        messageId = original.fields["message-id"] ?? original.fields["Message-ID"] ?? original.job_id;
+        recoveryId = `cloudflare-email:${original.route_key ?? "unrouted"}:${original.delivery_id ?? original.job_id}`;
+        let durableMessage = original;
+        if (!durableMessage.email_r2_key && durableMessage.email !== undefined) {
+          const rawR2Key = `ingest/${durableMessage.job_id}/email.raw`;
+          const digest = await sha256Hex(durableMessage.email);
+          await env.INGEST_BUCKET.put(rawR2Key, durableMessage.email, {
+            httpMetadata: { contentType: "message/rfc822" },
+            customMetadata: { sha256: digest, delivery_id: durableMessage.delivery_id ?? durableMessage.job_id },
+          });
+          durableMessage = {
+            ...durableMessage,
+            email_r2_key: rawR2Key,
+            raw_email_sha256: digest,
+          };
+          delete durableMessage.email;
+        }
+        replay = dlqReplayPayload(durableMessage);
+      }
+
+      const recoveryKey = `recovery/email-ingest/${safePathPart(jobId)}.json`;
+      await env.INGEST_BUCKET.put(recoveryKey, JSON.stringify({
+        version: 1,
+        recoveryId,
+        source: "cloudflare-native-dlq",
+        queue: batch.queue,
+        jobId,
+        messageId,
+        replayPayload: replay ?? null,
+        exhaustedAttempts: message.attempts,
+        recordedAt: new Date().toISOString(),
+      }), { httpMetadata: { contentType: "application/json" } });
+
+      await sendToDlq(config, {
+        job_id: jobId,
+        message_id: messageId,
+        bank: "unknown",
+        error: "Cloudflare email queue retry allowance exhausted",
+        payload: { recovery_r2_key: recoveryKey, queue: batch.queue, exhausted_attempts: message.attempts },
+        replay_payload: replay,
+        recovery_id: recoveryId,
+      });
+      message.ack();
+    } catch (error) {
+      console.log(JSON.stringify({
+        level: "error", msg: "email_native_dlq_persistence_failed",
+        component: "ingest-consumer", job_id: jobId,
+        error: error instanceof Error ? error.message : String(error),
+      }));
+      message.retry({ delaySeconds: backoffDelaySeconds(message.attempts) });
+    }
+  }
+}
+
+async function processOtherDeadLetterBatch(
+  batch: MessageBatch<unknown>,
+  env: ConsumerEnv,
+): Promise<void> {
+  const config = getConsumerConfig(env);
+  for (const message of batch.messages) {
+    const jobId = `cloudflare-dlq:${batch.queue}:${message.id}`;
+    const recoveryId = `cloudflare:${batch.queue}:${message.id}`;
+    const recoveryKey = `recovery/native-dlq/${safePathPart(batch.queue)}/${safePathPart(message.id)}.json`;
+    try {
+      await env.INGEST_BUCKET.put(recoveryKey, JSON.stringify({
+        version: 1,
+        recoveryId,
+        source: "cloudflare-native-dlq",
+        queue: batch.queue,
+        jobId,
+        messageId: message.id,
+        replayPayload: message.body,
+        exhaustedAttempts: message.attempts,
+        recordedAt: new Date().toISOString(),
+      }), { httpMetadata: { contentType: "application/json" } });
+      await sendToDlq(config, {
+        job_id: jobId,
+        message_id: message.id,
+        bank: "unknown",
+        error: `Cloudflare ${batch.queue} retry allowance exhausted`,
+        payload: { recovery_r2_key: recoveryKey, queue: batch.queue, exhausted_attempts: message.attempts },
+        replay_payload: isRecord(message.body) ? message.body : { value: String(message.body) },
+        recovery_id: recoveryId,
+      });
+      message.ack();
+    } catch (error) {
+      console.log(JSON.stringify({
+        level: "error", msg: "native_dlq_persistence_failed",
+        component: "ingest-consumer", queue: batch.queue,
+        error: error instanceof Error ? error.message : String(error),
+      }));
+      message.retry({ delaySeconds: backoffDelaySeconds(message.attempts) });
+    }
+  }
+}
+
+/** R2 is the durable fallback when a DLQ drain cannot reach Supabase. */
+async function drainR2RecoveryRecords(env: ConsumerEnv, limit: number): Promise<void> {
+  const config = getConsumerConfig(env);
+  const listed = await env.INGEST_BUCKET.list({ prefix: "recovery/", limit });
+  for (const item of listed.objects) {
+    const object = await env.INGEST_BUCKET.get(item.key);
+    if (!object) continue;
+    try {
+      const record: unknown = JSON.parse(await object.text());
+      if (!isRecord(record) || typeof record.jobId !== "string") {
+        throw new Error("Recovery record has an invalid shape");
+      }
+      const recoveryId = typeof record.recoveryId === "string"
+        ? record.recoveryId
+        : `legacy-recovery:${record.jobId}`;
+      const replay = isRecord(record.replayPayload) ? record.replayPayload : undefined;
+      await sendToDlq(config, {
+        job_id: record.jobId,
+        message_id: typeof record.messageId === "string" ? record.messageId : record.jobId,
+        bank: "unknown",
+        error: typeof record.queue === "string" ? `Cloudflare ${record.queue} retry allowance exhausted` : "Cloudflare queue retry allowance exhausted",
+        payload: { recovery_r2_key: item.key, queue: record.queue ?? "unknown", exhausted_attempts: record.exhaustedAttempts ?? null },
+        replay_payload: replay,
+        recovery_id: recoveryId,
+      });
+      await env.INGEST_BUCKET.delete(item.key);
+    } catch (error) {
+      console.log(JSON.stringify({
+        level: "error", msg: "r2_recovery_drain_failed",
+        component: "ingest-consumer", recovery_r2_key: item.key,
+        error: error instanceof Error ? error.message : String(error),
+      }));
+      break;
+    }
+  }
+}
+
+function safePathPart(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 120) || crypto.randomUUID();
+}
+
 async function processJobsQueueBatch(
   batch: MessageBatch<IngestQueueMessageV1 | Job>,
   env: ConsumerEnv,
@@ -318,6 +562,20 @@ async function processJobsQueueBatch(
     }
 
     const job: Job = parsed.job;
+    if (job.type === "bank-zero-statement") {
+      try {
+        await processEmailIngestMessage(job.source, env, job.startRow);
+        message.ack();
+      } catch (err: unknown) {
+        console.log(JSON.stringify({
+          level: "error", msg: "bank_zero_statement_continuation_failed",
+          component: "ingest-consumer", job_id: job.jobId,
+          error: err instanceof Error ? err.message : String(err),
+        }));
+        message.retry({ delaySeconds: backoffDelaySeconds(message.attempts) });
+      }
+      continue;
+    }
     const budget = new SubrequestBudget();
     try {
       await runJob(job, env, budget);
@@ -436,7 +694,11 @@ function isIngestQueueMessage(value: unknown): value is IngestQueueMessageV1 {
   }
   if (
     (value.email !== undefined && typeof value.email !== "string") ||
-    (value.email_r2_key !== undefined && typeof value.email_r2_key !== "string")
+    (value.email_r2_key !== undefined && typeof value.email_r2_key !== "string") ||
+    (value.route_key !== undefined && (typeof value.route_key !== "string" || !/^[a-z0-9_-]{1,64}$/.test(value.route_key))) ||
+    (value.delivery_id !== undefined && typeof value.delivery_id !== "string") ||
+    (value.received_at !== undefined && (typeof value.received_at !== "string" || Number.isNaN(Date.parse(value.received_at)))) ||
+    (value.raw_email_sha256 !== undefined && (typeof value.raw_email_sha256 !== "string" || !/^[0-9a-f]{64}$/.test(value.raw_email_sha256)))
   ) {
     return false;
   }
@@ -448,7 +710,8 @@ function isIngestQueueMessage(value: unknown): value is IngestQueueMessageV1 {
         typeof attachment.fieldname === "string" &&
         typeof attachment.filename === "string" &&
         typeof attachment.mimetype === "string" &&
-        typeof attachment.r2_key === "string",
+        typeof attachment.r2_key === "string" &&
+        (attachment.sha256 === undefined || (typeof attachment.sha256 === "string" && /^[0-9a-f]{64}$/.test(attachment.sha256))),
     )
   );
 }

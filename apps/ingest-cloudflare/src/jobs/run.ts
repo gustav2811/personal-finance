@@ -1,6 +1,8 @@
 import {
   countDlqSince,
   listOpenDlqGroupsSince,
+  createFinwiseClient,
+  processBankZeroPublicationBatch,
   type IngestCoreConfig,
 } from "@investments/ingest-core";
 import { type ConsumerEnv, getConsumerConfig } from "../config.js";
@@ -56,9 +58,45 @@ export async function runJob(
         fetchImpl,
       );
       return;
+    case "bank-zero-publish": {
+      const config = getConsumerConfig(env);
+      if (!config.uploadToFinwise) {
+        console.log(JSON.stringify({
+          level: "info", msg: "bank_zero_publication_paused",
+          component: "ingest-consumer", job_id: job.jobId,
+          reason: "UPLOAD_TO_FINWISE is disabled",
+        }));
+        return;
+      }
+      const finwise = createFinwiseClient(config.finwiseApiKey, config.finwiseBaseUrl);
+      const result = await processBankZeroPublicationBatch(
+        config,
+        finwise,
+        job.jobId,
+        {
+          info: (fields, message) => console.log(JSON.stringify({ level: "info", msg: message, ...asLogFields(fields) })),
+          warn: (fields, message) => console.log(JSON.stringify({ level: "warn", msg: message, ...asLogFields(fields) })),
+          error: (fields, message) => console.log(JSON.stringify({ level: "error", msg: message, ...asLogFields(fields) })),
+        },
+        5,
+      );
+      console.log(JSON.stringify({
+        level: "info", msg: "bank_zero_publication_batch_completed",
+        component: "ingest-consumer", job_id: job.jobId, ...result,
+      }));
+      return;
+    }
+    case "bank-zero-statement":
+      throw new Error("Bank Zero statement continuation must be handled by the queue adapter");
     default:
       assertNever(job);
   }
+}
+
+function asLogFields(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : { detail: value };
 }
 
 export type DlqReport = {

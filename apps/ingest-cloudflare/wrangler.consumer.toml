@@ -23,10 +23,28 @@ queue = "investments-email-ingest"
 max_batch_size = 1
 max_batch_timeout = 2
 max_retries = 5
+dead_letter_queue = "investments-email-ingest-dlq"
+
+[[queues.consumers]]
+queue = "investments-email-ingest-dlq"
+max_batch_size = 1
+max_batch_timeout = 1
+max_retries = 20
+dead_letter_queue = "investments-email-ingest-dlq-recovery"
+
+[[queues.consumers]]
+queue = "investments-email-ingest-dlq-recovery"
+max_batch_size = 1
+max_batch_timeout = 1
+max_retries = 20
 
 [[queues.producers]]
 binding = "JOBS_QUEUE"
 queue = "investments-jobs"
+
+[[queues.producers]]
+binding = "BANK_ZERO_PUBLISH_QUEUE"
+queue = "investments-bank-zero-publish"
 
 [[queues.consumers]]
 queue = "investments-jobs"
@@ -35,13 +53,41 @@ max_batch_timeout = 1
 max_retries = 5
 # Tuya rate-limits report-log queries per project; run one job at a time.
 max_concurrency = 1
+dead_letter_queue = "investments-jobs-dlq"
+
+[[queues.consumers]]
+queue = "investments-jobs-dlq"
+max_batch_size = 1
+max_batch_timeout = 1
+max_retries = 20
+
+[[queues.consumers]]
+queue = "investments-bank-zero-publish"
+max_batch_size = 1
+max_batch_timeout = 1
+max_retries = 5
+max_concurrency = 5
+dead_letter_queue = "investments-bank-zero-publish-dlq"
+
+[[queues.consumers]]
+queue = "investments-bank-zero-publish-dlq"
+max_batch_size = 1
+max_batch_timeout = 1
+max_retries = 20
+dead_letter_queue = "investments-bank-zero-publish-dlq-recovery"
+
+[[queues.consumers]]
+queue = "investments-bank-zero-publish-dlq-recovery"
+max_batch_size = 1
+max_batch_timeout = 1
+max_retries = 20
 
 # 07:00 UTC is 09:00 in Johannesburg, after the previous ISMRT usage day has closed.
 # 10:00 UTC runs the health check after the source jobs have finished/retried.
 # Crons only enqueue jobs onto investments-jobs; each job has separate external
 # and internal subrequest budgets below the Cloudflare free-plan ceilings.
 [triggers]
-crons = ["0 7 * * *", "0 10 * * *"]
+crons = ["* * * * *", "0 7 * * *", "0 10 * * *"]
 
 # Dashboard secrets: FINWISE_API_KEY, SUPABASE_*, BANK_ZERO_ACCOUNT_ID, SENTRY_DSN.
 # Bank Zero routing is src/bank-zero-accounts.ts, not a dashboard variable.

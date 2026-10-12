@@ -38,5 +38,7 @@ export function getAccountIdForBankAndFilename(
       }
     }
   }
-  return config.bankZeroAccountId || undefined;
+  // A configured alias registry is authoritative. Unknown statements must be
+  // held for review instead of falling through to a default household account.
+  return map && map.length > 0 ? undefined : config.bankZeroAccountId || undefined;
 }

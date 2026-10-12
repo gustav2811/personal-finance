@@ -119,13 +119,13 @@ describe("getAccountIdForBankAndFilename", () => {
     ).toBe("tx-A-id");
   });
 
-  it("falls back to default when no pattern matches", () => {
+  it("does not route an unknown Bank Zero statement to a default account", () => {
     const config = configWithMap([
       { pattern: "Savings", accountId: "savings-id" },
     ]);
     expect(
       getAccountIdForBankAndFilename(config, "bank_zero", "Other.xlsx"),
-    ).toBe("default-id");
+    ).toBeUndefined();
   });
 
   it("does not match Transactional when accountNumber is missing from subject and filename", () => {
@@ -147,6 +147,6 @@ describe("getAccountIdForBankAndFilename", () => {
         "bank_zero",
         "Transactional statement.xlsx",
       ),
-    ).toBe("default-id");
+    ).toBeUndefined();
   });
 });

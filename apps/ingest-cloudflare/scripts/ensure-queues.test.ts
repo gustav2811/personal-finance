@@ -7,6 +7,7 @@ describe("ensure-queues helpers", () => {
       parseQueueNames(`
 [[queues.producers]]
 queue = "investments-email-ingest"
+dead_letter_queue = "investments-email-ingest-dlq"
 
 [[queues.consumers]]
 queue = "investments-jobs"
@@ -14,7 +15,7 @@ queue = "investments-jobs"
 [[queues.producers]]
 queue = "investments-email-ingest"
       `),
-    ).toEqual(["investments-email-ingest", "investments-jobs"]);
+    ).toEqual(["investments-email-ingest", "investments-email-ingest-dlq", "investments-jobs"]);
   });
 
   it("plans only missing queues while preserving wanted order", () => {

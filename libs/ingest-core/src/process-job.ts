@@ -1,12 +1,18 @@
 import type { IngestCoreConfig } from "./config.js";
 import type { IngestJobPayload } from "./job-payload.js";
 import { payloadToBuffer } from "./job-payload.js";
+import { parseBankZeroEmail } from "./parsers/bank-zero-email.js";
 import {
   detectBank,
   getParserForBank,
   pickBestAttachment,
   type CanonicalTransaction,
 } from "./parsers/index.js";
+import {
+  recordBankZeroObservation,
+  recordBankZeroStatementRow,
+  type BankZeroReceiptContext,
+} from "./lib/bank-zero-ingest.js";
 import { getAccountIdForBankAndFilename } from "./parsers/bank-config.js";
 import { validateAll } from "./parsers/validate.js";
 import { categoriseTransactions } from "./lib/categorisation/pipeline.js";
@@ -25,7 +31,12 @@ export interface ProcessJobLogger {
 
 export type ProcessIngestJobOptions = {
   replayPayload?: Record<string, unknown>;
+  bankZeroReceipt?: BankZeroReceiptContext;
+  statementStartRow?: number;
+  scheduleStatementContinuation?: (nextStartRow: number) => Promise<void>;
 };
+
+const BANK_ZERO_STATEMENT_CHUNK_SIZE = 100;
 
 export async function processIngestJob(
   config: IngestCoreConfig,
@@ -38,6 +49,37 @@ export async function processIngestJob(
     message_id: payload.message_id,
     from: payload.from,
   });
+
+  const detectedBank = detectBank(payload.from, payload.to, "");
+  const hasStatementAttachment = pickBestAttachment(payload.attachments) !== undefined;
+  if (detectedBank === "bank_zero" && !hasStatementAttachment) {
+    const observation = parseBankZeroEmail({
+      subject: payload.subject,
+      text: payload.text,
+      html: payload.html,
+      attachments: payload.attachments.map(({ filename, mimetype }) => ({ filename, mimetype })),
+    });
+    if (!options.bankZeroReceipt) {
+      throw new Error("Bank Zero email has no durable receipt context");
+    }
+    const stored = await recordBankZeroObservation(
+      config,
+      options.bankZeroReceipt,
+      payload,
+      observation,
+    );
+    log.info(
+      {
+        message_class: observation.messageClass,
+        parser_version: observation.parserVersion,
+        receipt_outcome: stored.status,
+        route_status: stored.route_status,
+        ...(stored.account_id ? { account_id: stored.account_id } : {}),
+      },
+      "bank_zero_observation_recorded",
+    );
+    return;
+  }
 
   const attachment = pickBestAttachment(payload.attachments);
   if (!attachment) {
@@ -177,6 +219,57 @@ export async function processIngestJob(
 
   if (valid.length === 0) {
     plog.info("No valid transactions to post");
+    return;
+  }
+
+  if (bankCode === "bank_zero") {
+    if (!options.bankZeroReceipt) {
+      throw new Error("Bank Zero statement has no durable receipt context");
+    }
+    const attachmentPointer = options.bankZeroReceipt.attachments.find(
+      (item) => item.filename === attachment.filename,
+    );
+    if (!attachmentPointer?.sha256) {
+      throw new Error("Bank Zero statement attachment has no durable content hash");
+    }
+    const searchText = `${payload.subject} ${attachment.filename}`.toLowerCase();
+    const aliasMapping = config.bankZeroAccountMap.find(
+      (mapping) => mapping.accountId === accountId && searchText.includes(mapping.pattern.toLowerCase()),
+    );
+    if (!aliasMapping) {
+      throw new Error("Bank Zero statement account alias is not explicitly mapped for this route");
+    }
+    const startRow = options.statementStartRow ?? 0;
+    const chunk = valid.slice(startRow, startRow + BANK_ZERO_STATEMENT_CHUNK_SIZE);
+    for (const row of chunk) {
+      const result = await recordBankZeroStatementRow(
+        config,
+        options.bankZeroReceipt,
+        payload,
+        row,
+        aliasMapping.alias ?? aliasMapping.pattern,
+        attachmentPointer.sha256,
+        aliasMapping.accountNumber,
+      );
+      plog.info(
+        {
+          statement_row: row.meta.statement_row,
+          evidence_status: result.status,
+          ...(result.account_id ? { account_id: result.account_id } : {}),
+        },
+        "bank_zero_statement_row_recorded",
+      );
+    }
+    if (startRow + chunk.length < valid.length) {
+      if (!options.scheduleStatementContinuation) {
+        throw new Error("Bank Zero statement needs a durable continuation queue");
+      }
+      await options.scheduleStatementContinuation(startRow + chunk.length);
+      plog.info(
+        { parsed_rows: valid.length, next_row: startRow + chunk.length },
+        "bank_zero_statement_continuation_scheduled",
+      );
+    }
     return;
   }
 

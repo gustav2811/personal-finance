@@ -35,6 +35,16 @@ export type {
 } from "./parsers/types.js";
 export { validateAll } from "./parsers/validate.js";
 export {
+  parseBankZeroEmail,
+  type BankZeroEmailInput,
+  type BankZeroFinancialObservation,
+  type BankZeroMessageClass,
+} from "./parsers/bank-zero-email.js";
+export {
+  processBankZeroPublicationBatch,
+  type BankZeroPublicationLogger,
+} from "./lib/bank-zero-publication.js";
+export {
   categoriseTransactions,
   type CategorisationLogger,
 } from "./lib/categorisation/pipeline.js";
@@ -47,9 +57,15 @@ export {
 export type IngestQueueMessageV1 = {
   v: 1;
   job_id: string;
-  /** Inline email body when under size threshold; else use email_r2_key */
+  /** Trusted person/profile resolved from the route-specific webhook token. */
+  route_key?: string;
+  /** Transport attempt identity; the RFC 822 Message-ID remains separate. */
+  delivery_id?: string;
+  received_at?: string;
+  /** Legacy inline body supported for messages queued before durable-R2 rollout. */
   email?: string;
   email_r2_key?: string;
+  raw_email_sha256?: string;
   /** Multipart text fields except `email` when stored in R2 */
   fields: Record<string, string>;
   attachments: Array<{
@@ -57,5 +73,6 @@ export type IngestQueueMessageV1 = {
     filename: string;
     mimetype: string;
     r2_key: string;
+    sha256?: string;
   }>;
 };

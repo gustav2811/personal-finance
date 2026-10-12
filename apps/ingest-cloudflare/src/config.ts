@@ -4,6 +4,7 @@ import { bankZeroAccountMap } from "./bank-zero-accounts.js";
 export interface ConsumerEnv {
   INGEST_BUCKET: R2Bucket;
   JOBS_QUEUE: Queue<unknown>;
+  BANK_ZERO_PUBLISH_QUEUE: Queue<unknown>;
   FINWISE_API_KEY: string;
   FINWISE_BASE_URL: string;
   SUPABASE_URL: string;
