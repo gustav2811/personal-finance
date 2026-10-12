@@ -43,6 +43,9 @@ declare
   v_candidate_ids uuid[];
   v_candidate_count integer;
   v_plausible_count integer;
+  v_original_candidate_ids uuid[];
+  v_original_candidate_count integer;
+  v_original_movement_id uuid;
   v_movement_id uuid;
   v_description text;
   v_notes text;
@@ -478,6 +481,43 @@ begin
               v_route.household_id, v_observation_id, v_movement_id, 'created_from',
               'new_identity_no_compatible_candidate_v1', 'No compatible account-scoped movement exists'
             );
+          end if;
+
+          if v_movement_id is not null and v_movement_type in ('card_refund', 'return') then
+            select count(*), coalesce(array_agg(candidate.id), '{}'::uuid[])
+              into v_original_candidate_count, v_original_candidate_ids
+            from finance.bank_zero_movements candidate
+            where candidate.household_id = v_route.household_id
+              and candidate.account_id = v_account_id
+              and candidate.currency_code = coalesce(nullif(p_observation->'parsedValues'->>'currency', ''), 'ZAR')
+              and candidate.id <> v_movement_id
+              and candidate.amount < 0
+              and abs(candidate.amount) >= abs(v_signed_amount)
+              and candidate.movement_type = case when v_movement_type = 'card_refund' then 'card_purchase' else 'payment' end
+              and (v_reference is not null and candidate.payment_reference is not null
+                   and lower(candidate.payment_reference) = lower(v_reference)
+                or v_counterparty is not null and candidate.counterparty is not null
+                   and lower(candidate.counterparty) = lower(v_counterparty))
+              and coalesce((candidate.occurred_at at time zone 'Africa/Johannesburg')::date, candidate.posted_on)
+                between coalesce(v_event_at::date, v_posted_on) - 365 and coalesce(v_event_at::date, v_posted_on);
+            if v_original_candidate_count = 1 then
+              v_original_movement_id := v_original_candidate_ids[1];
+              update finance.bank_zero_movements
+              set refund_of_movement_id = v_original_movement_id, updated_at = now()
+              where id = v_movement_id and household_id = v_route.household_id
+                and (refund_of_movement_id is null or refund_of_movement_id = v_original_movement_id);
+              insert into finance.bank_zero_evidence_links (
+                household_id, observation_id, movement_id, relation, matching_method, decision_reason
+              ) values (
+                v_route.household_id, v_observation_id, v_original_movement_id,
+                case when v_movement_type = 'card_refund' then 'refund_of' else 'return_of' end,
+                'unique_opposite_movement_and_counterparty_v1',
+                'Unique earlier debit with matching account, amount coverage, and counterparty or reference'
+              ) on conflict (household_id, observation_id, movement_id) do nothing;
+            elsif v_original_candidate_count > 1 then
+              v_status := 'needs_review';
+              v_conflict := 'Refund or return has more than one plausible original movement';
+            end if;
           end if;
 
           if v_status = 'observed' and v_movement_id is not null then

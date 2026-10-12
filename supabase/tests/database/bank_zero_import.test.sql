@@ -1,6 +1,6 @@
 begin;
 
-select plan(42);
+select plan(49);
 
 insert into finance.households (id) values
   ('00000000-0000-4000-8000-00000000b201'),
@@ -19,7 +19,8 @@ where household_id = '00000000-0000-4000-8000-00000000b201' and route_key = 'pro
 insert into finance.bank_zero_route_capabilities (household_id, route_key, message_class, enabled)
 values
   ('00000000-0000-4000-8000-00000000b201', 'profile-a', 'paid', true),
-  ('00000000-0000-4000-8000-00000000b201', 'profile-a', 'card_purchase', true);
+  ('00000000-0000-4000-8000-00000000b201', 'profile-a', 'card_purchase', true),
+  ('00000000-0000-4000-8000-00000000b201', 'profile-a', 'payment_returned', true);
 insert into finance.bank_zero_account_aliases (household_id, route_key, account_id, alias_normalized, alias_display, account_number, status) values
   ('00000000-0000-4000-8000-00000000b201', 'profile-a', '00000000-0000-4000-8000-00000000b221', 'transactional', 'Transactional', '80200000001', 'active'),
   ('00000000-0000-4000-8000-00000000b202', 'profile-b', '00000000-0000-4000-8000-00000000b222', 'transactional', 'Transactional', '80200000002', 'active'),
@@ -247,6 +248,40 @@ select public.bank_zero_record_observation_v1(
 select is(:'changed_card_settlement_result'::jsonb->>'status', 'needs_review', 'amount-changing card settlement is held for review');
 select is((select count(*)::integer from finance.bank_zero_movements where household_id = '00000000-0000-4000-8000-00000000b201' and movement_type = 'card_purchase' and counterparty = 'Test Cafe'), 1, 'amount-changing card settlement does not create a duplicate purchase');
 select is((select state from finance.bank_zero_publication_outbox where movement_id = (select id from finance.bank_zero_movements where counterparty = 'Test Cafe') and operation = 'create'), 'needs_review', 'unpublished card purchase pauses before a changed settlement can be published');
+select public.bank_zero_record_observation_v1(
+  'profile-a', 'refund-statement', '<refund-statement@test.invalid>',
+  'ingest/00000000-0000-4000-8000-00000000b282/email.raw', repeat('8', 64), now(), '{}'::jsonb,
+  jsonb_build_object(
+    'evidenceKey', 'statement:' || repeat('9',64) || ':Transactions:3',
+    'messageClass', 'statement', 'outcome', 'movement_candidate', 'parserVersion', 'bank-zero-statement-v2',
+    'parsedValues', jsonb_build_object(
+      'messageClass', 'statement', 'outcome', 'movement_candidate', 'movementType', 'card_refund',
+      'direction', 'credit', 'amountMinor', 5000, 'currency', 'ZAR', 'accountAlias', 'Transactional',
+      'accountNumber', '80200000001', 'counterparty', 'Test Cafe', 'postedOn', '2026-10-12',
+      'statementContentSha256', repeat('9',64), 'statementSheet', 'Transactions', 'statementRow', 3
+    )
+  )
+) as refund_statement_result \gset
+select is((select refund_of_movement_id from finance.bank_zero_movements where movement_type = 'card_refund' and counterparty = 'Test Cafe'), (select id from finance.bank_zero_movements where movement_type = 'card_purchase' and counterparty = 'Test Cafe'), 'uniquely supported refund links back to its purchase');
+select is((select relation from finance.bank_zero_evidence_links where observation_id = (:'refund_statement_result'::jsonb->>'observation_id')::uuid and movement_id = (select id from finance.bank_zero_movements where movement_type = 'card_purchase' and counterparty = 'Test Cafe')), 'refund_of', 'refund evidence records its original-purchase relationship');
+select is((select count(*)::integer from finance.bank_zero_movements where movement_type = 'card_refund' and counterparty = 'Test Cafe'), 1, 'statement refund remains its own credit movement');
+select public.bank_zero_record_observation_v1(
+  'profile-a', 'return-alert', '<return-alert@test.invalid>',
+  'ingest/00000000-0000-4000-8000-00000000b283/email.raw', repeat('a', 64), now(), '{}'::jsonb,
+  jsonb_build_object(
+    'evidenceKey', 'message', 'messageClass', 'payment_returned', 'outcome', 'movement_candidate',
+    'parserVersion', 'bank-zero-email-v1',
+    'parsedValues', jsonb_build_object(
+      'amountMinor', 2500, 'direction', 'credit', 'accountAlias', 'Transactional',
+      'accountNumber', '80200000001', 'currency', 'ZAR', 'eventAt', '2026-10-12T09:00:00+02:00',
+      'counterparty', 'Test Merchant', 'reference', 'ref-1'
+    )
+  )
+) as return_result \gset
+select is(:'return_result'::jsonb->>'status', 'observed', 'supported returned payment is stored as a separate credit');
+select is((select refund_of_movement_id from finance.bank_zero_movements where movement_type = 'return' and payment_reference = 'ref-1'), (select id from finance.bank_zero_movements where movement_type = 'payment' and payment_reference = 'ref-1'), 'returned payment links to its original debit');
+select is((select relation from finance.bank_zero_evidence_links where observation_id = (:'return_result'::jsonb->>'observation_id')::uuid and movement_id = (select id from finance.bank_zero_movements where movement_type = 'payment' and payment_reference = 'ref-1')), 'return_of', 'return evidence records its original-payment relationship');
+select is((select count(*)::integer from finance.bank_zero_movements where movement_type = 'return' and payment_reference = 'ref-1'), 1, 'returned payment does not overwrite the original movement');
 
 select public.bank_zero_record_observation_v1(
   'profile-a', 'unknown-delivery', '<unknown@test.invalid>',
@@ -260,7 +295,7 @@ select ok(not (public.bank_zero_list_review_v1(50)->'items' @> '[{"route_key":"p
 select ok(exists (
   select 1 from jsonb_array_elements(public.bank_zero_list_review_v1(50)->'items') item
   where item->>'observation_id' = (:'changed_card_settlement_result'::jsonb->>'observation_id')
-    and item->'candidate_movements' @> jsonb_build_array(jsonb_build_object('movement_id', (select id::text from finance.bank_zero_movements where counterparty = 'Test Cafe')))
+    and item->'candidate_movements' @> jsonb_build_array(jsonb_build_object('movement_id', (select id::text from finance.bank_zero_movements where movement_type = 'card_purchase' and counterparty = 'Test Cafe')))
 ), 'review queue shows the plausible purchase candidate for a changed card settlement');
 select public.bank_zero_review_observation_v1((:'conflict_result'::jsonb->>'observation_id')::uuid, 'associate', '00000000-0000-4000-8000-00000000b251'::uuid);
 select is((select status from finance.bank_zero_observations where id = (:'conflict_result'::jsonb->>'observation_id')::uuid), 'matched', 'member association action updates the evidence state');
