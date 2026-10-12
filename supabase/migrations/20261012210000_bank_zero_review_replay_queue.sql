@@ -98,7 +98,15 @@ begin
   where id = p_replay_request_id
     and status = 'in_progress'
     and lease_owner = p_worker_id;
-  if not found then raise exception 'replay request is not leased by this worker'; end if;
+  if not found then
+    if p_succeeded and exists (
+      select 1 from finance.bank_zero_replay_requests
+      where id = p_replay_request_id and status = 'completed'
+    ) then
+      return;
+    end if;
+    raise exception 'replay request is not leased by this worker';
+  end if;
 end;
 $$;
 

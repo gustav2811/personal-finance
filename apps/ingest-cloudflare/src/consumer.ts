@@ -62,7 +62,7 @@ async function processEmailIngestMessage(
   body: IngestQueueMessageV1,
   env: ConsumerEnv,
   statementStartRow = 0,
-): Promise<void> {
+): Promise<boolean> {
   if (body.v !== 1) {
     throw new Error(
       `Unsupported ingest message version: ${String((body as { v?: unknown }).v)}`,
@@ -153,6 +153,7 @@ async function processEmailIngestMessage(
   if (rawSha256) continuationSource.raw_email_sha256 = rawSha256;
   delete continuationSource.email;
 
+  let continuationScheduled = false;
   await processIngestJob(config, payload, logger, {
     replayPayload: dlqReplayPayload(body),
     statementStartRow,
@@ -174,8 +175,10 @@ async function processEmailIngestMessage(
     },
     scheduleStatementContinuation: async (nextStartRow) => {
       await env.JOBS_QUEUE.send(createBankZeroStatementJob(continuationSource, nextStartRow));
+      continuationScheduled = true;
     },
   });
+  return continuationScheduled;
 }
 
 async function processBankZeroReviewReplayBatch(env: ConsumerEnv, limit = 1): Promise<void> {
@@ -206,18 +209,25 @@ async function processBankZeroReviewReplayBatch(env: ConsumerEnv, limit = 1): Pr
         delivery_id: `manual-replay:${claim.replay_request_id}`,
         received_at: claim.received_at,
         route_key: claim.route_key,
-        fields: {},
+        fields: {
+          bank_zero_replay_request_id: claim.replay_request_id,
+          bank_zero_replay_worker_id: workerId,
+        },
         attachments,
         email_r2_key: claim.raw_r2_key,
         raw_email_sha256: claim.raw_sha256,
       };
-      await processEmailIngestMessage(replay, env);
-      await finishBankZeroReviewReplay(config, claim.replay_request_id, workerId, {
-        succeeded: true,
-        details: { parser: "current", completedAt: new Date().toISOString() },
-      });
+      const continuationScheduled = await processEmailIngestMessage(replay, env);
+      if (!continuationScheduled) {
+        await finishBankZeroReviewReplay(config, claim.replay_request_id, workerId, {
+          succeeded: true,
+          details: { parser: "current", completedAt: new Date().toISOString() },
+        });
+      }
       console.log(JSON.stringify({
-        level: "info", msg: "bank_zero_review_replay_completed",
+        level: "info", msg: continuationScheduled
+          ? "bank_zero_review_replay_continuation_scheduled"
+          : "bank_zero_review_replay_completed",
         component: "ingest-consumer", replay_request_id: claim.replay_request_id,
         observation_id: claim.observation_id,
       }));
@@ -658,9 +668,38 @@ async function processJobsQueueBatch(
     const job: Job = parsed.job;
     if (job.type === "bank-zero-statement") {
       try {
-        await processEmailIngestMessage(job.source, env, job.startRow);
+        const continuationScheduled = await processEmailIngestMessage(job.source, env, job.startRow);
+        const replayRequestId = job.source.fields.bank_zero_replay_request_id;
+        const replayWorkerId = job.source.fields.bank_zero_replay_worker_id;
+        if (!continuationScheduled && replayRequestId && replayWorkerId) {
+          await finishBankZeroReviewReplay(getConsumerConfig(env), replayRequestId, replayWorkerId, {
+            succeeded: true,
+            details: { parser: "current", completedAt: new Date().toISOString() },
+          });
+        }
         message.ack();
       } catch (err: unknown) {
+        const replayRequestId = job.source.fields.bank_zero_replay_request_id;
+        const replayWorkerId = job.source.fields.bank_zero_replay_worker_id;
+        if (replayRequestId && replayWorkerId) {
+          try {
+            await finishBankZeroReviewReplay(getConsumerConfig(env), replayRequestId, replayWorkerId, {
+              succeeded: false,
+              error: err instanceof Error ? err.message : String(err),
+              retryDelaySeconds: 60,
+              terminal: false,
+            });
+            message.ack();
+          } catch (finishError) {
+            console.log(JSON.stringify({
+              level: "error", msg: "bank_zero_review_replay_continuation_finish_failed",
+              component: "ingest-consumer", job_id: job.jobId,
+              error: finishError instanceof Error ? finishError.message : String(finishError),
+            }));
+            message.retry({ delaySeconds: backoffDelaySeconds(message.attempts) });
+          }
+          continue;
+        }
         console.log(JSON.stringify({
           level: "error", msg: "bank_zero_statement_continuation_failed",
           component: "ingest-consumer", job_id: job.jobId,

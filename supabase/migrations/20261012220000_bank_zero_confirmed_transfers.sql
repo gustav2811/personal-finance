@@ -17,6 +17,10 @@ create table if not exists finance.bank_zero_transfer_pairs (
 );
 create index if not exists bank_zero_transfer_pair_lookup
   on finance.bank_zero_transfer_pairs (household_id, state, created_at desc);
+create unique index if not exists bank_zero_transfer_pair_debit_unique
+  on finance.bank_zero_transfer_pairs (household_id, debit_movement_id);
+create unique index if not exists bank_zero_transfer_pair_credit_unique
+  on finance.bank_zero_transfer_pairs (household_id, credit_movement_id);
 alter table finance.bank_zero_transfer_pairs
   add constraint bank_zero_transfer_pairs_household_id_key unique (household_id, id);
 alter table finance.bank_zero_movements
@@ -181,7 +185,8 @@ begin
   if new.relation <> 'created_from' then return new; end if;
   select * into v_movement from finance.bank_zero_movements
   where household_id = new.household_id and id = new.movement_id;
-  if not found or v_movement.movement_type not in ('payment', 'receipt', 'transfer_leg', 'statement_movement') then return new; end if;
+  if not found or v_movement.transfer_group_id is not null
+     or v_movement.movement_type not in ('payment', 'receipt', 'transfer_leg', 'statement_movement') then return new; end if;
   select * into v_observation from finance.bank_zero_observations
   where household_id = new.household_id and id = new.observation_id;
   if not found then return new; end if;
@@ -219,6 +224,7 @@ begin
     and candidate.amount = -v_movement.amount
     and candidate.movement_type in ('payment', 'receipt', 'transfer_leg', 'statement_movement')
     and candidate.reconciliation_state <> 'needs_review'
+    and candidate.transfer_group_id is null
     and coalesce(candidate.occurred_at at time zone 'Africa/Johannesburg', candidate.posted_on::timestamp)::date
       between v_date - 1 and v_date + 1
     and exists (
@@ -316,3 +322,51 @@ create trigger bank_zero_transfer_after_create_projection
 
 revoke all on function public.bank_zero_transfer_after_create_projection_v1() from public, anon, authenticated;
 grant execute on function public.bank_zero_transfer_after_create_projection_v1() to service_role;
+
+create or replace function public.bank_zero_complete_transfer_projection_v1()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, finance, pg_temp
+as $$
+begin
+  if new.source_is_transfer is true then
+    update finance.bank_zero_transfer_pairs pair
+    set projection_state = 'complete', reason = null, updated_at = now()
+    where pair.household_id = new.household_id
+      and pair.projection_state <> 'complete'
+      and exists (
+        select 1
+        from finance.bank_zero_movements movement
+        where movement.household_id = pair.household_id
+          and movement.id in (pair.debit_movement_id, pair.credit_movement_id)
+          and movement.finwise_transaction_id = new.id
+      )
+      and exists (
+        select 1
+        from finance.bank_zero_movements debit
+        join finance.bank_zero_movements credit
+          on credit.household_id = debit.household_id
+         and credit.id = pair.credit_movement_id
+        join public.transactions debit_tx
+          on debit_tx.household_id = debit.household_id
+         and debit_tx.id = debit.finwise_transaction_id
+        join public.transactions credit_tx
+          on credit_tx.household_id = credit.household_id
+         and credit_tx.id = credit.finwise_transaction_id
+        where debit.household_id = pair.household_id
+          and debit.id = pair.debit_movement_id
+          and debit_tx.source_is_transfer is true
+          and credit_tx.source_is_transfer is true
+      );
+  end if;
+  return new;
+end;
+$$;
+
+create trigger bank_zero_complete_transfer_projection
+  after insert or update of source_is_transfer on public.transactions
+  for each row execute function public.bank_zero_complete_transfer_projection_v1();
+
+revoke all on function public.bank_zero_complete_transfer_projection_v1() from public, anon, authenticated;
+grant execute on function public.bank_zero_complete_transfer_projection_v1() to service_role;

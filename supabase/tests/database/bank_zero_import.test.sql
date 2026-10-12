@@ -1,6 +1,6 @@
 begin;
 
-select plan(62);
+select plan(69);
 
 insert into finance.households (id) values
   ('00000000-0000-4000-8000-00000000b201'),
@@ -325,6 +325,51 @@ select public.bank_zero_record_observation_v1(
 select is((select count(*)::integer from finance.bank_zero_transfer_pairs where household_id = '00000000-0000-4000-8000-00000000b201' and state = 'confirmed'), 1, 'equal opposite legs pair only after both registered accounts confirm the transfer');
 select is((select count(distinct transfer_group_id)::integer from finance.bank_zero_movements where transfer_group_id = (select id from finance.bank_zero_transfer_pairs where household_id = '00000000-0000-4000-8000-00000000b201')), 1, 'paired transfer legs share one household transfer identity');
 select is((select count(*)::integer from finance.bank_zero_publication_outbox where movement_id in (select debit_movement_id from finance.bank_zero_transfer_pairs union select credit_movement_id from finance.bank_zero_transfer_pairs) and operation = 'create' and exact_request->>'isTransfer' = 'true'), 2, 'both unposted confirmed legs carry FinWise transfer classification');
+
+select public.bank_zero_record_observation_v1(
+  'profile-a', 'transfer-out-2', '<transfer-out-2@test.invalid>',
+  'ingest/00000000-0000-4000-8000-00000000b287/email.raw', repeat('e', 64), now(), '{}'::jsonb,
+  jsonb_build_object('evidenceKey', 'message', 'messageClass', 'paid', 'outcome', 'movement_candidate',
+    'parserVersion', 'bank-zero-email-v1',
+    'parsedValues', jsonb_build_object('amountMinor', 12500, 'direction', 'debit', 'accountAlias', 'Transactional',
+      'accountNumber', '80200000001', 'currency', 'ZAR', 'eventAt', '2026-10-13T10:00:00+02:00',
+      'counterparty', 'Savings Transfer', 'reference', 'transfer-2'))
+);
+select is((select count(*)::integer from finance.bank_zero_transfer_pairs where household_id = '00000000-0000-4000-8000-00000000b201'), 1, 'a later same-value outgoing leg does not reuse the prior confirmed pair');
+select public.bank_zero_record_observation_v1(
+  'profile-a2', 'transfer-in-2', '<transfer-in-2@test.invalid>',
+  'ingest/00000000-0000-4000-8000-00000000b288/email.raw', repeat('f', 64), now(), '{}'::jsonb,
+  jsonb_build_object('evidenceKey', 'message', 'messageClass', 'money_received', 'outcome', 'movement_candidate',
+    'parserVersion', 'bank-zero-email-v1',
+    'parsedValues', jsonb_build_object('amountMinor', 12500, 'direction', 'credit', 'accountAlias', 'Savings Transfer',
+      'currency', 'ZAR', 'eventAt', '2026-10-13T10:01:00+02:00', 'counterparty', 'Gustav Transactional', 'reference', 'transfer-2'))
+);
+select is((select count(*)::integer from finance.bank_zero_transfer_pairs where household_id = '00000000-0000-4000-8000-00000000b201'), 2, 'the second transfer forms its own pair');
+select is((select count(distinct movement_id)::integer from (
+  select debit_movement_id as movement_id from finance.bank_zero_transfer_pairs where household_id = '00000000-0000-4000-8000-00000000b201'
+  union all
+  select credit_movement_id from finance.bank_zero_transfer_pairs where household_id = '00000000-0000-4000-8000-00000000b201'
+) legs), 4, 'two transfer pairs retain four distinct movement legs');
+select is((select count(*)::integer from finance.bank_zero_transfer_pairs pair
+  join finance.bank_zero_movements debit on debit.household_id = pair.household_id and debit.id = pair.debit_movement_id
+  join finance.bank_zero_movements credit on credit.household_id = pair.household_id and credit.id = pair.credit_movement_id
+  where pair.household_id = '00000000-0000-4000-8000-00000000b201'
+    and debit.payment_reference = 'transfer-1' and credit.payment_reference = 'transfer-1'), 1, 'the first transfer pair remains intact after a later matching amount');
+
+update finance.bank_zero_movements
+set finwise_transaction_id = case when amount < 0 then 'bz-transfer-debit' else 'bz-transfer-credit' end
+where payment_reference = 'transfer-1';
+insert into public.transactions (
+  id, account_id, date, occurred_on, details, household_id, source_system,
+  source_is_pending, source_is_transfer, source_is_archived, amount, currency_code, raw_payload_hash
+) values
+  ('bz-transfer-debit', '00000000-0000-4000-8000-00000000b221', now(), current_date, '{}', '00000000-0000-4000-8000-00000000b201', 'finwise', false, false, false, -125, 'ZAR', 'bz-transfer-debit-hash'),
+  ('bz-transfer-credit', '00000000-0000-4000-8000-00000000b223', now(), current_date, '{}', '00000000-0000-4000-8000-00000000b201', 'finwise', false, false, false, 125, 'ZAR', 'bz-transfer-credit-hash');
+select is((select projection_state from finance.bank_zero_transfer_pairs where debit_movement_id = (select id from finance.bank_zero_movements where payment_reference = 'transfer-1' and amount < 0)), 'pending', 'transfer projection remains pending until both FinWise mirrors confirm');
+update public.transactions set source_is_transfer = true where id = 'bz-transfer-debit';
+select is((select projection_state from finance.bank_zero_transfer_pairs where debit_movement_id = (select id from finance.bank_zero_movements where payment_reference = 'transfer-1' and amount < 0)), 'pending', 'one projected transfer leg does not complete the pair');
+update public.transactions set source_is_transfer = true where id = 'bz-transfer-credit';
+select is((select projection_state from finance.bank_zero_transfer_pairs where debit_movement_id = (select id from finance.bank_zero_movements where payment_reference = 'transfer-1' and amount < 0)), 'complete', 'transfer projection completes after both FinWise mirrors report transfer');
 
 select public.bank_zero_record_observation_v1(
   'profile-a', 'unknown-delivery', '<unknown@test.invalid>',
