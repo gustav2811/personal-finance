@@ -1,6 +1,7 @@
 import * as Sentry from "@sentry/cloudflare";
 import { sentryOptions } from "./sentry.js";
 import type { IngestQueueMessageV1 } from "@investments/ingest-core";
+import { resolveBankZeroOwner } from "./bank-zero-owner.js";
 
 export interface IngestEnv {
   INGEST_BUCKET: R2Bucket;
@@ -8,6 +9,8 @@ export interface IngestEnv {
   INGEST_TOKEN: string;
   /** JSON object of trusted profile route keys to independent webhook tokens. */
   INGEST_ROUTE_TOKENS_JSON?: string;
+  /** Comma-separated profiles allowed to become routable from shared delivery. */
+  INGEST_OWNER_PROFILES?: string;
   SENTRY_DSN: string;
 }
 
@@ -105,6 +108,7 @@ const handler = {
     const attachments: IngestQueueMessageV1["attachments"] = [];
     let email_r2_key: string | undefined;
     let raw_email_sha256: string | undefined;
+    let rawEmail: string | undefined;
 
     let fileIdx = 0;
     // workers-types declare entries() as [string, string][]; file parts are File at runtime.
@@ -141,6 +145,7 @@ const handler = {
           // some recovery metadata, making their evidence unavailable on replay.
           const ek = `${prefix}email.raw`;
           const sha256 = await sha256Hex(s);
+          rawEmail = s;
           await env.INGEST_BUCKET.put(ek, s, {
             httpMetadata: { contentType: "message/rfc822" },
             customMetadata: {
@@ -157,6 +162,23 @@ const handler = {
         }
       }
     }
+
+    const owner = resolveBankZeroOwner({
+      rawEmail,
+      transportHeaders: fields.headers,
+      routeKey,
+      enabledProfiles: env.INGEST_OWNER_PROFILES,
+    });
+    // These fields are written by the receiver and survive queue retries and
+    // DLQ replay. They are deliberately separate from route_key: a disabled
+    // or ambiguous observed owner must remain unverified.
+    delete fields["__bank_zero_observed_owner"];
+    delete fields["__bank_zero_owner_basis"];
+    delete fields["__bank_zero_owner_status"];
+    fields["__bank_zero_owner_status"] = owner.status;
+    if (owner.observedProfile) fields["__bank_zero_observed_owner"] = owner.observedProfile;
+    if (owner.basis) fields["__bank_zero_owner_basis"] = owner.basis;
+    routeKey = owner.routeKey;
 
     const message: IngestQueueMessageV1 = {
       v: 1,

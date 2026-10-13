@@ -23,6 +23,36 @@ vi.mock("@sentry/cloudflare", () => ({
 }));
 
 describe("consumer schedule", () => {
+  function emailEnv(publishSend: (job: unknown) => Promise<void>): ConsumerEnv {
+    return {
+      INGEST_BUCKET: { get: async () => null, put: vi.fn() },
+      JOBS_QUEUE: { send: vi.fn(), sendBatch: vi.fn() },
+      BANK_ZERO_PUBLISH_QUEUE: { send: publishSend },
+      FINWISE_API_KEY: "finwise-key",
+      FINWISE_BASE_URL: "https://finwise.test",
+      SUPABASE_URL: "https://supabase.test",
+      SUPABASE_SERVICE_KEY: "service-key",
+      BANK_ZERO_ACCOUNT_ID: "bank-zero",
+      UPLOAD_TO_FINWISE: "false",
+      TUYA_DEVICE_ID: "device",
+      TUYA_ACCESS_ID: "access-id",
+      TUYA_ACCESS_SECRET: "access-secret",
+      SENTRY_DSN: "",
+    } as unknown as ConsumerEnv;
+  }
+
+  function routedEmailMessage() {
+    return {
+      v: 1,
+      job_id: "email-1",
+      route_key: "gustav",
+      delivery_id: "delivery-1",
+      received_at: "2026-10-13T09:00:00.000Z",
+      fields: { email: "From: e-services@bankzerosa.co.za\r\n\r\nPaid R200" },
+      attachments: [],
+    };
+  }
+
   it("sends a valid publisher job directly to the publisher queue", async () => {
     const sent: unknown[] = [];
     const scheduledTime = Date.parse("2026-10-12T10:01:00.000Z");
@@ -39,6 +69,44 @@ describe("consumer schedule", () => {
 
     expect(sent).toEqual([createBankZeroPublishJob(new Date(scheduledTime).toISOString())]);
     expect(sent[0]).not.toHaveProperty("body");
+  });
+
+  it("wakes the publisher after a routed Bank Zero email succeeds", async () => {
+    const sent: unknown[] = [];
+    ingestCoreMocks.finalizeIngestPayload.mockResolvedValue({
+      job_id: "email-1", message_id: "message-1", from: "e-services@bankzerosa.co.za",
+      to: "gustav+bankzero@klingbiel.org", subject: "Paid", headers: "", text: "Paid R200", attachments: [],
+    });
+    ingestCoreMocks.processIngestJob.mockResolvedValue(undefined);
+    const env = emailEnv(async (job) => { sent.push(job); });
+    const acknowledged: string[] = [];
+
+    await consumer.queue({
+      queue: "investments-email-ingest",
+      messages: [{ body: routedEmailMessage(), attempts: 1, ack: () => acknowledged.push("ack"), retry: () => acknowledged.push("retry") }],
+    } as unknown as MessageBatch<never>, env, {} as ExecutionContext);
+
+    expect(acknowledged).toEqual(["ack"]);
+    expect(sent).toEqual([createBankZeroPublishJob("2026-10-13T09:00:00.000Z")]);
+  });
+
+  it("does not wake the publisher when email processing fails", async () => {
+    const sent: unknown[] = [];
+    ingestCoreMocks.finalizeIngestPayload.mockResolvedValue({
+      job_id: "email-1", message_id: "message-1", from: "e-services@bankzerosa.co.za",
+      to: "gustav+bankzero@klingbiel.org", subject: "Paid", headers: "", text: "Paid R200", attachments: [],
+    });
+    ingestCoreMocks.processIngestJob.mockRejectedValueOnce(new Error("persistence failed"));
+    const env = emailEnv(async (job) => { sent.push(job); });
+    const retried: string[] = [];
+
+    await consumer.queue({
+      queue: "investments-email-ingest",
+      messages: [{ body: routedEmailMessage(), attempts: 1, ack: vi.fn(), retry: () => retried.push("retry") }],
+    } as unknown as MessageBatch<never>, env, {} as ExecutionContext);
+
+    expect(retried).toEqual(["retry"]);
+    expect(sent).toEqual([]);
   });
 
   it("enqueues all scheduled jobs in one batch", async () => {

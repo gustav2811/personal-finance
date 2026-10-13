@@ -111,9 +111,9 @@ export async function recordBankZeroObservation(
   return data as BankZeroIngestResult;
 }
 
-function minorUnits(amount: number): number {
+export function statementAmountMinorUnits(amount: number): number {
   const minor = Math.round(Math.abs(amount) * 100);
-  if (!Number.isSafeInteger(minor) || minor <= 0 || Math.abs(amount * 100 - minor) > 0.00001) {
+  if (!Number.isSafeInteger(minor) || minor <= 0 || Math.abs(Math.abs(amount) * 100 - minor) > 0.00001) {
     throw new Error("Bank Zero statement amount is not an exact positive minor-unit value");
   }
   return minor;
@@ -157,7 +157,7 @@ async function persistBankZeroStatementAmount(
   const { messageClass, paymentMethod } = inferred;
   const alias = accountAlias.trim();
   const eventAt = row.meta.bank_event_at;
-  const amountMinorValue = minorUnits(amount);
+  const amountMinorValue = statementAmountMinorUnits(amount);
   const parsedValues = {
     messageClass,
     outcome: "movement_candidate",

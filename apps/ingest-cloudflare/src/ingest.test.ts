@@ -18,6 +18,7 @@ function mocks(): {
     INGEST_QUEUE: { send: async (message: unknown) => { queued.push(message); } } as unknown as Queue<never>,
     INGEST_TOKEN: "legacy-secret",
     INGEST_ROUTE_TOKENS_JSON: JSON.stringify({ gustav: "gustav-route-secret", cara: "cara-route-secret" }),
+    INGEST_OWNER_PROFILES: "gustav",
     SENTRY_DSN: "https://public@sentry.test.invalid/1",
   } satisfies IngestEnv;
   return { env, objects, queued };
@@ -30,6 +31,24 @@ function form(fields: Record<string, string>): FormData {
 }
 
 describe("Bank Zero webhook receipt", () => {
+  it("routes shared-token automatic forwards using supplemental Gmail headers", async () => {
+    const { env, queued } = mocks();
+    const response = await worker.fetch(new Request("https://ingest.test.invalid/webhook/sendgrid", {
+      method: "POST",
+      headers: { Authorization: "Bearer legacy-secret" },
+      body: form({
+        email: "From: e-services@bankzerosa.co.za\r\nTo: external@example.net\r\n\r\nPaid R10",
+        headers: "Delivered-To: bankzero@automations.klingbiel.org\r\nX-Forwarded-For: gustav+bankzero@klingbiel.org bankzero@automations.klingbiel.org",
+      }),
+    }), env, {} as ExecutionContext);
+    expect(response.status).toBe(200);
+    expect(queued).toHaveLength(1);
+    expect(queued[0]).toMatchObject({
+      route_key: "gustav",
+      fields: { __bank_zero_observed_owner: "gustav", __bank_zero_owner_basis: "forwarded" },
+    });
+  });
+
   it("writes raw MIME before queueing and carries a trusted profile route plus integrity metadata", async () => {
     const { env, objects, queued } = mocks();
     const raw = [
@@ -73,5 +92,25 @@ describe("Bank Zero webhook receipt", () => {
     expect(response.status).toBe(401);
     expect(objects).toHaveLength(0);
     expect(queued).toHaveLength(0);
+  });
+
+  it("overwrites ownership metadata supplied by the multipart sender", async () => {
+    const { env, queued } = mocks();
+    const request = new Request("https://ingest.test.invalid/webhook/sendgrid", {
+      method: "POST",
+      headers: { Authorization: "Bearer gustav-route-secret" },
+      body: form({
+        email: "From: e-services@bankzerosa.co.za\r\n\r\nPaid R10",
+        __bank_zero_observed_owner: "cara",
+        __bank_zero_owner_basis: "from",
+        __bank_zero_owner_status: "resolved",
+      }),
+    });
+    const response = await worker.fetch(request, env, {} as ExecutionContext);
+    expect(response.status).toBe(200);
+    const fields = (queued[0] as { fields: Record<string, string> }).fields;
+    expect(fields.__bank_zero_owner_status).toBe("resolved");
+    expect(fields.__bank_zero_observed_owner).toBeUndefined();
+    expect(fields.__bank_zero_owner_basis).toBeUndefined();
   });
 });
