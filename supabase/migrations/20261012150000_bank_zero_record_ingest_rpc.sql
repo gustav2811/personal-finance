@@ -42,6 +42,8 @@ declare
   v_policy_enabled boolean;
   v_candidate_ids uuid[];
   v_candidate_count integer;
+  v_history_candidate_count integer;
+  v_existing_finwise_id text;
   v_plausible_count integer;
   v_original_candidate_ids uuid[];
   v_original_candidate_count integer;
@@ -298,6 +300,13 @@ begin
             v_reference, v_counterparty, initcap(replace(v_movement_type, '_', ' '))
           );
 
+          -- Serialize reconciliation for one household account. This makes the
+          -- candidate query and movement/outbox insert one account-scoped
+          -- critical section across concurrent webhook deliveries.
+          perform pg_advisory_xact_lock(
+            hashtextextended(v_route.household_id::text || ':' || v_account_id::text, 0)
+          );
+
           select coalesce(array_agg(candidate.id), '{}'::uuid[])
             into v_candidate_ids
           from finance.bank_zero_movements candidate
@@ -339,16 +348,41 @@ begin
               or v_counterparty is not null and candidate.counterparty is not null
                  and lower(candidate.counterparty) = lower(v_counterparty))
             and (
-              (v_message_class in ('card_purchase', 'card_refund')
-                and coalesce(candidate.occurred_at::date, candidate.posted_on) between
+              ((v_movement_type in ('card_purchase', 'card_refund')
+                  or candidate.movement_type in ('card_purchase', 'card_refund'))
+                and coalesce((candidate.occurred_at at time zone 'Africa/Johannesburg')::date, candidate.posted_on) between
                   coalesce(v_event_at::date, v_posted_on) - 7 and coalesce(v_event_at::date, v_posted_on) + 7)
-              or (v_message_class not in ('card_purchase', 'card_refund')
-                and coalesce(candidate.occurred_at::date, candidate.posted_on) between
+              or (v_movement_type not in ('card_purchase', 'card_refund')
+                and candidate.movement_type not in ('card_purchase', 'card_refund')
+                and coalesce((candidate.occurred_at at time zone 'Africa/Johannesburg')::date, candidate.posted_on) between
                   coalesce(v_event_at::date, v_posted_on) - 1 and coalesce(v_event_at::date, v_posted_on) + 1)
             )
             and (v_event_at is null or candidate.occurred_at is null
-              or (v_message_class in ('card_purchase', 'card_refund') and candidate.occurred_at::date between v_event_at::date - 7 and v_event_at::date + 7)
-              or abs(extract(epoch from (candidate.occurred_at - v_event_at))) <= 120);
+              or ((v_movement_type in ('card_purchase', 'card_refund')
+                    or candidate.movement_type in ('card_purchase', 'card_refund'))
+                  and (candidate.occurred_at at time zone 'Africa/Johannesburg')::date between
+                    (v_event_at at time zone 'Africa/Johannesburg')::date - 7
+                    and (v_event_at at time zone 'Africa/Johannesburg')::date + 7)
+              or (v_movement_type not in ('card_purchase', 'card_refund')
+                  and candidate.movement_type not in ('card_purchase', 'card_refund')
+                  and abs(extract(epoch from (candidate.occurred_at - v_event_at))) <= 120))
+            and not (
+              v_message_class in ('money_received', 'paid', 'card_purchase', 'card_refund', 'payment_returned', 'fee')
+              and v_event_at is not null
+              and exists (
+                select 1
+                from finance.bank_zero_evidence_links prior_link
+                join finance.bank_zero_observations prior_observation
+                  on prior_observation.household_id = prior_link.household_id
+                 and prior_observation.id = prior_link.observation_id
+                where prior_link.household_id = candidate.household_id
+                  and prior_link.movement_id = candidate.id
+                  and prior_link.relation = 'created_from'
+                  and prior_observation.parsed_values->>'messageClass' = v_message_class
+                  and nullif(prior_observation.parsed_values->>'eventAt', '') is not null
+                  and (prior_observation.parsed_values->>'eventAt')::timestamptz <> v_event_at
+              )
+            );
           v_candidate_count := coalesce(cardinality(v_candidate_ids), 0);
 
           if v_candidate_count = 0 and v_message_class = 'statement'
@@ -379,6 +413,47 @@ begin
               update finance.bank_zero_movements
               set publication_state = 'deferred', updated_at = now()
               where id = any(v_candidate_ids) and publication_state in ('pending', 'retryable_failure');
+            end if;
+          end if;
+
+          -- Adopt an exact, unique match from existing FinWise history before
+          -- creating a provisional movement. Ambiguous history is held for
+          -- review; it must never become a second remote create.
+          if v_candidate_count = 0 and v_status <> 'needs_review' then
+            select count(*), min(transaction_row.id)
+              into v_history_candidate_count, v_existing_finwise_id
+            from public.transactions transaction_row
+            where transaction_row.household_id = v_route.household_id
+              and transaction_row.source_system = 'finwise'
+              and transaction_row.account_id = v_account_id
+              and transaction_row.amount = v_signed_amount
+              and transaction_row.currency_code = coalesce(nullif(p_observation->'parsedValues'->>'currency', ''), 'ZAR')
+              and transaction_row.source_is_archived is not true
+              and not exists (
+                select 1 from finance.bank_zero_movements adopted
+                where adopted.household_id = v_route.household_id
+                  and adopted.finwise_transaction_id = transaction_row.id
+              )
+              and coalesce(transaction_row.occurred_on,
+                    (transaction_row.date at time zone 'Africa/Johannesburg')::date) between
+                coalesce((v_event_at at time zone 'Africa/Johannesburg')::date, v_posted_on) -
+                  case when v_movement_type in ('card_purchase', 'card_refund') then 7 else 1 end
+                and coalesce((v_event_at at time zone 'Africa/Johannesburg')::date, v_posted_on) +
+                  case when v_movement_type in ('card_purchase', 'card_refund') then 7 else 1 end
+              and (v_event_at is null or date_trunc('minute', transaction_row.date) = date_trunc('minute', v_event_at))
+              and (
+                (v_reference is not null and (
+                  lower(coalesce(transaction_row.notes, transaction_row.details->>'notes', transaction_row.details->>'note', '')) = lower(v_reference)
+                ))
+                or (v_counterparty is not null and (
+                  lower(coalesce(transaction_row.original_description, '')) = lower(v_counterparty)
+                  or position(lower(v_counterparty) in lower(coalesce(transaction_row.description, transaction_row.details->>'description', ''))) > 0
+                ))
+              );
+            if v_history_candidate_count > 1 then
+              v_status := 'needs_review';
+              v_conflict := 'Existing FinWise history has more than one compatible transaction';
+              v_existing_finwise_id := null;
             end if;
           end if;
 
@@ -466,20 +541,23 @@ begin
               household_id, route_key, member_id, account_id, movement_type, payment_method,
               amount, currency_code, occurred_at, event_precision, posted_on,
               counterparty, payment_reference, display_description, reconciliation_state,
-              publication_state, last_importer_values
+              publication_state, finwise_transaction_id, last_importer_values
             ) values (
               v_route.household_id, p_route_key, v_route.member_id, v_account_id,
               v_movement_type, v_payment_method, v_signed_amount,
               coalesce(nullif(p_observation->'parsedValues'->>'currency', ''), 'ZAR'),
               v_event_at, v_event_precision, v_posted_on, v_counterparty, v_reference,
               v_description, case when v_message_class = 'statement' then 'statement_confirmed' else 'alert_observed' end,
-              'deferred', jsonb_build_object('description', v_description, 'notes', v_notes)
+              case when v_existing_finwise_id is null then 'deferred' else 'published' end,
+              v_existing_finwise_id, jsonb_build_object('description', v_description, 'notes', v_notes)
             ) returning id into v_movement_id;
             insert into finance.bank_zero_evidence_links (
               household_id, observation_id, movement_id, relation, matching_method, decision_reason
             ) values (
               v_route.household_id, v_observation_id, v_movement_id, 'created_from',
-              'new_identity_no_compatible_candidate_v1', 'No compatible account-scoped movement exists'
+              case when v_existing_finwise_id is null then 'new_identity_no_compatible_candidate_v1' else 'existing_finwise_history_v1' end,
+              case when v_existing_finwise_id is null then 'No compatible account-scoped movement exists'
+                else 'Unique existing FinWise history transaction was adopted' end
             );
           end if;
 
@@ -524,7 +602,7 @@ begin
             if v_message_class = 'statement' then
               v_policy_enabled := true;
             end if;
-            if v_policy_enabled then
+            if v_policy_enabled and v_existing_finwise_id is null then
               v_finwise_date := case
                 when v_event_at is not null then to_char(v_event_at at time zone 'Africa/Johannesburg', 'YYYY-MM-DD"T"HH24:MI:SS') || '+02:00'
                 else coalesce(v_posted_on, v_event_at::date)::text
@@ -548,6 +626,8 @@ begin
               ) on conflict (household_id, movement_id, desired_revision) do nothing;
               update finance.bank_zero_movements set publication_state = 'pending', updated_at = now()
               where id = v_movement_id and finwise_transaction_id is null;
+            elsif v_existing_finwise_id is not null then
+              null;
             else
               update finance.bank_zero_movements set publication_state = 'deferred', updated_at = now()
               where id = v_movement_id and finwise_transaction_id is null;

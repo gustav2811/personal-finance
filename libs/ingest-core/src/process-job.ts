@@ -36,7 +36,17 @@ export type ProcessIngestJobOptions = {
   scheduleStatementContinuation?: (nextStartRow: number) => Promise<void>;
 };
 
-const BANK_ZERO_STATEMENT_CHUNK_SIZE = 100;
+// One RPC per statement row, plus a second RPC for rows with fees. Keep the
+// chunk below Cloudflare's 50 external-subrequest limit even when every row
+// contains a fee, leaving headroom for provider-side work.
+const BANK_ZERO_STATEMENT_CHUNK_SIZE = 20;
+
+export function shouldUseBankZeroStatementPipeline(
+  bankCode: string,
+  receipt: Pick<BankZeroReceiptContext, "routeKey"> | undefined,
+): boolean {
+  return bankCode === "bank_zero" && receipt !== undefined && receipt.routeKey !== "unverified";
+}
 
 export async function processIngestJob(
   config: IngestCoreConfig,
@@ -222,7 +232,7 @@ export async function processIngestJob(
     return;
   }
 
-  if (bankCode === "bank_zero") {
+  if (shouldUseBankZeroStatementPipeline(bankCode, options.bankZeroReceipt)) {
     if (!options.bankZeroReceipt) {
       throw new Error("Bank Zero statement has no durable receipt context");
     }
@@ -271,6 +281,13 @@ export async function processIngestJob(
       );
     }
     return;
+  }
+
+  if (bankCode === "bank_zero" && hasStatementAttachment) {
+    plog.warn(
+      { route_key: options.bankZeroReceipt?.routeKey ?? "missing" },
+      "bank_zero_statement_legacy_import_fallback",
+    );
   }
 
   if (!config.uploadToFinwise) {

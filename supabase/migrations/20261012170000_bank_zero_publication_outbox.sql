@@ -26,9 +26,32 @@ begin
   set state = 'retryable_failure', lease_owner = null, lease_expires_at = null,
       next_attempt_at = now(), updated_at = now()
   where operation = 'project' and state = 'in_progress' and lease_expires_at < now();
+  update finance.bank_zero_publication_outbox
+  set state = 'retryable_failure', lease_owner = null, lease_expires_at = null,
+      next_attempt_at = now(), last_error = 'Update lease expired before completion', updated_at = now()
+  where operation = 'update' and state = 'in_progress' and lease_expires_at < now();
+  update finance.bank_zero_movements movement
+  set publication_state = 'retryable_failure', updated_at = now()
+  from finance.bank_zero_publication_outbox outbox
+  where outbox.movement_id = movement.id and outbox.operation = 'update'
+    and outbox.state = 'retryable_failure'
+    and outbox.last_error = 'Update lease expired before completion';
   for v_row in
     select outbox.* from finance.bank_zero_publication_outbox outbox
     where outbox.state in ('pending', 'retryable_failure') and outbox.next_attempt_at <= now()
+      and (outbox.operation <> 'create' or exists (
+        select 1 from finance.bank_zero_account_baselines baseline
+        where baseline.household_id = outbox.household_id
+          and baseline.account_id::text = outbox.exact_request->>'accountId'
+          and baseline.status = 'complete'
+      ))
+      and not exists (
+        select 1 from finance.bank_zero_publication_outbox prior
+        where prior.household_id = outbox.household_id
+          and prior.movement_id = outbox.movement_id
+          and prior.desired_revision < outbox.desired_revision
+          and prior.state <> 'published'
+      )
     order by outbox.next_attempt_at, outbox.created_at
     for update skip locked limit p_limit
   loop
@@ -116,7 +139,9 @@ begin
       lease_owner = null, lease_expires_at = null, updated_at = now()
   where id = v_outbox.id;
   update finance.bank_zero_movements
-  set publication_state = p_state, updated_at = now()
+  set publication_state = case when p_state = 'needs_review' then 'deferred' else p_state end,
+      reconciliation_state = case when p_state = 'needs_review' then 'needs_review' else reconciliation_state end,
+      updated_at = now()
   where id = v_outbox.movement_id and v_outbox.operation in ('create', 'update');
 end;
 $$;

@@ -352,6 +352,87 @@ join public.accounts account_row
  and account_row.household_id = route.household_id
 on conflict do nothing;
 
+-- Existing FinWise history must be reconciled before any new Bank Zero create
+-- can run. Alias registration alone is not evidence that historical rows were
+-- adopted. Service operators mark an account complete only after its baseline
+-- snapshot and exceptions have been reconciled.
+create table finance.bank_zero_account_baselines (
+  household_id uuid not null references finance.households(id),
+  account_id uuid not null,
+  status text not null default 'required' check (status in ('required', 'complete')),
+  history_row_count integer,
+  adopted_row_count integer,
+  exception_row_count integer,
+  snapshot_sha256 text,
+  completed_at timestamptz,
+  updated_at timestamptz not null default now(),
+  primary key (household_id, account_id),
+  foreign key (household_id, account_id) references public.accounts(household_id, account_id),
+  check (
+    (status = 'required' and completed_at is null)
+    or (status = 'complete' and completed_at is not null
+      and history_row_count >= 0 and adopted_row_count >= 0 and exception_row_count >= 0
+      and adopted_row_count + exception_row_count = history_row_count
+      and snapshot_sha256 ~ '^[0-9a-f]{64}$')
+  )
+);
+insert into finance.bank_zero_account_baselines (household_id, account_id)
+select distinct alias.household_id, alias.account_id
+from finance.bank_zero_account_aliases alias
+on conflict (household_id, account_id) do nothing;
+create or replace function finance.require_bank_zero_account_baseline()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, finance, pg_temp
+as $$
+begin
+  insert into finance.bank_zero_account_baselines (household_id, account_id)
+  values (new.household_id, new.account_id)
+  on conflict (household_id, account_id) do nothing;
+  return new;
+end;
+$$;
+create trigger bank_zero_alias_requires_baseline
+  after insert on finance.bank_zero_account_aliases
+  for each row execute function finance.require_bank_zero_account_baseline();
+revoke all on function finance.require_bank_zero_account_baseline() from public, anon, authenticated;
+alter table finance.bank_zero_account_baselines enable row level security;
+revoke all on finance.bank_zero_account_baselines from public, anon, authenticated;
+grant all on finance.bank_zero_account_baselines to service_role;
+
+create or replace function public.bank_zero_complete_account_baseline_v1(
+  p_household_id uuid,
+  p_account_id uuid,
+  p_history_row_count integer,
+  p_adopted_row_count integer,
+  p_exception_row_count integer,
+  p_snapshot_sha256 text
+) returns void
+language plpgsql
+security definer
+set search_path = public, finance, pg_temp
+as $$
+begin
+  if p_household_id is null or p_account_id is null
+     or p_history_row_count is null or p_adopted_row_count is null or p_exception_row_count is null
+     or p_snapshot_sha256 is null
+     or p_history_row_count < 0 or p_adopted_row_count < 0 or p_exception_row_count < 0
+     or p_adopted_row_count + p_exception_row_count <> p_history_row_count
+     or p_snapshot_sha256 !~ '^[0-9a-f]{64}$' then
+    raise exception 'complete baseline counts and snapshot hash are required';
+  end if;
+  update finance.bank_zero_account_baselines
+  set status = 'complete', history_row_count = p_history_row_count,
+      adopted_row_count = p_adopted_row_count, exception_row_count = p_exception_row_count,
+      snapshot_sha256 = p_snapshot_sha256, completed_at = now(), updated_at = now()
+  where household_id = p_household_id and account_id = p_account_id;
+  if not found then raise exception 'Bank Zero account is not registered for baseline reconciliation'; end if;
+end;
+$$;
+revoke all on function public.bank_zero_complete_account_baseline_v1(uuid,uuid,integer,integer,integer,text) from public, anon, authenticated;
+grant execute on function public.bank_zero_complete_account_baseline_v1(uuid,uuid,integer,integer,integer,text) to service_role;
+
 alter table finance.bank_zero_received_emails enable row level security;
 alter table finance.bank_zero_delivery_attempts enable row level security;
 alter table finance.bank_zero_observations enable row level security;

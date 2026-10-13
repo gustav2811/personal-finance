@@ -227,26 +227,8 @@ async function updateTransaction(
     p_normalized_transaction: normalized,
   });
   if (error) throw new Error(`FinWise update completed but its identity could not be recorded: ${error.message}`);
-  const projectionClaim = {
-    ...claim,
-    operation: "project" as const,
-    finwise_transaction_id: remoteId,
-    exact_request: normalized,
-  };
-  try {
-    await projectTransaction(client, projectionClaim, log);
-    return true;
-  } catch (error) {
-    const { error: finishError } = await client.rpc("bank_zero_finish_projection_v1", {
-      p_operation_id: claim.operation_id,
-      p_succeeded: false,
-      p_error: error instanceof Error ? error.message : String(error),
-      p_retry_delay_seconds: retryDelaySeconds(claim.attempt_count),
-    });
-    if (finishError) throw new Error(`Projection recovery could not be recorded: ${finishError.message}`);
-    log.error({ movement_id: claim.movement_id, finwise_transaction_id: remoteId, err: error }, "bank_zero_finwise_projection_failed");
-    return false;
-  }
+  log.info({ movement_id: claim.movement_id, finwise_transaction_id: remoteId }, "bank_zero_finwise_projection_queued");
+  return false;
 }
 
 /** Claims and processes bounded publication work. Creates are never blindly retried. */
@@ -316,21 +298,8 @@ export async function processBankZeroPublicationBatch(
         deferred++;
         continue;
       }
-      const projectionClaim = { ...claim, operation: "project" as const, finwise_transaction_id: created.id, exact_request: normalized };
-      try {
-        await projectTransaction(client, projectionClaim, log);
-        published++;
-      } catch (error) {
-        const { error: finishError } = await client.rpc("bank_zero_finish_projection_v1", {
-          p_operation_id: claim.operation_id,
-          p_succeeded: false,
-          p_error: error instanceof Error ? error.message : String(error),
-          p_retry_delay_seconds: retryDelaySeconds(claim.attempt_count),
-        });
-        if (finishError) throw new Error(`Projection recovery could not be recorded: ${finishError.message}`);
-        deferred++;
-        log.error({ movement_id: claim.movement_id, finwise_transaction_id: created.id, err: error }, "bank_zero_finwise_projection_failed");
-      }
+      log.info({ movement_id: claim.movement_id, finwise_transaction_id: created.id }, "bank_zero_finwise_projection_queued");
+      deferred++;
     } catch (error) {
       if (error instanceof FinWiseApiError && error.status >= 400 && error.status < 500) {
         const state = error.status === 429 ? "retryable_failure" : "terminal_failure";

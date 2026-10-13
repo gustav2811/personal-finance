@@ -309,9 +309,7 @@ const handler = {
               error: error instanceof Error ? error.message : String(error),
             }));
           }
-          await env.BANK_ZERO_PUBLISH_QUEUE.send({
-            body: createBankZeroPublishJob(scheduledTime),
-          });
+          await env.BANK_ZERO_PUBLISH_QUEUE.send(createBankZeroPublishJob(scheduledTime));
           return;
         case "0 7 * * *":
           {

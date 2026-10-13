@@ -272,6 +272,10 @@ function classifyNonMovement(text: string, attachments: BankZeroEmailInput["atta
 }
 
 function parseOne(text: string, attachments: BankZeroEmailInput["attachments"]): ParsedText {
+  // An explicit failed/declined outcome must win over a positive phrase elsewhere
+  // in the same text (for example, a subject containing "Paid" with a declined body).
+  const noMovement = classifyNonMovement(text, attachments);
+  if (noMovement?.outcome === "no_movement") return noMovement;
   const parsed = transactionFromText(text);
   const isProofAttachment = (attachments ?? []).some((item) => /proof|payment/i.test(item.filename));
   if (parsed) {
@@ -279,7 +283,6 @@ function parseOne(text: string, attachments: BankZeroEmailInput["attachments"]):
       ? { ...parsed, messageClass: "proof_of_payment", outcome: "evidence" }
       : parsed;
   }
-  const noMovement = classifyNonMovement(text, attachments);
   if (noMovement) return noMovement;
   return { messageClass: "unknown", outcome: "review", currency: "ZAR", sourceFields: {}, reason: "Unknown Bank Zero message template" };
 }
@@ -289,6 +292,17 @@ export function parseBankZeroEmail(input: BankZeroEmailInput): BankZeroFinancial
   const body = cleanText(input);
   const subjectParsed = parseOne(subject, input.attachments);
   const bodyParsed = body ? parseOne(body, input.attachments) : undefined;
+
+  if (bodyParsed && (
+    (subjectParsed.outcome === "movement_candidate" && bodyParsed.outcome === "no_movement") ||
+    (subjectParsed.outcome === "no_movement" && bodyParsed.outcome === "movement_candidate")
+  )) {
+    return {
+      parserVersion: "bank-zero-email-v1", messageClass: "unknown", outcome: "review", currency: "ZAR",
+      sourceFields: {}, conflict: "outcome differs between subject and body",
+      reason: "Subject and body disagree about whether a movement completed",
+    };
+  }
 
   if (bodyParsed && subjectParsed.outcome === "movement_candidate" && bodyParsed.outcome === "movement_candidate") {
     const conflict = materiallyDifferent(subjectParsed, bodyParsed);

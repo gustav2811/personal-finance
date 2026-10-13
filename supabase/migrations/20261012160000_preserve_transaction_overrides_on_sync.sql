@@ -4,6 +4,21 @@ alter table public.transactions
   add column if not exists source_managed_description text,
   add column if not exists source_managed_notes text;
 
+-- Existing imported rows predate these tracking columns. Their last fetched
+-- FinWise payload is retained in details, so use it as the baseline and leave
+-- any displayed value that already differs from that payload as a household edit.
+update public.transactions
+set source_managed_description = case
+      when details ? 'description' then coalesce(details->>'description', '')
+      else coalesce(description, '')
+    end,
+    source_managed_notes = case
+      when details ? 'notes' then nullif(details->>'notes', '')
+      else notes
+    end
+where source_system = 'finwise'
+  and (source_managed_description is null or source_managed_notes is null);
+
 create or replace function public.finance_upsert_source_transaction(
   p_household_id uuid,
   p_sync_run_id uuid,

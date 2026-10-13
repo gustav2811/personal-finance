@@ -68,3 +68,11 @@ export async function reviewBankZeroObservation(
   } as never)
   if (error) throw new Error(error.message)
 }
+
+export async function adoptUncertainBankZeroCreate(observationId: string, finwiseTransactionId: string): Promise<void> {
+  const { error } = await getBrowserClient().rpc("bank_zero_adopt_uncertain_create_v1" as never, {
+    p_observation_id: observationId,
+    p_finwise_transaction_id: finwiseTransactionId.trim(),
+  } as never)
+  if (error) throw new Error(error.message)
+}

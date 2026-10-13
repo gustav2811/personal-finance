@@ -42,6 +42,12 @@ const transferUpdateClaim = {
   },
   attempt_count: 1,
 };
+const projectClaim = {
+  outbox_id: "outbox-project", operation_id: "operation-1", operation: "project",
+  household_id: "household-1", movement_id: "movement-1", finwise_transaction_id: "finwise-1",
+  exact_request: { id: "finwise-1", accountId: "account-1", amount: -12, currencyCode: "ZAR", rawPayloadHash: "hash" },
+  attempt_count: 1,
+};
 
 const finwiseTransaction = {
   id: "finwise-1", accountId: "account-1", date: "2026-10-12T10:00:00+02:00",
@@ -53,10 +59,9 @@ const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 describe("Bank Zero publication recovery", () => {
   beforeEach(() => rpc.mockReset());
 
-  it("records the returned remote ID before projecting and never makes a second create", async () => {
+  it("records the returned remote ID and queues projection for the next claimed operation", async () => {
     rpc.mockImplementation(async (name: string) => {
       if (name === "bank_zero_claim_publication_v1") return { data: [createClaim], error: null };
-      if (name === "finance_start_sync_run") return { data: "sync-1", error: null };
       return { data: null, error: null };
     });
     const create = vi.fn().mockResolvedValue(finwiseTransaction);
@@ -64,13 +69,24 @@ describe("Bank Zero publication recovery", () => {
 
     const result = await processBankZeroPublicationBatch(config, finwise, "worker-1", logger);
 
-    expect(result).toEqual({ claimed: 1, published: 1, deferred: 0 });
+    expect(result).toEqual({ claimed: 1, published: 0, deferred: 1 });
     expect(create).toHaveBeenCalledTimes(1);
     const calls = rpc.mock.calls.map(([name]) => name);
-    expect(calls.indexOf("bank_zero_record_finwise_create_v1")).toBeLessThan(calls.indexOf("finance_upsert_source_transaction"));
+    expect(calls).not.toContain("finance_upsert_source_transaction");
     expect(rpc).toHaveBeenCalledWith("bank_zero_record_finwise_create_v1", expect.objectContaining({
       p_operation_id: "operation-1", p_finwise_transaction_id: "finwise-1",
     }));
+
+    rpc.mockReset();
+    rpc.mockImplementation(async (name: string) => {
+      if (name === "bank_zero_claim_publication_v1") return { data: [projectClaim], error: null };
+      if (name === "finance_start_sync_run") return { data: "sync-1", error: null };
+      return { data: null, error: null };
+    });
+    const projected = await processBankZeroPublicationBatch(config, finwise, "worker-2", logger);
+    expect(projected).toEqual({ claimed: 1, published: 1, deferred: 0 });
+    expect(rpc).toHaveBeenCalledWith("finance_upsert_source_transaction", expect.objectContaining({ p_payload: projectClaim.exact_request }));
+    expect(rpc).toHaveBeenCalledWith("bank_zero_finish_projection_v1", expect.objectContaining({ p_operation_id: "operation-1", p_succeeded: true }));
   });
 
   it("stops automatic creation after a response-loss outcome", async () => {
@@ -124,9 +140,8 @@ describe("Bank Zero publication recovery", () => {
     expect(rpc).toHaveBeenCalledWith("bank_zero_record_finwise_update_v1", expect.objectContaining({
       p_operation_id: "operation-2", p_finwise_transaction_id: "finwise-1",
     }));
-    expect(rpc).toHaveBeenCalledWith("bank_zero_finish_projection_v1", expect.objectContaining({
-      p_operation_id: "operation-2", p_succeeded: false,
-    }));
+    expect(rpc).not.toHaveBeenCalledWith("bank_zero_finish_projection_v1", expect.anything());
+    expect(rpc).toHaveBeenCalledWith("bank_zero_record_finwise_update_v1", expect.objectContaining({ p_operation_id: "operation-2" }));
     expect(rpc).not.toHaveBeenCalledWith("bank_zero_finish_publication_v1", expect.anything());
   });
 
@@ -161,7 +176,7 @@ describe("Bank Zero publication recovery", () => {
 
     const result = await processBankZeroPublicationBatch(config, finwise, "worker-1", logger);
 
-    expect(result).toEqual({ claimed: 1, published: 1, deferred: 0 });
+    expect(result).toEqual({ claimed: 1, published: 0, deferred: 1 });
     expect(update).toHaveBeenCalledWith("finwise-transfer", { isTransfer: true });
     expect(create).not.toHaveBeenCalled();
     expect(rpc).toHaveBeenCalledWith("bank_zero_record_finwise_update_v1", expect.objectContaining({

@@ -86,11 +86,13 @@ begin
           or nullif(observation.parsed_values->>'counterparty', '') is not null
             and lower(candidate.counterparty) = lower(observation.parsed_values->>'counterparty')
         )
-        and coalesce(candidate.occurred_at::date, candidate.posted_on) between
-          coalesce(observation.occurred_at::date, observation.posted_on) -
-            case when observation.parsed_values->>'messageClass' in ('card_purchase', 'card_refund') then 7 else 1 end
-          and coalesce(observation.occurred_at::date, observation.posted_on) +
-            case when observation.parsed_values->>'messageClass' in ('card_purchase', 'card_refund') then 7 else 1 end
+        and coalesce((candidate.occurred_at at time zone 'Africa/Johannesburg')::date, candidate.posted_on) between
+          coalesce((observation.occurred_at at time zone 'Africa/Johannesburg')::date, observation.posted_on) -
+            case when observation.parsed_values->>'messageClass' in ('card_purchase', 'card_refund')
+                or observation.parsed_values->>'movementType' in ('card_purchase', 'card_refund') then 7 else 1 end
+          and coalesce((observation.occurred_at at time zone 'Africa/Johannesburg')::date, observation.posted_on) +
+            case when observation.parsed_values->>'messageClass' in ('card_purchase', 'card_refund')
+                or observation.parsed_values->>'movementType' in ('card_purchase', 'card_refund') then 7 else 1 end
       limit 5
     ) candidates on true
     where (observation.status in ('needs_review', 'deferred') or exists (

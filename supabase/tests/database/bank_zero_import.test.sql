@@ -1,6 +1,6 @@
 begin;
 
-select plan(69);
+select plan(83);
 
 insert into finance.households (id) values
   ('00000000-0000-4000-8000-00000000b201'),
@@ -22,6 +22,7 @@ insert into finance.bank_zero_route_capabilities (household_id, route_key, messa
 values
   ('00000000-0000-4000-8000-00000000b201', 'profile-a', 'paid', true),
   ('00000000-0000-4000-8000-00000000b201', 'profile-a', 'card_purchase', true),
+  ('00000000-0000-4000-8000-00000000b201', 'profile-a', 'card_refund', true),
   ('00000000-0000-4000-8000-00000000b201', 'profile-a', 'payment_returned', true),
   ('00000000-0000-4000-8000-00000000b201', 'profile-a2', 'paid', true),
   ('00000000-0000-4000-8000-00000000b201', 'profile-a2', 'money_received', true);
@@ -108,6 +109,38 @@ select is((:'first_result'::jsonb->>'account_id')::uuid, '00000000-0000-4000-800
 select is((select count(*)::integer from finance.bank_zero_movements where household_id = '00000000-0000-4000-8000-00000000b201' and amount = -25), 1, 'first enabled alert creates one internal movement identity');
 select is((select count(*)::integer from finance.bank_zero_publication_outbox where household_id = '00000000-0000-4000-8000-00000000b201' and operation = 'create' and state = 'pending'), 1, 'movement and recoverable create intent commit together');
 
+insert into public.transactions (
+  id, account_id, date, occurred_on, details, household_id, source_system,
+  source_is_pending, source_is_transfer, source_is_archived, amount, currency_code, notes, raw_payload_hash
+) values (
+  'bz-history-match', '00000000-0000-4000-8000-00000000b221', '2026-10-12T07:00:00Z', '2026-10-12',
+  jsonb_build_object('id', 'bz-history-match', 'accountId', '00000000-0000-4000-8000-00000000b221',
+    'amount', '-33.00', 'currencyCode', 'ZAR', 'description', 'Historical Merchant', 'notes', 'history-ref'),
+  '00000000-0000-4000-8000-00000000b201', 'finwise', false, false, false, -33, 'ZAR', 'history-ref', 'bz-history-match-hash'
+);
+select public.bank_zero_record_observation_v1(
+  'profile-a', 'legacy-history', '<legacy-history@test.invalid>',
+  'ingest/00000000-0000-4000-8000-00000000b290/email.raw', repeat('3', 64), now(), '{}'::jsonb,
+  jsonb_build_object('evidenceKey', 'message', 'messageClass', 'paid', 'outcome', 'movement_candidate',
+    'parserVersion', 'bank-zero-email-v1',
+    'parsedValues', jsonb_build_object('messageClass', 'paid', 'amountMinor', 3300, 'direction', 'debit',
+      'accountAlias', 'Transactional', 'accountNumber', '80200000001', 'currency', 'ZAR',
+      'eventAt', '2026-10-12T09:00:00+02:00', 'counterparty', 'Historical Merchant', 'reference', 'history-ref'))
+);
+select is((select count(*)::integer from finance.bank_zero_movements where finwise_transaction_id = 'bz-history-match'), 1, 'new evidence adopts an exact matching existing FinWise history row');
+select is((select count(*)::integer from finance.bank_zero_publication_outbox where movement_id = (select id from finance.bank_zero_movements where finwise_transaction_id = 'bz-history-match') and operation = 'create'), 0, 'historical adoption never queues a second FinWise create');
+select public.bank_zero_record_observation_v1(
+  'profile-a', 'new-payment-near-history', '<new-payment-near-history@test.invalid>',
+  'ingest/00000000-0000-4000-8000-00000000b291/email.raw', repeat('4', 64), now(), '{}'::jsonb,
+  jsonb_build_object('evidenceKey', 'message', 'messageClass', 'paid', 'outcome', 'movement_candidate',
+    'parserVersion', 'bank-zero-email-v1',
+    'parsedValues', jsonb_build_object('messageClass', 'paid', 'amountMinor', 3300, 'direction', 'debit',
+      'accountAlias', 'Transactional', 'accountNumber', '80200000001', 'currency', 'ZAR',
+      'eventAt', '2026-10-12T09:01:00+02:00', 'counterparty', 'Historical Merchant', 'reference', 'history-ref'))
+);
+select is((select count(*)::integer from finance.bank_zero_movements where account_id = '00000000-0000-4000-8000-00000000b221' and amount = -33 and counterparty = 'Historical Merchant'), 2, 'a distinct payment one minute later does not collapse into adopted history');
+select is((select count(*)::integer from finance.bank_zero_publication_outbox outbox join finance.bank_zero_movements movement on movement.id = outbox.movement_id where movement.counterparty = 'Historical Merchant' and outbox.operation = 'create'), 1, 'the separate new payment retains its own create intent');
+
 select public.bank_zero_record_observation_v1(
   'profile-a', 'statement-delivery', '<statement@test.invalid>',
   'ingest/00000000-0000-4000-8000-00000000b275/email.raw', repeat('d', 64), now(), '{}'::jsonb,
@@ -127,6 +160,23 @@ select public.bank_zero_record_observation_v1(
 select is(:'statement_result'::jsonb->>'status', 'observed', 'statement evidence is recorded');
 select is((select count(*)::integer from finance.bank_zero_movements where household_id = '00000000-0000-4000-8000-00000000b201' and amount = -25), 1, 'statement row confirms the live alert without creating another movement');
 select is((select reconciliation_state from finance.bank_zero_movements where household_id = '00000000-0000-4000-8000-00000000b201' and amount = -25), 'statement_confirmed', 'unique statement match confirms reconciliation');
+
+select public.bank_zero_record_observation_v1(
+  'profile-a', 'repeated-payment-1', '<repeated-payment-1@test.invalid>',
+  'ingest/00000000-0000-4000-8000-00000000b287/email.raw', repeat('f', 64), now(), '{}'::jsonb,
+  jsonb_build_object('evidenceKey', 'message', 'messageClass', 'paid', 'outcome', 'movement_candidate', 'parserVersion', 'bank-zero-email-v1',
+    'parsedValues', jsonb_build_object('messageClass', 'paid', 'amountMinor', 10000, 'direction', 'debit', 'accountAlias', 'Transactional',
+      'accountNumber', '80200000001', 'currency', 'ZAR', 'eventAt', '2026-10-12T12:00:00+02:00', 'counterparty', 'Repeated Payee'))
+) as repeated_payment_one \gset
+select public.bank_zero_record_observation_v1(
+  'profile-a', 'repeated-payment-2', '<repeated-payment-2@test.invalid>',
+  'ingest/00000000-0000-4000-8000-00000000b288/email.raw', repeat('1', 64), now(), '{}'::jsonb,
+  jsonb_build_object('evidenceKey', 'message', 'messageClass', 'paid', 'outcome', 'movement_candidate', 'parserVersion', 'bank-zero-email-v1',
+    'parsedValues', jsonb_build_object('messageClass', 'paid', 'amountMinor', 10000, 'direction', 'debit', 'accountAlias', 'Transactional',
+      'accountNumber', '80200000001', 'currency', 'ZAR', 'eventAt', '2026-10-12T12:01:00+02:00', 'counterparty', 'Repeated Payee'))
+) as repeated_payment_two \gset
+select is((select count(*)::integer from finance.bank_zero_movements where household_id = '00000000-0000-4000-8000-00000000b201' and amount = -100 and counterparty = 'Repeated Payee'), 2, 'two same-amount payments one minute apart retain distinct movement identities');
+select is((select count(*)::integer from finance.bank_zero_evidence_links link join finance.bank_zero_observations observation on observation.id = link.observation_id where link.relation = 'created_from' and observation.received_email_id in (select id from finance.bank_zero_received_emails where original_message_id in ('<repeated-payment-1@test.invalid>', '<repeated-payment-2@test.invalid>'))), 2, 'each repeated payment remains the primary evidence for a separate movement');
 
 select public.bank_zero_record_observation_v1(
   'profile-a', 'proof-delivery', '<proof@test.invalid>',
@@ -274,6 +324,36 @@ select is((select refund_of_movement_id from finance.bank_zero_movements where m
 select is((select relation from finance.bank_zero_evidence_links where observation_id = (:'refund_statement_result'::jsonb->>'observation_id')::uuid and movement_id = (select id from finance.bank_zero_movements where movement_type = 'card_purchase' and counterparty = 'Test Cafe')), 'refund_of', 'refund evidence records its original-purchase relationship');
 select is((select count(*)::integer from finance.bank_zero_movements where movement_type = 'card_refund' and counterparty = 'Test Cafe'), 1, 'statement refund remains its own credit movement');
 select public.bank_zero_record_observation_v1(
+  'profile-a', 'delayed-refund-alert', '<delayed-refund-alert@test.invalid>',
+  'ingest/00000000-0000-4000-8000-00000000b285/email.raw', repeat('c', 64), now(), '{}'::jsonb,
+  jsonb_build_object(
+    'evidenceKey', 'message', 'messageClass', 'card_refund', 'outcome', 'movement_candidate',
+    'parserVersion', 'bank-zero-email-v1',
+    'parsedValues', jsonb_build_object(
+      'amountMinor', 267, 'direction', 'credit', 'accountAlias', 'Transactional',
+      'accountNumber', '80200000001', 'currency', 'ZAR', 'eventAt', '2025-11-28T17:22:00+02:00',
+      'counterparty', 'Delayed Refund Shop'
+    )
+  )
+) as delayed_refund_alert \gset
+select public.bank_zero_record_observation_v1(
+  'profile-a', 'delayed-refund-statement', '<delayed-refund-statement@test.invalid>',
+  'ingest/00000000-0000-4000-8000-00000000b286/email.raw', repeat('d', 64), now(), '{}'::jsonb,
+  jsonb_build_object(
+    'evidenceKey', 'statement:' || repeat('e',64) || ':Transactions:4',
+    'messageClass', 'statement', 'outcome', 'movement_candidate', 'parserVersion', 'bank-zero-statement-v2',
+    'parsedValues', jsonb_build_object(
+      'messageClass', 'statement', 'outcome', 'movement_candidate', 'movementType', 'card_refund',
+      'direction', 'credit', 'amountMinor', 267, 'currency', 'ZAR', 'accountAlias', 'Transactional',
+      'accountNumber', '80200000001', 'counterparty', 'Delayed Refund Shop', 'postedOn', '2025-12-01',
+      'statementContentSha256', repeat('e',64), 'statementSheet', 'Transactions', 'statementRow', 4
+    )
+  )
+) as delayed_refund_statement \gset
+select is(:'delayed_refund_statement'::jsonb->>'status', 'observed', 'refund posting-date shifts match their earlier card alert');
+select is((select count(*)::integer from finance.bank_zero_movements where movement_type = 'card_refund' and counterparty = 'Delayed Refund Shop'), 1, 'delayed refund statement confirms the alert without a duplicate credit');
+select is((select reconciliation_state from finance.bank_zero_movements where movement_type = 'card_refund' and counterparty = 'Delayed Refund Shop'), 'statement_confirmed', 'delayed refund candidate reaches statement-confirmed state');
+select public.bank_zero_record_observation_v1(
   'profile-a', 'original-payment', '<original-payment@test.invalid>',
   'ingest/00000000-0000-4000-8000-00000000b284/email.raw', repeat('b', 64), now(), '{}'::jsonb,
   jsonb_build_object(
@@ -376,10 +456,58 @@ select public.bank_zero_record_observation_v1(
   'ingest/00000000-0000-4000-8000-00000000b278/email.raw', repeat('2', 64), now(), '{}'::jsonb,
   jsonb_build_object('evidenceKey', 'message', 'messageClass', 'unknown', 'outcome', 'review', 'parserVersion', 'bank-zero-email-v1', 'reason', 'Unknown template')
 ) as unknown_result \gset
+select public.bank_zero_record_observation_v1(
+  'profile-a', 'uncertain-create', '<uncertain-create@test.invalid>',
+  'ingest/00000000-0000-4000-8000-00000000b289/email.raw', repeat('2', 64), now(), '{}'::jsonb,
+  jsonb_build_object('evidenceKey', 'message', 'messageClass', 'paid', 'outcome', 'movement_candidate',
+    'parserVersion', 'bank-zero-email-v1',
+    'parsedValues', jsonb_build_object('messageClass', 'paid', 'amountMinor', 8800, 'direction', 'debit',
+      'accountAlias', 'Transactional', 'accountNumber', '80200000001', 'currency', 'ZAR',
+      'eventAt', '2026-10-13T11:00:00+02:00', 'counterparty', 'Uncertain Merchant'))
+) as uncertain_create_result \gset
+update finance.bank_zero_publication_outbox
+set state = 'outcome_unknown', last_error = 'test uncertain create'
+where movement_id = (select link.movement_id from finance.bank_zero_evidence_links link
+  where link.observation_id = (:'uncertain_create_result'::jsonb->>'observation_id')::uuid and link.relation = 'created_from')
+  and operation = 'create';
+update finance.bank_zero_movements
+set publication_state = 'outcome_unknown'
+where id = (select link.movement_id from finance.bank_zero_evidence_links link
+  where link.observation_id = (:'uncertain_create_result'::jsonb->>'observation_id')::uuid and link.relation = 'created_from');
+insert into public.transactions (
+  id, account_id, date, occurred_on, details, household_id, source_system,
+  source_is_pending, source_is_transfer, source_is_archived, amount, currency_code, raw_payload_hash
+) values (
+  'bz-uncertain-adopted', '00000000-0000-4000-8000-00000000b221', '2026-10-13T09:00:00Z', '2026-10-13',
+  jsonb_build_object('id', 'bz-uncertain-adopted', 'accountId', '00000000-0000-4000-8000-00000000b221',
+    'amount', '-88.00', 'currencyCode', 'ZAR', 'description', 'Uncertain Merchant'),
+  '00000000-0000-4000-8000-00000000b201', 'finwise', false, false, false, -88, 'ZAR', 'bz-uncertain-adopted-hash'
+), (
+  'bz-wrong-adoption', '00000000-0000-4000-8000-00000000b221', '2026-10-13T08:00:00Z', '2026-10-13',
+  jsonb_build_object('id', 'bz-wrong-adoption', 'accountId', '00000000-0000-4000-8000-00000000b221',
+    'amount', '-88.00', 'currencyCode', 'ZAR', 'description', 'Uncertain Merchant'),
+  '00000000-0000-4000-8000-00000000b201', 'finwise', false, false, false, -88, 'ZAR', 'bz-wrong-adoption-hash'
+);
+update finance.bank_zero_observations
+set status = 'needs_review', review_reason = 'test delayed refund candidate visibility'
+where id = (:'delayed_refund_statement'::jsonb->>'observation_id')::uuid;
 select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-8000-00000000b211","role":"authenticated","email":"bz-a@test.invalid","email_verified":true,"app_metadata":{"provider":"google"}}', true);
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-00000000b211', true);
 set local role authenticated;
+select throws_ok(
+  format('select public.bank_zero_adopt_uncertain_create_v1(%L::uuid, %L)', :'uncertain_create_result'::jsonb->>'observation_id', 'bz-wrong-adoption'),
+  'P0001', 'bank_zero_conflict: FinWise transaction date does not match',
+  'manual adoption rejects a same-amount transaction with the wrong occurrence time'
+);
+select is(public.bank_zero_adopt_uncertain_create_v1((:'uncertain_create_result'::jsonb->>'observation_id')::uuid, 'bz-uncertain-adopted')->>'status', 'projection_pending', 'member can recover an uncertain create by adopting a matching existing FinWise transaction');
+select is((select finwise_transaction_id from finance.bank_zero_movements where id = (select link.movement_id from finance.bank_zero_evidence_links link where link.observation_id = (:'uncertain_create_result'::jsonb->>'observation_id')::uuid and link.relation = 'created_from')), 'bz-uncertain-adopted', 'adoption attaches the verified remote identity to its movement');
+select is((select operation || '/' || state from finance.bank_zero_publication_outbox where movement_id = (select link.movement_id from finance.bank_zero_evidence_links link where link.observation_id = (:'uncertain_create_result'::jsonb->>'observation_id')::uuid and link.relation = 'created_from') and finwise_transaction_id = 'bz-uncertain-adopted'), 'project/pending', 'adoption resumes the durable projection operation instead of replaying a create');
 select ok(not (public.bank_zero_list_review_v1(50)->'items' @> '[{"route_key":"profile-b"}]'::jsonb), 'review queue excludes another household');
+select ok(exists (
+  select 1 from jsonb_array_elements(public.bank_zero_list_review_v1(50)->'items') item
+  where item->>'observation_id' = (:'delayed_refund_statement'::jsonb->>'observation_id')
+    and item->'candidate_movements' @> jsonb_build_array(jsonb_build_object('movement_id', (select id::text from finance.bank_zero_movements where movement_type = 'card_refund' and counterparty = 'Delayed Refund Shop')))
+), 'review queue retains a refund alert as a candidate when its statement posts three days later');
 select is(jsonb_typeof(public.bank_zero_ops_summary_v1()->'match_outcomes'), 'object', 'member can read the operational summary for their household');
 select ok(not (public.bank_zero_ops_summary_v1()->'routes' @> '[{"route_key":"profile-b"}]'::jsonb), 'operational summary excludes routes from another household');
 select is(public.bank_zero_ops_summary_v1()->>'statement_balance_gaps', null, 'summary reports statement gaps as untracked rather than claiming zero');

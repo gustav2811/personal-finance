@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { PageHeader } from "@/components/patterns/page-header"
 import { Section } from "@/components/patterns/section"
-import { getBankZeroOpsSummary, listBankZeroReview, reviewBankZeroObservation, type BankZeroOpsSummary, type BankZeroReviewItem } from "./rpc"
+import { adoptUncertainBankZeroCreate, getBankZeroOpsSummary, listBankZeroReview, reviewBankZeroObservation, type BankZeroOpsSummary, type BankZeroReviewItem } from "./rpc"
 
 function displayValue(value: unknown): string {
   if (typeof value === "string") return value
@@ -22,6 +22,7 @@ export function BankZeroReviewView() {
   const [items, setItems] = useState<BankZeroReviewItem[]>([])
   const [summary, setSummary] = useState<BankZeroOpsSummary | null>(null)
   const [selected, setSelected] = useState<Record<string, string>>({})
+  const [finwiseIds, setFinwiseIds] = useState<Record<string, string>>({})
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
@@ -61,6 +62,25 @@ export function BankZeroReviewView() {
       await refresh()
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not save the review decision")
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  async function adopt(item: BankZeroReviewItem) {
+    const finwiseTransactionId = finwiseIds[item.observation_id]?.trim()
+    if (!finwiseTransactionId) {
+      setError("Enter the existing FinWise transaction ID to recover an uncertain create.")
+      return
+    }
+    setBusyId(item.observation_id)
+    setError(null)
+    try {
+      await adoptUncertainBankZeroCreate(item.observation_id, finwiseTransactionId)
+      setFinwiseIds((state) => ({ ...state, [item.observation_id]: "" }))
+      await refresh()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not adopt the FinWise transaction")
     } finally {
       setBusyId(null)
     }
@@ -132,6 +152,14 @@ export function BankZeroReviewView() {
                     {candidate.finwise_transaction_id ? ` · FinWise ${candidate.finwise_transaction_id}` : ""}
                   </p>
                 ))}
+                <div className="space-y-2 rounded-lg border border-dashed p-3">
+                  <p className="text-sm font-medium">Recover an uncertain create</p>
+                  <p className="text-xs text-muted-foreground">If FinWise created this transaction but the response was lost, enter its ID. The server checks account, amount, currency, and household before resuming projection.</p>
+                  <div className="flex gap-2">
+                    <input className="min-w-0 flex-1 rounded-lg border bg-background px-3 py-2 text-sm" value={finwiseIds[item.observation_id] ?? ""} onChange={(event) => setFinwiseIds((state) => ({ ...state, [item.observation_id]: event.target.value }))} aria-label="Existing FinWise transaction ID" placeholder="FinWise transaction ID" />
+                    <button className="rounded-lg border px-3 py-2 text-sm disabled:opacity-50" disabled={busyId === item.observation_id || !finwiseIds[item.observation_id]?.trim()} onClick={() => void adopt(item)}>Adopt</button>
+                  </div>
+                </div>
                 <div className="flex flex-wrap gap-2 pt-2">
                   <button className="rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground disabled:opacity-50" disabled={busyId === item.observation_id || candidates.length === 0} onClick={() => void act(item, "associate")}>Associate</button>
                   <button className="rounded-lg border px-3 py-2 text-sm disabled:opacity-50" disabled={busyId === item.observation_id || Boolean(item.source_expired_at)} onClick={() => void act(item, "replay")}>Re-evaluate</button>

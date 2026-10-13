@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import consumer from "./consumer.js";
-import { createTuyaDayJob } from "./jobs/jobs.js";
+import { createBankZeroPublishJob, createTuyaDayJob } from "./jobs/jobs.js";
 import type { ConsumerEnv } from "./config.js";
 
 const ingestCoreMocks = vi.hoisted(() => ({
@@ -23,6 +23,24 @@ vi.mock("@sentry/cloudflare", () => ({
 }));
 
 describe("consumer schedule", () => {
+  it("sends a valid publisher job directly to the publisher queue", async () => {
+    const sent: unknown[] = [];
+    const scheduledTime = Date.parse("2026-10-12T10:01:00.000Z");
+    const env = {
+      BANK_ZERO_PUBLISH_QUEUE: { send: async (job: unknown) => { sent.push(job); } },
+      JOBS_QUEUE: { sendBatch: vi.fn() },
+    } as unknown as ConsumerEnv;
+
+    await consumer.scheduled(
+      { cron: "* * * * *", scheduledTime } as unknown as ScheduledEvent,
+      env,
+      {} as ExecutionContext,
+    );
+
+    expect(sent).toEqual([createBankZeroPublishJob(new Date(scheduledTime).toISOString())]);
+    expect(sent[0]).not.toHaveProperty("body");
+  });
+
   it("enqueues all scheduled jobs in one batch", async () => {
     const batches: unknown[][] = [];
     const env = {

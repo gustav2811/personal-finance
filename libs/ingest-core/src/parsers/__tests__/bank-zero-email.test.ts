@@ -74,6 +74,25 @@ describe("Bank Zero email parser", () => {
     expect(parsed).toMatchObject({ messageClass: "unknown", outcome: "review", conflict: "amountMinor differs between subject and body" });
   });
 
+  it("holds a paid subject when the body says the payment was declined", () => {
+    const parsed = parseBankZeroEmail({
+      subject: "Paid R400.00 to Sample Merchant with reference 'Invoice A' on 12 Oct-26 Mon 11h44 (Transactional)",
+      text: "Your payment was declined. Paid R400.00 to Sample Merchant on 12 Oct-26 Mon 11h44 (Transactional)",
+    });
+    expect(parsed).toMatchObject({
+      messageClass: "unknown", outcome: "review",
+      conflict: "outcome differs between subject and body",
+    });
+  });
+
+  it("classifies a declined body before positive payment phrases", () => {
+    const parsed = parseBankZeroEmail({
+      subject: "Paid R400.00 to Sample Merchant with reference 'Invoice A' on 12 Oct-26 Mon 11h44 (Transactional)",
+      text: "Paid R400.00 to Sample Merchant on 12 Oct-26 Mon 11h44 (Transactional). The payment was declined.",
+    });
+    expect(parsed).toMatchObject({ messageClass: "unknown", outcome: "review" });
+  });
+
   it("recognizes proofs, statements, status, declines, and unknowns without making transactions", () => {
     expect(parseBankZeroEmail({ subject: "Bank Zero: Payment of R400.00 from Example to Merchant", attachments: [{ filename: "ProofOfPayment.pdf", mimetype: "application/pdf" }] }).messageClass).toBe("proof_of_payment");
     expect(parseBankZeroEmail({ subject: "Bank Statement for Transactional October2026", attachments: [{ filename: "Transactional October2026.xls", mimetype: "application/vnd.ms-excel" }] }).messageClass).toBe("statement");
