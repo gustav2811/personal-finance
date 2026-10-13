@@ -131,14 +131,18 @@ function transactionFromText(text: string): ParsedText | undefined {
     };
   }
 
-  const paid = new RegExp(String.raw`\b(Pay\s+Immediately|Paid)\s+(${MONEY})\s+to\s+(.+?)(?:\s+with\s+reference\s+['’](.*?)['’])?(?:\s+on\s+|,?\s+balance\s+|\s+\([^()]+\))`, "i").exec(text);
+  const paid = new RegExp(String.raw`\b(Pay\s+Immediately|Paid)\s+(${MONEY})\s+to\s+(.*?)(?:\s+on\s+|,?\s+balance\s+|\s+\([^()]+\))`, "i").exec(text);
   if (paid) {
     const amount = amountMinor(paid[2]);
     if (amount === undefined) return { messageClass: "unknown", outcome: "review", currency: "ZAR", sourceFields, reason: "Could not parse payment amount" };
-    const counterparty = paid[3].trim();
-    const reference = paid[4]?.trim();
+    // Some immediate-payment bodies omit the payee but retain the reference.
+    // Split those fields explicitly so "with reference ..." is never a payee.
+    const details = paid[3].trim();
+    const referenceMatch = /^(.*?)\s*\bwith\s+reference\s+['’](.*?)['’]\s*$/i.exec(details);
+    const counterparty = (referenceMatch ? referenceMatch[1] : details).trim() || undefined;
+    const reference = referenceMatch?.[2]?.trim();
     sourceFields.amountMinor = "body";
-    sourceFields.counterparty = "body";
+    if (counterparty) sourceFields.counterparty = "body";
     if (reference) sourceFields.reference = "body";
     return {
       messageClass: "paid", outcome: "movement_candidate", direction: "debit", amountMinor: amount,
@@ -264,12 +268,16 @@ function classifyNonMovement(text: string, attachments: BankZeroEmailInput["atta
   }
   // Only classify explicit Bank Zero notice templates as non-movements. These
   // words can also appear in payee names, references, and fee descriptions.
-  const noticeText = text.replace(/^\s*(?:bank\s*zero\s*[:\-]\s*)?/i, "");
+  const noticeText = text
+    .replace(/^\s*(?:bank\s*zero\s*[:\-]\s*)?/i, "")
+    // Strip a recipient-name prefix only before these observed notice forms.
+    // Do not strip template labels such as "Card Fee:" or "Security Alert:".
+    .replace(/^[^:\r\n]{1,80}:\s*(?=(?:pay\s+recipient\b|card\s+(?:online\s+)?timeout\s+tried\b))/i, "");
   if (/^(?:card\s+(?:online\s+)?timeout\s+tried\b|(?:payment|transaction)\s+(?:was\s+)?incomplete\b|(?:your\s+)?(?:payment|transaction)\s+(?:authorization|authorisation)\s+(?:failed|was\s+declined)\b|subscription\s+is\s+disabled\b)/i.test(noticeText)
     || /\b(?:your\s+)?(?:payment|transaction|card\s+transaction)\s+(?:was\s+)?declined\b/i.test(text)) {
     return { messageClass: "non_transaction", outcome: "no_movement", currency: "ZAR", sourceFields: {}, reason: "Unsuccessful or incomplete attempt" };
   }
-  if (/^(?:beneficiar(?:y|ies)\s+(?:has\s+been\s+)?added\b|recipient\s+.+?\s+(?:has\s+been\s+)?added\b|account\s+confirmation\b|(?:new\s+)?security\s+(?:alert|notification|update)\b|settings\s+(?:changed|updated)\b|tax\s+(?:certificate|statement|document)\b|marketing\s+preferences\b|password\s+(?:reset|changed|updated)\b|profile\s+(?:updated|changed)\b)/i.test(noticeText)) {
+  if (/^(?:beneficiar(?:y|ies)\s+(?:has\s+been\s+)?added\b|(?:pay\s+)?recipient\s+.+?\s+(?:has\s+been\s+)?added\b|account\s+confirmation\b|(?:new\s+)?security\s+(?:alert|notification|update)\b|settings\s+(?:changed|updated)\b|tax\s+(?:certificate|statement|document)\b|marketing\s+preferences\b|password\s+(?:reset|changed|updated)\b|profile\s+(?:updated|changed)\b)/i.test(noticeText)) {
     return { messageClass: "non_transaction", outcome: "no_movement", currency: "ZAR", sourceFields: {}, reason: "Account or informational notice" };
   }
   return undefined;
@@ -321,11 +329,18 @@ export function parseBankZeroEmail(input: BankZeroEmailInput): BankZeroFinancial
   const selected = bodyParsed && bodyParsed.outcome === "movement_candidate" ? bodyParsed : subjectParsed;
   const source = selected === subjectParsed ? "subject" : "body";
   const sourceFields = { ...selected.sourceFields };
+  const result = { ...selected };
   for (const key of ["amountMinor", "counterparty", "reference", "accountAlias", "eventAt", "balanceMinor", "attemptedAmountMinor"] as const) {
-    if (selected[key] !== undefined) sourceFields[key] = source;
+    if (selected[key] !== undefined) {
+      sourceFields[key] = source;
+    } else if (selected === bodyParsed && subjectParsed.outcome === "movement_candidate" && subjectParsed[key] !== undefined) {
+      // Only supplement after the material-conflict checks above have passed.
+      Object.assign(result, { [key]: subjectParsed[key] });
+      sourceFields[key] = "subject";
+    }
   }
-  if (selected.messageClass === "unknown") {
-    return { ...selected, parserVersion: "bank-zero-email-v1", sourceFields };
+  if (result.messageClass === "paid" && result.outcome === "movement_candidate" && !result.counterparty) {
+    return { ...result, outcome: "review", reason: "Payment counterparty is missing from subject and body", parserVersion: "bank-zero-email-v1", sourceFields };
   }
-  return { ...selected, parserVersion: "bank-zero-email-v1", sourceFields };
+  return { ...result, parserVersion: "bank-zero-email-v1", sourceFields };
 }

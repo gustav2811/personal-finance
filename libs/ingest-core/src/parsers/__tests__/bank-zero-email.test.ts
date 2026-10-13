@@ -33,6 +33,77 @@ describe("Bank Zero email parser", () => {
     expect(immediate).toMatchObject({ messageClass: "paid", direction: "debit", amountMinor: 40000, paymentMethod: "immediate_payment" });
   });
 
+  it.each([
+    { text: "Pay Immediately R400.00 to with reference 'Household' on 12 Oct-26 Mon 11h48, balance R201 (Transactional)." },
+    { html: "<p>Pay Immediately <span>R400.00</span> to <span></span> with reference &#39;<span>Household</span>&#39; on <span>12 Oct-26 Mon 11h48</span>, balance <span>R201</span> (<span>Transactional</span>).</p>" },
+  ])("recovers an omitted immediate-payment body payee from the subject (%j)", (body) => {
+    const parsed = parseBankZeroEmail({
+      subject: "Gustav: Pay Immediately R400.00 to Example Payee with reference 'Household' on 12 Oct-26 Mon 11h48, balance R201(Transactional)",
+      ...body,
+    });
+    expect(parsed).toMatchObject({
+      messageClass: "paid", outcome: "movement_candidate", direction: "debit",
+      amountMinor: 40000, paymentMethod: "immediate_payment",
+      counterparty: "Example Payee", reference: "Household", accountAlias: "Transactional",
+      eventAt: "2026-10-12T11:48:00+02:00", balanceMinor: 20100,
+      sourceFields: { counterparty: "subject", amountMinor: "body", reference: "body", eventAt: "body" },
+    });
+    expect(parsed.conflict).toBeUndefined();
+  });
+
+  it("holds a missing payee when neither subject nor body supplies one", () => {
+    const parsed = parseBankZeroEmail({
+      subject: "Gustav: Pay Immediately R400.00 to with reference 'Household' on 12 Oct-26 Mon 11h48 (Transactional)",
+    });
+    expect(parsed).toMatchObject({ messageClass: "paid", outcome: "review", reference: "Household" });
+    expect(parsed.counterparty).toBeUndefined();
+  });
+
+  it("still holds amount conflicts when the body omits the payee", () => {
+    const parsed = parseBankZeroEmail({
+      subject: "Gustav: Pay Immediately R400.00 to Example Payee with reference 'Household' on 12 Oct-26 Mon 11h48 (Transactional)",
+      text: "Pay Immediately R500.00 to with reference 'Household' on 12 Oct-26 Mon 11h48 (Transactional)",
+    });
+    expect(parsed).toMatchObject({ outcome: "review", conflict: "amountMinor differs between subject and body" });
+  });
+
+  it("still holds genuinely different payees in the subject and body", () => {
+    const parsed = parseBankZeroEmail({
+      subject: "Pay Immediately R400.00 to Example Payee with reference 'Household' on 12 Oct-26 Mon 11h48 (Transactional)",
+      text: "Pay Immediately R400.00 to Another Payee with reference 'Household' on 12 Oct-26 Mon 11h48 (Transactional)",
+    });
+    expect(parsed).toMatchObject({ outcome: "review", conflict: "counterparty differs between subject and body" });
+  });
+
+  it.each(["Gustav: ", "Cara: ", "Bank Zero: ", ""])("recognizes recipient-added notices with prefix %j", (prefix) => {
+    const parsed = parseBankZeroEmail({
+      subject: `${prefix}Pay recipient Example Payee added with Standard Bank account 000000001 by Example on 12 Oct-26 Mon 11h47.`,
+      html: "<p>Pay recipient Example Payee added with Standard Bank account 000000001 by Example on 12 Oct-26 Mon 11h47.</p>",
+    });
+    expect(parsed).toMatchObject({ messageClass: "non_transaction", outcome: "no_movement" });
+    expect(parsed.amountMinor).toBeUndefined();
+    expect(parsed.direction).toBeUndefined();
+  });
+
+  it.each(["Gustav: ", "Cara: ", "Bank Zero: ", ""])("recognizes card timeout notices with prefix %j", (prefix) => {
+    const parsed = parseBankZeroEmail({
+      subject: `${prefix}Card Online Timeout Tried R72.30 at Example Merchant on 01 Dec-25 Mon 04h19, balance R569 (Transactional)`,
+      html: "<p>Tried R72.30 at Example Merchant on 01 Dec-25 Mon 04h19. After 1 more timeouts Example Merchant will be added to your card subscriptions for you to enable, balance R569 (Transactional)</p>",
+    });
+    expect(parsed).toMatchObject({ messageClass: "non_transaction", outcome: "no_movement" });
+    expect(parsed.amountMinor).toBeUndefined();
+    expect(parsed.direction).toBeUndefined();
+  });
+
+  it("recognizes the timeout template when its attempted amount has no currency prefix", () => {
+    const parsed = parseBankZeroEmail({
+      subject: "Gustav: Card Online Timeout Tried 660.94 at Example Merchant on 22 Jun-26 Mon 13h41, balance ZAR 27 (Transactional)",
+      text: "Hi Gustav, A secure 3DS online card transaction of 660.94 at Example Merchant was last tried on 22 Jun-26 Mon 13h41.",
+    });
+    expect(parsed).toMatchObject({ messageClass: "non_transaction", outcome: "no_movement" });
+    expect(parsed.amountMinor).toBeUndefined();
+  });
+
   it("does not treat notice keywords in payees, references, or fee descriptions as notices", () => {
     const payee = parseBankZeroEmail({
       subject: "Paid R100.00 to Sample Security on 12 Oct-26 Mon 11h44 (Transactional)",
