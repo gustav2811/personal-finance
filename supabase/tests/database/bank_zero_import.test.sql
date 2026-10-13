@@ -1,6 +1,6 @@
 begin;
 
-select plan(83);
+select plan(92);
 
 insert into finance.households (id) values
   ('00000000-0000-4000-8000-00000000b201'),
@@ -140,6 +140,50 @@ select public.bank_zero_record_observation_v1(
 );
 select is((select count(*)::integer from finance.bank_zero_movements where account_id = '00000000-0000-4000-8000-00000000b221' and amount = -33 and counterparty = 'Historical Merchant'), 2, 'a distinct payment one minute later does not collapse into adopted history');
 select is((select count(*)::integer from finance.bank_zero_publication_outbox outbox join finance.bank_zero_movements movement on movement.id = outbox.movement_id where movement.counterparty = 'Historical Merchant' and outbox.operation = 'create'), 1, 'the separate new payment retains its own create intent');
+
+insert into public.transactions (
+  id, account_id, date, occurred_on, details, household_id, source_system,
+  source_is_pending, source_is_transfer, source_is_archived, amount, currency_code, raw_payload_hash
+) values (
+  'bz-card-shift-history', '00000000-0000-4000-8000-00000000b221', '2026-10-13T00:00:00+02:00', '2026-10-13',
+  jsonb_build_object('id', 'bz-card-shift-history', 'description', 'Shifted Card Shop'),
+  '00000000-0000-4000-8000-00000000b201', 'finwise', false, false, false, -20, 'ZAR', 'bz-card-shift-history-hash'
+);
+select public.bank_zero_record_observation_v1(
+  'profile-a', 'shifted-card-history', '<shifted-card-history@test.invalid>',
+  'ingest/00000000-0000-4000-8000-00000000b292/email.raw', repeat('5', 64), now(), '{}'::jsonb,
+  jsonb_build_object('evidenceKey', 'message', 'messageClass', 'card_purchase', 'outcome', 'movement_candidate',
+    'parserVersion', 'bank-zero-email-v1',
+    'parsedValues', jsonb_build_object('messageClass', 'card_purchase', 'amountMinor', 2000, 'direction', 'debit',
+      'accountAlias', 'Transactional', 'accountNumber', '80200000001', 'currency', 'ZAR',
+      'eventAt', '2026-10-10T12:00:00+02:00', 'counterparty', 'Shifted Card Shop'))
+) as shifted_card_result \gset
+select is(:'shifted_card_result'::jsonb->>'status', 'observed', 'historical card adoption accepts a three-day shifted posting date');
+select is((select count(*)::integer from finance.bank_zero_movements where finwise_transaction_id = 'bz-card-shift-history'), 1, 'shifted card history is adopted without creating a second movement');
+select is((select count(*)::integer from finance.bank_zero_publication_outbox where movement_id = (select id from finance.bank_zero_movements where finwise_transaction_id = 'bz-card-shift-history') and operation = 'create'), 0, 'shifted card history does not enqueue a remote create');
+
+select public.bank_zero_record_observation_v1(
+  'profile-a', 'statement-first', '<statement-first@test.invalid>',
+  'ingest/00000000-0000-4000-8000-00000000b293/email.raw', repeat('6', 64), now(), '{}'::jsonb,
+  jsonb_build_object('evidenceKey', 'statement:' || repeat('6',64) || ':Transactions:9',
+    'messageClass', 'statement', 'outcome', 'movement_candidate', 'parserVersion', 'bank-zero-statement-v2',
+    'parsedValues', jsonb_build_object('messageClass', 'statement', 'outcome', 'movement_candidate',
+      'movementType', 'statement_movement', 'direction', 'debit', 'amountMinor', 1900, 'currency', 'ZAR',
+      'accountAlias', 'Transactional', 'accountNumber', '80200000001', 'counterparty', 'Statement First Shop',
+      'postedOn', '2026-10-12', 'statementContentSha256', repeat('6',64), 'statementSheet', 'Transactions', 'statementRow', 9))
+) as statement_first_result \gset
+select is(:'statement_first_result'::jsonb->>'status', 'observed', 'a generic statement row can arrive before its payment alert');
+select public.bank_zero_record_observation_v1(
+  'profile-a', 'alert-after-statement', '<alert-after-statement@test.invalid>',
+  'ingest/00000000-0000-4000-8000-00000000b294/email.raw', repeat('7', 64), now(), '{}'::jsonb,
+  jsonb_build_object('evidenceKey', 'message', 'messageClass', 'paid', 'outcome', 'movement_candidate',
+    'parserVersion', 'bank-zero-email-v1',
+    'parsedValues', jsonb_build_object('messageClass', 'paid', 'amountMinor', 1900, 'direction', 'debit',
+      'accountAlias', 'Transactional', 'accountNumber', '80200000001', 'currency', 'ZAR',
+      'eventAt', '2026-10-12T08:54:00+02:00', 'counterparty', 'Statement First Shop'))
+) as alert_after_statement_result \gset
+select is(:'alert_after_statement_result'::jsonb->>'status', 'observed', 'the alert reconciles to an earlier generic statement movement');
+select is((select count(*)::integer from finance.bank_zero_movements where counterparty = 'Statement First Shop'), 1, 'reversed arrival order preserves one movement identity');
 
 select public.bank_zero_record_observation_v1(
   'profile-a', 'statement-delivery', '<statement@test.invalid>',
@@ -502,6 +546,7 @@ select throws_ok(
 select is(public.bank_zero_adopt_uncertain_create_v1((:'uncertain_create_result'::jsonb->>'observation_id')::uuid, 'bz-uncertain-adopted')->>'status', 'projection_pending', 'member can recover an uncertain create by adopting a matching existing FinWise transaction');
 select is((select finwise_transaction_id from finance.bank_zero_movements where id = (select link.movement_id from finance.bank_zero_evidence_links link where link.observation_id = (:'uncertain_create_result'::jsonb->>'observation_id')::uuid and link.relation = 'created_from')), 'bz-uncertain-adopted', 'adoption attaches the verified remote identity to its movement');
 select is((select operation || '/' || state from finance.bank_zero_publication_outbox where movement_id = (select link.movement_id from finance.bank_zero_evidence_links link where link.observation_id = (:'uncertain_create_result'::jsonb->>'observation_id')::uuid and link.relation = 'created_from') and finwise_transaction_id = 'bz-uncertain-adopted'), 'project/pending', 'adoption resumes the durable projection operation instead of replaying a create');
+select is((select publication_state from finance.bank_zero_movements where finwise_transaction_id = 'bz-uncertain-adopted'), 'pending', 'recovered movement remains pending until projection finishes');
 select ok(not (public.bank_zero_list_review_v1(50)->'items' @> '[{"route_key":"profile-b"}]'::jsonb), 'review queue excludes another household');
 select ok(exists (
   select 1 from jsonb_array_elements(public.bank_zero_list_review_v1(50)->'items') item
@@ -524,6 +569,18 @@ select is((select status from finance.bank_zero_replay_requests where id = (:'re
 select public.bank_zero_review_observation_v1((:'unknown_result'::jsonb->>'observation_id')::uuid, 'dismiss', null);
 select is((select status from finance.bank_zero_observations where id = (:'unknown_result'::jsonb->>'observation_id')::uuid), 'ignored', 'member dismissal action records the decision');
 reset role;
+
+select id::text as adopted_projection_movement_id
+from finance.bank_zero_movements where finwise_transaction_id = 'bz-uncertain-adopted' \gset
+set local role service_role;
+select claim->>'operation_id' as adopted_projection_operation_id
+from public.bank_zero_claim_publication_v1('adoption-projection-test', 20) as rows(claim)
+where claim->>'movement_id' = :'adopted_projection_movement_id'
+\gset
+select public.bank_zero_finish_projection_v1(:'adopted_projection_operation_id'::uuid, true, null, 0);
+reset role;
+select is((select state from finance.bank_zero_publication_outbox where operation_id = :'adopted_projection_operation_id'::uuid), 'published', 'manual-adoption projection completes its durable outbox operation');
+select is((select publication_state from finance.bank_zero_movements where finwise_transaction_id = 'bz-uncertain-adopted'), 'published', 'manual-adopted movement reaches published after successful projection');
 
 set local role service_role;
 select coalesce(jsonb_agg(claim), '[]'::jsonb) as replay_claims

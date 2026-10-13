@@ -316,6 +316,9 @@ begin
             and candidate.amount = v_signed_amount
             and (
               candidate.movement_type = v_movement_type
+              or (candidate.movement_type = 'statement_movement' and v_movement_type in (
+                'payment', 'receipt', 'card_purchase', 'card_refund', 'fee', 'interest', 'transfer_leg'
+              ))
               or (v_message_class = 'statement' and (
                 v_movement_type = 'payment' and candidate.movement_type in ('payment', 'statement_movement')
                 or v_movement_type = 'receipt' and candidate.movement_type in ('receipt', 'statement_movement')
@@ -365,7 +368,8 @@ begin
                     and (v_event_at at time zone 'Africa/Johannesburg')::date + 7)
               or (v_movement_type not in ('card_purchase', 'card_refund')
                   and candidate.movement_type not in ('card_purchase', 'card_refund')
-                  and abs(extract(epoch from (candidate.occurred_at - v_event_at))) <= 120))
+                  and (candidate.event_precision = 'day'
+                    or abs(extract(epoch from (candidate.occurred_at - v_event_at))) <= 120)))
             and not (
               v_message_class in ('money_received', 'paid', 'card_purchase', 'card_refund', 'payment_returned', 'fee')
               and v_event_at is not null
@@ -440,7 +444,22 @@ begin
                   case when v_movement_type in ('card_purchase', 'card_refund') then 7 else 1 end
                 and coalesce((v_event_at at time zone 'Africa/Johannesburg')::date, v_posted_on) +
                   case when v_movement_type in ('card_purchase', 'card_refund') then 7 else 1 end
-              and (v_event_at is null or date_trunc('minute', transaction_row.date) = date_trunc('minute', v_event_at))
+              and (
+                v_event_at is null
+                or (v_movement_type in ('card_purchase', 'card_refund')
+                  and coalesce(transaction_row.occurred_on,
+                    (transaction_row.date at time zone 'Africa/Johannesburg')::date)
+                    between (v_event_at at time zone 'Africa/Johannesburg')::date - 7
+                      and (v_event_at at time zone 'Africa/Johannesburg')::date + 7)
+                or ((v_event_precision = 'day'
+                  or (transaction_row.date at time zone 'Africa/Johannesburg') =
+                    date_trunc('day', transaction_row.date at time zone 'Africa/Johannesburg'))
+                  and coalesce(transaction_row.occurred_on,
+                    (transaction_row.date at time zone 'Africa/Johannesburg')::date)
+                    between (v_event_at at time zone 'Africa/Johannesburg')::date - 1
+                      and (v_event_at at time zone 'Africa/Johannesburg')::date + 1)
+                or date_trunc('minute', transaction_row.date) = date_trunc('minute', v_event_at)
+              )
               and (
                 (v_reference is not null and (
                   lower(coalesce(transaction_row.notes, transaction_row.details->>'notes', transaction_row.details->>'note', '')) = lower(v_reference)

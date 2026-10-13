@@ -78,7 +78,12 @@ begin
         not between coalesce((v_movement.occurred_at at time zone 'Africa/Johannesburg')::date, v_movement.posted_on) - 7
             and coalesce((v_movement.occurred_at at time zone 'Africa/Johannesburg')::date, v_movement.posted_on) + 7)
      or (v_movement.movement_type not in ('card_purchase', 'card_refund') and v_movement.occurred_at is not null
-       and date_trunc('minute', v_transaction.date) <> date_trunc('minute', v_movement.occurred_at))
+       and date_trunc('minute', v_transaction.date) <> date_trunc('minute', v_movement.occurred_at)
+       and not ((v_transaction.date at time zone 'Africa/Johannesburg') =
+         date_trunc('day', v_transaction.date at time zone 'Africa/Johannesburg')
+         and (v_transaction.occurred_on is null or v_transaction.occurred_on between
+           (v_movement.occurred_at at time zone 'Africa/Johannesburg')::date - 1
+           and (v_movement.occurred_at at time zone 'Africa/Johannesburg')::date + 1)))
      or (v_movement.movement_type not in ('card_purchase', 'card_refund') and v_movement.occurred_at is null
        and v_movement.posted_on is not null
        and coalesce(v_transaction.occurred_on, (v_transaction.date at time zone 'Africa/Johannesburg')::date)

@@ -203,6 +203,12 @@ begin
   if not found or v_outbox.operation <> 'project' or v_outbox.state <> 'in_progress' then
     raise exception 'projection operation is not in progress';
   end if;
+  update finance.bank_zero_movements
+  set publication_state = case when p_succeeded then 'published' else 'retryable_failure' end,
+      updated_at = now()
+  where id = v_outbox.movement_id and household_id = v_outbox.household_id
+    and finwise_transaction_id = v_outbox.finwise_transaction_id;
+  if not found then raise exception 'Bank Zero movement identity changed during projection'; end if;
   update finance.bank_zero_publication_outbox
   set state = case when p_succeeded then 'published' else 'retryable_failure' end,
       last_error = case when p_succeeded then null else left(coalesce(p_error, 'Projection failed'), 2000) end,

@@ -33,6 +33,21 @@ describe("Bank Zero email parser", () => {
     expect(immediate).toMatchObject({ messageClass: "paid", direction: "debit", amountMinor: 40000, paymentMethod: "immediate_payment" });
   });
 
+  it("does not treat notice keywords in payees, references, or fee descriptions as notices", () => {
+    const payee = parseBankZeroEmail({
+      subject: "Paid R100.00 to Sample Security on 12 Oct-26 Mon 11h44 (Transactional)",
+    });
+    const reference = parseBankZeroEmail({
+      subject: "Paid R100.00 to Sample Merchant with reference 'Tax' on 12 Oct-26 Mon 11h44 (Transactional)",
+    });
+    const fee = parseBankZeroEmail({
+      subject: "Card Fee: Tax Certificate R2.50 for R15.67 @ Sample Security on 02 Dec-25 Tue 07h56, balance R8 (Transactional)",
+    });
+    expect(payee).toMatchObject({ messageClass: "paid", outcome: "movement_candidate", counterparty: "Sample Security" });
+    expect(reference).toMatchObject({ messageClass: "paid", outcome: "movement_candidate", reference: "Tax" });
+    expect(fee).toMatchObject({ messageClass: "fee", outcome: "movement_candidate", amountMinor: 250 });
+  });
+
   it("uses the subject when a refund body contains only a template filename", () => {
     const parsed = parseBankZeroEmail({
       subject: "Card Refund R2.67 at Sample Taxi, Thailand on 28 Nov-25 Fri 17h22, balance R569 (Transactional)",
@@ -98,6 +113,7 @@ describe("Bank Zero email parser", () => {
     expect(parseBankZeroEmail({ subject: "Bank Statement for Transactional October2026", attachments: [{ filename: "Transactional October2026.xls", mimetype: "application/vnd.ms-excel" }] }).messageClass).toBe("statement");
     expect(parseBankZeroEmail({ subject: "Bank Zero: Banking status as at 11 Jan-26 Sun 06h00" }).outcome).toBe("review");
     expect(parseBankZeroEmail({ subject: "Card Online Timeout Tried R72.30 at Sample Taxi on 01 Dec-25 Mon 04h19" }).outcome).toBe("no_movement");
+    expect(parseBankZeroEmail({ subject: "Security Alert: A new device was added" }).outcome).toBe("no_movement");
     expect(parseBankZeroEmail({ subject: "A newly introduced Bank Zero template" }).outcome).toBe("review");
   });
 
