@@ -2,13 +2,12 @@ import * as Sentry from "@sentry/cloudflare";
 import { sentryOptions } from "./sentry.js";
 import type { IngestQueueMessageV1 } from "@investments/ingest-core";
 
-/** Raw MIME `email` field larger than this is stored in R2 to keep queue messages smaller. */
-const EMAIL_R2_THRESHOLD_BYTES = 256 * 1024;
-
 export interface IngestEnv {
   INGEST_BUCKET: R2Bucket;
   INGEST_QUEUE: Queue<IngestQueueMessageV1>;
   INGEST_TOKEN: string;
+  /** JSON object of trusted profile route keys to independent webhook tokens. */
+  INGEST_ROUTE_TOKENS_JSON?: string;
   SENTRY_DSN: string;
 }
 
@@ -21,6 +20,33 @@ function jsonResponse(data: unknown, status = 200): Response {
 
 function unauthorized(): Response {
   return jsonResponse({ error: "Unauthorized" }, 401);
+}
+
+function routeForToken(rawRoutes: string | undefined, token: string): string | undefined {
+  if (!rawRoutes?.trim()) return undefined;
+  const routes: unknown = JSON.parse(rawRoutes);
+  if (typeof routes !== "object" || routes === null || Array.isArray(routes)) {
+    throw new Error("INGEST_ROUTE_TOKENS_JSON must be an object");
+  }
+  for (const [routeKey, routeToken] of Object.entries(routes)) {
+    if (
+      /^[a-z0-9_-]{1,64}$/.test(routeKey) &&
+      typeof routeToken === "string" &&
+      routeToken.length > 0 &&
+      routeToken === token
+    ) {
+      return routeKey;
+    }
+  }
+  return undefined;
+}
+
+async function sha256Hex(value: ArrayBuffer | string): Promise<string> {
+  const bytes = typeof value === "string" ? new TextEncoder().encode(value) : value;
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 const handler = {
@@ -46,9 +72,23 @@ const handler = {
         ? authHeader.slice(7)
         : undefined;
     const token = url.searchParams.get("token") ?? bearer;
-    if (!token || token !== env.INGEST_TOKEN) {
+    if (!token) {
       return unauthorized();
     }
+
+    let routeKey: string | undefined;
+    try {
+      routeKey = routeForToken(env.INGEST_ROUTE_TOKENS_JSON, token);
+    } catch (error) {
+      console.log(JSON.stringify({
+        level: "error",
+        msg: "ingest_route_configuration_invalid",
+        component: "ingest-producer",
+        error: error instanceof Error ? error.message : String(error),
+      }));
+      return jsonResponse({ error: "Invalid route configuration" }, 500);
+    }
+    if (token !== env.INGEST_TOKEN && !routeKey) return unauthorized();
 
     const contentType = request.headers.get("content-type") ?? "";
     if (!contentType.includes("multipart/form-data")) {
@@ -56,13 +96,15 @@ const handler = {
     }
 
     const job_id = crypto.randomUUID();
+    const delivery_id = job_id;
+    const received_at = new Date().toISOString();
     const prefix = `ingest/${job_id}/`;
 
     const formData = await request.formData();
     const fields: Record<string, string> = {};
     const attachments: IngestQueueMessageV1["attachments"] = [];
-    let email: string | undefined;
     let email_r2_key: string | undefined;
+    let raw_email_sha256: string | undefined;
 
     let fileIdx = 0;
     // workers-types declare entries() as [string, string][]; file parts are File at runtime.
@@ -73,27 +115,43 @@ const handler = {
         fileIdx += 1;
         const filename = value.name || "attachment";
         const mimetype = value.type || "application/octet-stream";
-        await env.INGEST_BUCKET.put(r2_key, value.stream(), {
+        const bytes = await value.arrayBuffer();
+        const sha256 = await sha256Hex(bytes);
+        await env.INGEST_BUCKET.put(r2_key, bytes, {
           httpMetadata: { contentType: mimetype },
+          customMetadata: {
+            sha256,
+            received_at,
+            delivery_id,
+            ...(routeKey ? { route_key: routeKey } : {}),
+          },
         });
         attachments.push({
           fieldname: key,
           filename,
           mimetype,
           r2_key,
+          sha256,
         });
       } else {
         const s = typeof value === "string" ? value : String(value);
         if (key === "email") {
-          if (s.length >= EMAIL_R2_THRESHOLD_BYTES) {
-            const ek = `${prefix}email.raw`;
-            await env.INGEST_BUCKET.put(ek, s, {
-              httpMetadata: { contentType: "message/rfc822" },
-            });
-            email_r2_key = ek;
-          } else {
-            email = s;
-          }
+          // Keep every original message replayable from the same durable source,
+          // regardless of size. Inline messages were previously omitted from
+          // some recovery metadata, making their evidence unavailable on replay.
+          const ek = `${prefix}email.raw`;
+          const sha256 = await sha256Hex(s);
+          await env.INGEST_BUCKET.put(ek, s, {
+            httpMetadata: { contentType: "message/rfc822" },
+            customMetadata: {
+              sha256,
+              received_at,
+              delivery_id,
+              ...(routeKey ? { route_key: routeKey } : {}),
+            },
+          });
+          email_r2_key = ek;
+          raw_email_sha256 = sha256;
         } else {
           fields[key] = s;
         }
@@ -103,10 +161,13 @@ const handler = {
     const message: IngestQueueMessageV1 = {
       v: 1,
       job_id,
+      delivery_id,
+      received_at,
+      ...(routeKey ? { route_key: routeKey } : {}),
       fields,
       attachments,
-      ...(email !== undefined ? { email } : {}),
       ...(email_r2_key !== undefined ? { email_r2_key } : {}),
+      ...(raw_email_sha256 !== undefined ? { raw_email_sha256 } : {}),
     };
 
     await env.INGEST_QUEUE.send(message);

@@ -11,6 +11,8 @@ export interface DlqEntry {
   payload: Record<string, unknown>;
   /** Requeue-safe source pointers. Inline email bodies are deliberately excluded. */
   replay_payload?: Record<string, unknown>;
+  /** Stable identity for Cloudflare native DLQ drains; ordinary retries omit it. */
+  recovery_id?: string;
 }
 
 let supabase: SupabaseClient | null = null;
@@ -27,14 +29,19 @@ export async function sendToDlq(
   entry: DlqEntry,
 ): Promise<void> {
   const client = getSupabase(config);
-  await client.from(DLQ_TABLE).insert({
+  const row = {
     job_id: entry.job_id,
     message_id: entry.message_id,
     bank: entry.bank,
     error: entry.error,
     payload: entry.payload,
     replay_payload: entry.replay_payload ?? null,
-  });
+    recovery_id: entry.recovery_id ?? null,
+  };
+  const { error } = entry.recovery_id
+    ? await client.from(DLQ_TABLE).upsert(row, { onConflict: "recovery_id", ignoreDuplicates: true })
+    : await client.from(DLQ_TABLE).insert(row);
+  if (error) throw new Error(`Could not persist ingest recovery record: ${error.message}`);
 }
 
 /** Count DLQ rows with `created_at >= since` (cheap `head: true` query). */

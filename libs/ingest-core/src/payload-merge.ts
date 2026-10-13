@@ -6,9 +6,13 @@ import {
   type IngestJobPayload,
 } from "./job-payload.js";
 
+function normalizeMessageId(value: string): string {
+  return value.trim().replace(/^<|>$/g, "");
+}
+
 function extractMessageId(headers: string): string {
   const match = /^Message-ID:\s*<?([^>\s]+)>?/im.exec(headers);
-  if (match) return match[1].trim();
+  if (match) return normalizeMessageId(match[1]);
   return createHash("sha256").update(headers).digest("hex").slice(0, 32);
 }
 
@@ -57,6 +61,8 @@ export async function finalizeIngestPayload(options: {
   let to = fields["to"] ?? "";
   let subject = fields["subject"] ?? "";
   let headers = fields["headers"] ?? "";
+  let text = fields["text"] ?? "";
+  let html = fields["html"] ?? "";
   const attachments = [...options.attachments];
 
   let message_id = extractMessageId(headers);
@@ -67,11 +73,13 @@ export async function finalizeIngestPayload(options: {
     to = formatAddress(parsed.to) ?? to;
     subject = parsed.subject ?? subject;
     headers = rawEmail.slice(0, 8192);
+    text = parsed.text || text;
+    html = typeof parsed.html === "string" ? parsed.html : html;
     const parsedMessageId =
       typeof parsed.messageId === "string"
         ? parsed.messageId.trim()
         : undefined;
-    if (parsedMessageId) message_id = parsedMessageId;
+    if (parsedMessageId) message_id = normalizeMessageId(parsedMessageId);
     for (let i = 0; i < (parsed.attachments?.length ?? 0); i++) {
       const att = parsed.attachments[i];
       const buf = Buffer.isBuffer(att.content)
@@ -100,6 +108,8 @@ export async function finalizeIngestPayload(options: {
     to,
     subject,
     headers,
+    ...(text ? { text } : {}),
+    ...(html ? { html } : {}),
     attachments,
   };
 }

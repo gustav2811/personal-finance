@@ -13,6 +13,8 @@ export interface IngestJobPayload {
   to: string;
   subject: string;
   headers: string;
+  text?: string;
+  html?: string;
   attachments: IngestJobAttachment[];
 }
 

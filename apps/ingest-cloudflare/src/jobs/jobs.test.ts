@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createDlqReportJob,
   createHealthCheckJob,
+  createBankZeroStatementJob,
   createIsmrtSyncJob,
   createTuyaDayJob,
   createTuyaPlanJob,
@@ -53,6 +54,29 @@ describe("scheduled job parsing", () => {
   it("parses a v1 job", () => {
     const job = createTuyaDayJob("device", "2026-09-28", ["add_ele"]);
     expect(parseJob(job)).toEqual({ ok: true, job });
+  });
+
+  it("persists statement continuation cursors separately from email retry state", () => {
+    const source = {
+      v: 1 as const,
+      job_id: "source-1",
+      route_key: "profile-a",
+      delivery_id: "delivery-1",
+      received_at: "2026-10-12T10:00:00.000Z",
+      fields: {},
+      email_r2_key: "ingest/00000000-0000-4000-8000-000000000001/email.raw",
+      raw_email_sha256: "a".repeat(64),
+      attachments: [{
+        fieldname: "attachment1", filename: "Transactional.xlsx",
+        mimetype: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        r2_key: "ingest/00000000-0000-4000-8000-000000000001/files/0",
+        sha256: "b".repeat(64),
+      }],
+    };
+    const job = createBankZeroStatementJob(source, 100);
+    expect(job.jobId).toBe("bank-zero-statement:source-1:100");
+    expect(parseJob(job)).toEqual({ ok: true, job });
+    expect(parseJob({ ...job, source: { ...source, email: "inline" } })).toEqual({ ok: false, reason: "invalid" });
   });
 
   it("upgrades an unversioned legacy job", () => {

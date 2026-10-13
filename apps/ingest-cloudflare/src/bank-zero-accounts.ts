@@ -26,11 +26,13 @@ export const bankZeroAccountMap: BankZeroAccountMapping[] = [
   },
   {
     pattern: "Transaction",
+    alias: "Transactional",
     accountNumber: "80204387707",
     accountId: "1660ce38-4b44-4812-8123-26f3514dbc49",
   },
   {
     pattern: "Transaction",
+    alias: "Transactional",
     accountNumber: "80204621122",
     accountId: "258f9b35-a32a-4a6f-97cd-fba0d08d1aca",
   },

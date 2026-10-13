@@ -6,7 +6,7 @@ const API_BASE = "https://api.cloudflare.com/client/v4";
 
 export function parseQueueNames(tomlText) {
   const names = new Set();
-  const queuePattern = /^\s*queue\s*=\s*"([^"]+)"/gm;
+  const queuePattern = /^\s*(?:queue|dead_letter_queue)\s*=\s*"([^"]+)"/gm;
   for (const match of tomlText.matchAll(queuePattern)) {
     const name = match[1]?.trim();
     if (name) names.add(name);

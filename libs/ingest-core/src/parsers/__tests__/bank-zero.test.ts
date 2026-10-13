@@ -39,11 +39,15 @@ describe("bankZeroParser", () => {
       description: "Albertsville, Apple Pay",
       counterparty: "Sprinkles Bake & Par",
       balance: 32157.91,
-      meta: { bank: "bank_zero", source_email: ctx.source_email, filename: ctx.filename },
+      meta: {
+        bank: "bank_zero", source_email: ctx.source_email, filename: ctx.filename,
+        bank_event_at: "2026-02-05T17:22:00+02:00", event_precision: "minute",
+        statement_sheet: "Feb 26 Transactions", statement_row: 2,
+      },
     });
     expect(result[1].amount).toBe(7300);
     expect(result[1].description).toBe("[TRANSFER] Gustav Klingbiel");
-    expect(result[1].counterparty).toBe("Bank Zero");
+    expect(result[1].counterparty).toBe("Gustav Klingbiel");
     expect(result[1].notes).toBe("February");
   });
 
@@ -81,7 +85,7 @@ describe("bankZeroParser", () => {
     expect(result[0].amount).toBe(-1500);
     expect(result[0].balance).toBe(30657.91);
     expect(result[0].description).toBe("[TRANSFER] Travel Savings");
-    expect(result[0].counterparty).toBe("Bank Zero");
+    expect(result[0].counterparty).toBe("Travel Savings");
     expect(result[0].notes).toBe("February");
     expect(result[1].amount).toBe(-1364);
     expect(result[1].balance).toBe(29293.91);
@@ -101,5 +105,40 @@ describe("bankZeroParser", () => {
     const result1 = bankZeroParser(buffer, ctx);
     const result2 = bankZeroParser(buffer, ctx);
     expect(result2[0].external_id).toBe(result1[0].external_id);
+  });
+
+  it("preserves two identical statement rows as separate occurrences", () => {
+    const wb = XLSX.utils.book_new();
+    const rows = [
+      ["Date", "Time", "Type", "Description 1", "Description 2", "Amount", "Balance"],
+      ["2026-02-05", "17:22", "Pay out", "Sample Merchant", "Invoice", "-25.00", "100.00"],
+      ["2026-02-05", "17:22", "Pay out", "Sample Merchant", "Invoice", "-25.00", "75.00"],
+    ];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), "Feb 26 Transactions");
+    const buffer = Buffer.from(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
+    const result = bankZeroParser(buffer, {
+      bank: "bank_zero", source_email: "a@b.co", filename: "f.xlsx", account_id: "acc1",
+    });
+    expect(result).toHaveLength(2);
+    expect(result[0].external_id).not.toBe(result[1].external_id);
+    expect(result.map((row) => row.meta.statement_row)).toEqual([2, 3]);
+    expect(result.map((row) => row.meta.bank_event_at)).toEqual([
+      "2026-02-05T17:22:00+02:00",
+      "2026-02-05T17:22:00+02:00",
+    ]);
+  });
+
+  it("preserves separately reported nonzero statement fees", () => {
+    const wb = XLSX.utils.book_new();
+    const rows = [
+      ["Date", "Type", "Description 1", "Description 2", "Fee", "Amount", "Balance"],
+      ["2026-02-05", "Pay out", "Sample Merchant", "Invoice", "3.50", "-25.00", "71.50"],
+    ];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), "Feb 26 Transactions");
+    const buffer = Buffer.from(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
+    const [result] = bankZeroParser(buffer, {
+      bank: "bank_zero", source_email: "a@b.co", filename: "f.xlsx", account_id: "acc1",
+    });
+    expect(result).toMatchObject({ amount: -25, fee: 3.5, meta: { statement_row: 2 } });
   });
 });

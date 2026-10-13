@@ -1,0 +1,175 @@
+"use client"
+
+import { useCallback, useEffect, useState } from "react"
+import { PageHeader } from "@/components/patterns/page-header"
+import { Section } from "@/components/patterns/section"
+import { adoptUncertainBankZeroCreate, getBankZeroOpsSummary, listBankZeroReview, reviewBankZeroObservation, type BankZeroOpsSummary, type BankZeroReviewItem } from "./rpc"
+
+function displayValue(value: unknown): string {
+  if (typeof value === "string") return value
+  if (value === null || value === undefined) return "—"
+  return String(value)
+}
+
+function amountLabel(values: Record<string, unknown>): string {
+  const cents = Number(values.amountMinor)
+  if (!Number.isFinite(cents)) return "Amount unavailable"
+  const amount = values.direction === "debit" ? -cents / 100 : cents / 100
+  return new Intl.NumberFormat("en-ZA", { style: "currency", currency: displayValue(values.currency || "ZAR") }).format(amount)
+}
+
+export function BankZeroReviewView() {
+  const [items, setItems] = useState<BankZeroReviewItem[]>([])
+  const [summary, setSummary] = useState<BankZeroOpsSummary | null>(null)
+  const [selected, setSelected] = useState<Record<string, string>>({})
+  const [finwiseIds, setFinwiseIds] = useState<Record<string, string>>({})
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [loaded, setLoaded] = useState(false)
+
+  const refresh = useCallback(async () => {
+    setError(null)
+    try {
+      const [nextItems, nextSummary] = await Promise.all([listBankZeroReview(), getBankZeroOpsSummary()])
+      setItems(nextItems)
+      setSummary(nextSummary)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not load Bank Zero review work")
+    } finally {
+      setLoaded(true)
+    }
+  }, [])
+
+  useEffect(() => { void refresh() }, [refresh])
+
+  useEffect(() => {
+    const hasActiveReplay = items.some((item) => item.replay_status === "pending" || item.replay_status === "in_progress")
+    if (!hasActiveReplay) return
+    const timer = window.setInterval(() => void refresh(), 3000)
+    return () => window.clearInterval(timer)
+  }, [items, refresh])
+
+  async function act(item: BankZeroReviewItem, action: "associate" | "dismiss" | "replay") {
+    const movementId = selected[item.observation_id] ?? item.candidate_movements[0]?.movement_id
+    if (action === "associate" && !movementId) {
+      setError("There is no suggested movement to associate. Dismiss this item or wait for more evidence.")
+      return
+    }
+    setBusyId(item.observation_id)
+    setError(null)
+    try {
+      await reviewBankZeroObservation(item.observation_id, action, action === "associate" ? movementId : undefined)
+      await refresh()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not save the review decision")
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  async function adopt(item: BankZeroReviewItem) {
+    const finwiseTransactionId = finwiseIds[item.observation_id]?.trim()
+    if (!finwiseTransactionId) {
+      setError("Enter the existing FinWise transaction ID to recover an uncertain create.")
+      return
+    }
+    setBusyId(item.observation_id)
+    setError(null)
+    try {
+      await adoptUncertainBankZeroCreate(item.observation_id, finwiseTransactionId)
+      setFinwiseIds((state) => ({ ...state, [item.observation_id]: "" }))
+      await refresh()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not adopt the FinWise transaction")
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Bank Zero review"
+        description="Resolve uncertain message matches, inspect the evidence, and re-run retained email through the current parser."
+      />
+      {error ? <p role="alert" className="rounded-xl border border-destructive/30 p-4 text-sm text-destructive">{error}</p> : null}
+      {!loaded ? <p className="type-body text-muted-foreground">Loading unresolved work…</p> : null}
+      {summary ? (
+        <Section title="Pipeline health" description="Recent receipt, reconciliation, and publication work for this household.">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <p className="rounded-lg border p-3 text-sm"><strong>Receipt p95:</strong> {summary.receipt_processing_p95_seconds === null ? "No recent sample" : `${Math.round(summary.receipt_processing_p95_seconds)} seconds`}</p>
+            <p className="rounded-lg border p-3 text-sm"><strong>Unclassified:</strong> {summary.unclassified_templates}</p>
+            <p className="rounded-lg border p-3 text-sm"><strong>Unresolved routes:</strong> {summary.unresolved_account_routes}</p>
+            <p className="rounded-lg border p-3 text-sm"><strong>Matches:</strong> {summary.match_outcomes.matched} matched · {summary.match_outcomes.needs_review} review · {summary.match_outcomes.deferred} deferred</p>
+            <p className="rounded-lg border p-3 text-sm"><strong>Open reconciliation &gt;24h:</strong> {summary.reconciliation_older_than_24h}</p>
+            <p className="rounded-lg border p-3 text-sm"><strong>Publication backlog:</strong> {summary.publication_backlog}</p>
+            <p className="rounded-lg border p-3 text-sm"><strong>Unknown outcomes:</strong> {summary.unknown_publication_outcomes}</p>
+            <p className="rounded-lg border p-3 text-sm"><strong>Exhausted retries:</strong> {summary.exhausted_publication_retries}</p>
+            <p className="rounded-lg border p-3 text-sm"><strong>Statement balance gaps:</strong> {summary.statement_balance_gaps ?? "Not tracked yet"}</p>
+          </div>
+          {summary.routes.length > 0 ? (
+            <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
+              {summary.routes.map((route) => <li key={route.route_key}>{route.route_key}: {route.status} · {route.unresolved_observations} unresolved</li>)}
+            </ul>
+          ) : null}
+        </Section>
+      ) : null}
+      {loaded && items.length === 0 ? (
+        <Section title="All caught up" description="There are no deferred or uncertain Bank Zero observations to review." />
+      ) : null}
+      {items.map((item) => {
+        const parsed = item.parsed_values ?? {}
+        const raw = item.raw_values ?? {}
+        const candidates = item.candidate_movements ?? []
+        const current = selected[item.observation_id] ?? candidates[0]?.movement_id ?? ""
+        return (
+          <Section key={item.observation_id} title={`${amountLabel(parsed)} · ${displayValue(parsed.counterparty ?? parsed.accountAlias ?? item.kind)}`} description={item.reason ?? `Received ${new Date(item.received_at).toLocaleString()}`}>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="space-y-2 text-sm">
+                <p><strong>Route:</strong> {item.route_key}</p>
+                <p><strong>Evidence type:</strong> {item.kind}</p>
+                <p><strong>Subject:</strong> {displayValue(raw.subject)}</p>
+                <p><strong>Source:</strong> {item.source_expired_at ? "Expired" : "Available for replay"}</p>
+                {item.replay_status ? <p><strong>Latest re-evaluation:</strong> {item.replay_error ?? item.replay_status}</p> : null}
+                <p className="whitespace-pre-wrap text-muted-foreground">{displayValue(raw.bodySnippet)}</p>
+                <p><strong>Reference:</strong> {displayValue(parsed.reference)}</p>
+                <p><strong>Event:</strong> {displayValue(parsed.eventAt ?? parsed.postedOn)}</p>
+              </div>
+              <div className="space-y-3">
+                <p className="text-sm font-medium">Suggested movements</p>
+                {candidates.length === 0 ? <p className="text-sm text-muted-foreground">No unique candidate was suggested.</p> : (
+                  <select className="w-full rounded-lg border bg-background px-3 py-2 text-sm" value={current} onChange={(event) => setSelected((state) => ({ ...state, [item.observation_id]: event.target.value }))} aria-label="Movement to associate">
+                    {candidates.map((candidate) => (
+                      <option key={candidate.movement_id} value={candidate.movement_id}>
+                        {candidate.description} · {new Intl.NumberFormat("en-ZA", { style: "currency", currency: candidate.currency_code }).format(candidate.amount)} · {candidate.posted_on ?? candidate.occurred_at ?? "date unknown"} · {candidate.publication_state}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {candidates.map((candidate) => (
+                  <p key={candidate.movement_id} className="text-xs text-muted-foreground">
+                    {candidate.reconciliation_state} · publication {candidate.publication_state}
+                    {candidate.finwise_transaction_id ? ` · FinWise ${candidate.finwise_transaction_id}` : ""}
+                  </p>
+                ))}
+                <div className="space-y-2 rounded-lg border border-dashed p-3">
+                  <p className="text-sm font-medium">Recover an uncertain create</p>
+                  <p className="text-xs text-muted-foreground">If FinWise created this transaction but the response was lost, enter its ID. The server checks account, amount, currency, and household before resuming projection.</p>
+                  <div className="flex gap-2">
+                    <input className="min-w-0 flex-1 rounded-lg border bg-background px-3 py-2 text-sm" value={finwiseIds[item.observation_id] ?? ""} onChange={(event) => setFinwiseIds((state) => ({ ...state, [item.observation_id]: event.target.value }))} aria-label="Existing FinWise transaction ID" placeholder="FinWise transaction ID" />
+                    <button className="rounded-lg border px-3 py-2 text-sm disabled:opacity-50" disabled={busyId === item.observation_id || !finwiseIds[item.observation_id]?.trim()} onClick={() => void adopt(item)}>Adopt</button>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2 pt-2">
+                  <button className="rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground disabled:opacity-50" disabled={busyId === item.observation_id || candidates.length === 0} onClick={() => void act(item, "associate")}>Associate</button>
+                  <button className="rounded-lg border px-3 py-2 text-sm disabled:opacity-50" disabled={busyId === item.observation_id || Boolean(item.source_expired_at)} onClick={() => void act(item, "replay")}>Re-evaluate</button>
+                  <button className="rounded-lg border px-3 py-2 text-sm disabled:opacity-50" disabled={busyId === item.observation_id} onClick={() => void act(item, "dismiss")}>Dismiss</button>
+                </div>
+              </div>
+            </div>
+          </Section>
+        )
+      })}
+    </div>
+  )
+}

@@ -1,5 +1,7 @@
 export interface BankZeroAccountMapping {
   pattern: string;
+  /** Exact route-scoped Bank Zero alias written into statement evidence. */
+  alias?: string;
   accountId: string;
   accountNumber?: string;
 }

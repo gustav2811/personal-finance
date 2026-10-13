@@ -2,6 +2,7 @@
 
 import {
   Home,
+  Landmark,
   List,
   Radio,
   Scale,
@@ -42,7 +43,10 @@ const HOUSEHOLD: NavItem[] = [
 
 const HOME: NavItem[] = [{ href: "/utilities", icon: Zap, label: "Utilities" }]
 
-const RECORD: NavItem[] = [{ href: "/sources", icon: Radio, label: "Sources" }]
+const RECORD: NavItem[] = [
+  { href: "/sources", icon: Radio, label: "Sources" },
+  { href: "/bank-zero", icon: Landmark, label: "Bank Zero" },
+]
 
 function isCurrent(pathname: string, href: string): boolean {
   if (href === "/") return pathname === "/"
