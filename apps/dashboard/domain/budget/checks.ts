@@ -1,7 +1,7 @@
 import { gapWords } from "./capacity"
 import { formatDayMonth } from "./cycle"
 import { absoluteCents, formatCents, isCents, parseCents } from "./money"
-import { readRecord, readString } from "./wire"
+import { readArray, readComplete, readRecord, readString } from "./wire"
 import type { PlanLine } from "./plan"
 import { placeGroup, type PurposeGroup } from "./presentation"
 
@@ -36,7 +36,7 @@ const LEAD = 2
 
 export function savedFactsFromOverview(payload: unknown): Map<string, SavedFact> | null {
   const root = readRecord(payload)
-  if (!root || !Array.isArray(root.funds)) return null
+  if (!root || !Array.isArray(root.funds) || !readComplete(root) || readArray(root.reasons).length > 0) return null
   const facts = new Map<string, SavedFact>()
   for (const entry of root.funds) {
     const record = readRecord(entry)
@@ -87,6 +87,7 @@ export function projectChecks(input: {
   groupOverrides: ReadonlyMap<string, PurposeGroup>
   saved: ReadonlyMap<string, SavedFact> | null
   reviewItems: boolean | null
+  historical?: boolean
 }): BudgetCheck[] {
   const checks: BudgetCheck[] = []
   if (input.incomeIncomplete || !input.incomeKnown) {
@@ -127,7 +128,17 @@ export function projectChecks(input: {
 
   for (const line of input.lines) {
     const override = input.groupOverrides.get(line.stableLineId)
-    if (line.fundingBehaviour === "target_by_date" && (!line.targetCents || !line.dueOn || !isCents(line.targetCents))) {
+    if (input.historical && line.targetCents && line.dueOn) {
+      checks.push(info({
+        id: `target-historical-${line.stableLineId}`,
+        title: `${line.name} had a target of ${formatCents(line.targetCents)} by ${formatDayMonth(line.dueOn)}`,
+        why: "This is an older agreement. Today's saved balance cannot prove whether the target was reached then.",
+        evidence: "Historical savings at that date are not available.",
+        action: "Review target and contribution",
+        target: { kind: "row", stableLineId: line.stableLineId, field: "target" },
+      }))
+    }
+    if (!input.historical && line.fundingBehaviour === "target_by_date" && (!line.targetCents || !line.dueOn || !isCents(line.targetCents))) {
       checks.push(
         decision({
           id: `target-incomplete-${line.stableLineId}`,
@@ -140,7 +151,7 @@ export function projectChecks(input: {
       )
       continue
     }
-    if (line.dueOn && line.targetCents && isCents(line.targetCents) && !line.targetCents.startsWith("-") && line.targetCents !== "0") {
+    if (!input.historical && line.dueOn && line.targetCents && isCents(line.targetCents) && !line.targetCents.startsWith("-") && line.targetCents !== "0") {
       const saved = input.saved?.get(line.fundId) ?? null
       if (input.saved === null || !saved || saved.savedCents === null || !isCents(saved.savedCents)) {
         checks.push(
@@ -148,7 +159,7 @@ export function projectChecks(input: {
             id: `target-unverified-${line.stableLineId}`,
             title: `${line.name} has a target, and the saved balance is not in this read`,
             why: "Saved money and the monthly contribution are different facts. A recommendation needs the saved balance.",
-            evidence: "No projection is calculated from the target and contribution alone.",
+            evidence: "A target comparison needs a complete saved balance read.",
             action: "Review target and contribution",
             target: { kind: "row", stableLineId: line.stableLineId, field: "target" },
           }),
@@ -196,7 +207,7 @@ export function projectChecks(input: {
           why: "The household cannot see which account is expected to pay this bill.",
           evidence: line.plannedPayerMemberId
             ? "A payer is named. The paying account is not."
-            : "Paid by is not assigned. Either is not a stored choice.",
+            : "Paid by is not assigned, so either person may pay.",
           action: "Review payer and account",
           target: { kind: "row", stableLineId: line.stableLineId, field: "payer" },
         }),
@@ -207,7 +218,7 @@ export function projectChecks(input: {
         severity: "review",
         title: `${line.name} has no planned payer`,
         why: "Who pays is separate from who the purpose is for. An unassigned payer is a planning question, not a personal budget.",
-        evidence: "The agreement permits an unassigned payer. It does not store Either.",
+        evidence: "The agreement permits an unassigned payer when either person may pay.",
         action: "Review payer and account",
         target: { kind: "row", stableLineId: line.stableLineId, field: "payer" },
       })
@@ -219,7 +230,7 @@ export function projectChecks(input: {
       id: "timing",
       title: "Payment timing is not checked",
       why: "A bill can fall before money reaches its paying account, and this page cannot see that from the plan alone.",
-      evidence: "budget_get_liquidity_v1 does not say, per bill, whether expected funds arrive before the payment. Plan forecast and observed cash stay separate.",
+      evidence: "Expected deposits and observed cash are shown separately from the plan.",
       action: "View current funding and paying accounts",
       target: { kind: "position" },
     }),

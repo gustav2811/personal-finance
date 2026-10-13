@@ -65,20 +65,21 @@ export function IncomeFields({
         </p>
       </div>
       {rows.length === 0 ? (
-        <p className="type-body">Household members could not be read, so income cannot be named yet.</p>
+        <p className="type-body">No income assumptions yet. Add one for each expected payment to include it in the plan.</p>
       ) : (
         <ul className="space-y-4">
           {rows.map((row, index) => {
             const name = memberName(members, row.memberId) ?? "A household member"
+            const rowId = `${row.memberId}-${index}`
             return (
-              <li className="grid gap-3 border-b pb-4 sm:grid-cols-2" key={row.memberId}>
-                <p className="type-body sm:col-span-2">{name}</p>
+              <li className="grid gap-3 border-b pb-4 sm:grid-cols-2" key={rowId}>
+                <p className="type-body sm:col-span-2">{name}{rows.filter((item) => item.memberId === row.memberId).length > 1 ? ` · Income ${rows.slice(0, index + 1).filter((item) => item.memberId === row.memberId).length}` : ""}</p>
                 <div className="grid gap-1.5">
-                  <Label htmlFor={`income-amount-${row.memberId}`}>Net amount (R)</Label>
+                  <Label htmlFor={`income-amount-${rowId}`}>Net amount (R)</Label>
                   {editing ? (
                     <Input
                       className={`${CONTROL} type-numeric`}
-                      id={`income-amount-${row.memberId}`}
+                      id={`income-amount-${rowId}`}
                       inputMode="decimal"
                       onBlur={onCommitScale}
                       onChange={(event) => onChange(rows.map((item, itemIndex) => itemIndex === index ? { ...item, centsText: event.target.value } : item))}
@@ -89,11 +90,11 @@ export function IncomeFields({
                   )}
                 </div>
                 <div className="grid gap-1.5">
-                  <Label htmlFor={`income-date-${row.memberId}`}>Expected date</Label>
+                  <Label htmlFor={`income-date-${rowId}`}>Expected date</Label>
                   {editing ? (
                     <Input
                       className={CONTROL}
-                      id={`income-date-${row.memberId}`}
+                      id={`income-date-${rowId}`}
                       onChange={(event) => onChange(rows.map((item, itemIndex) => itemIndex === index ? { ...item, expectedOn: event.target.value } : item))}
                       type="date"
                       value={row.expectedOn}
@@ -103,23 +104,22 @@ export function IncomeFields({
                   )}
                 </div>
                 <p className="type-caption text-muted-foreground sm:col-span-2">{copy.receivingAccountUnknown}</p>
+                {editing ? (
+                  <Button className={CONTROL} onClick={() => onChange(rows.filter((_, itemIndex) => itemIndex !== index))} type="button" variant="outline">Remove this income</Button>
+                ) : null}
               </li>
             )
           })}
         </ul>
       )}
-      {editing && members.length > rows.length ? (
-        <Button
-          className={CONTROL}
-          onClick={() => {
-            const missing = members.find((member) => !rows.some((row) => row.memberId === member.id))
-            if (missing) onChange([...rows, blankIncome(missing.id)])
-          }}
-          type="button"
-          variant="outline"
-        >
-          Add income
-        </Button>
+      {editing && members.length > 0 ? (
+        <div className="flex flex-wrap gap-2">
+          {members.map((member) => (
+            <Button className={CONTROL} key={member.id} onClick={() => onChange([...rows, blankIncome(member.id)])} type="button" variant="outline">
+              Add income for {memberName(members, member.id) ?? "household member"}
+            </Button>
+          ))}
+        </div>
       ) : null}
     </div>
   )
@@ -154,7 +154,7 @@ export function AgreementPlan({
   members: readonly MemberRef[]
   onAddFund: (fund: CutoverFund) => void
   onCommitScale: () => void
-  onCreate: (name: string, group: PurposeGroup) => void
+  onCreate: (name: string, group: PurposeGroup, kind: PlanLine["kind"]) => void
   onExpand: (stableLineId: string | null) => void
   onLines: (lines: PlanLine[]) => void
   onOverrides: (overrides: Map<string, PurposeGroup>) => void
@@ -164,6 +164,7 @@ export function AgreementPlan({
 }) {
   const [name, setName] = useState("")
   const [group, setGroup] = useState<PurposeGroup>("everyday")
+  const [kind, setKind] = useState<PlanLine["kind"]>("consumption")
   const changed = new Set(planDiff(publishedLines, lines).filter((row) => !row.unchanged).map((row) => row.stableLineId))
   const suggestions = funds.filter((fund) => fund.status === "active" && !lines.some((line) => line.fundId === fund.id))
   const placed = lines.map((line) => ({ line, placement: placeGroup(line, overrides.get(line.stableLineId)) }))
@@ -183,13 +184,24 @@ export function AgreementPlan({
             onSubmit={(event) => {
               event.preventDefault()
               if (name.trim().length === 0) return
-              onCreate(name.trim(), group)
+              onCreate(name.trim(), group, kind)
               setName("")
             }}
           >
             <div className="grid gap-1.5">
               <Label htmlFor="new-purpose">Purpose</Label>
               <Input className={CONTROL} id="new-purpose" onChange={(event) => setName(event.target.value)} value={name} />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="new-purpose-kind">Type</Label>
+              <Select onValueChange={(next) => { if (next === "consumption" || next === "contribution" || next === "debt_commitment") setKind(next) }} value={kind}>
+                <SelectTrigger className={`w-44 ${CONTROL}`} id="new-purpose-kind"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="consumption">Everyday spending or bill</SelectItem>
+                  <SelectItem value="contribution">Contribution, such as investing</SelectItem>
+                  <SelectItem value="debt_commitment">Debt payment</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="new-purpose-group">Group</Label>
@@ -297,6 +309,13 @@ export function AgreementPlan({
                           onOverrides(nextOverrides)
                         }}
                         onPatch={(next) => patch(line.stableLineId, next)}
+                        onRemove={() => {
+                          onLines(lines.filter((entry) => entry.stableLineId !== line.stableLineId))
+                          onExpand(null)
+                          const nextOverrides = new Map(overrides)
+                          nextOverrides.delete(line.stableLineId)
+                          onOverrides(nextOverrides)
+                        }}
                         placementAmbiguous={placement.ambiguous}
                       />
                     ) : null}
@@ -322,6 +341,7 @@ function PurposeDetails({
   members,
   onGroup,
   onPatch,
+  onRemove,
   placementAmbiguous,
 }: {
   accounts: readonly CutoverAccount[]
@@ -334,6 +354,7 @@ function PurposeDetails({
   members: readonly MemberRef[]
   onGroup: (group: PurposeGroup) => void
   onPatch: (next: Partial<PlanLine>) => void
+  onRemove: () => void
   placementAmbiguous: boolean
 }) {
   const dated = line.fundingBehaviour === "target_by_date" || Boolean(line.dueOn && line.targetCents)
@@ -344,6 +365,16 @@ function PurposeDetails({
       </p>
       {editing ? (
         <>
+          <Field label="Type">
+            <Select onValueChange={(next) => { if (next === "consumption" || next === "contribution" || next === "debt_commitment") onPatch({ kind: next }) }} value={line.kind}>
+              <SelectTrigger className={CONTROL}><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="consumption">Everyday spending or bill</SelectItem>
+                <SelectItem value="contribution">Contribution, such as investing</SelectItem>
+                <SelectItem value="debt_commitment">Debt payment</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
           <Field label="For whom">
             <Select
               onValueChange={(next) => {
@@ -370,7 +401,7 @@ function PurposeDetails({
                 {members.map((member) => <SelectItem key={member.id} value={member.id}>{memberName(members, member.id)}</SelectItem>)}
               </SelectContent>
             </Select>
-            <p className="type-caption text-muted-foreground">Either is not stored. Leave this unassigned if either person may pay. Paying does not make a shared bill personal.</p>
+            <p className="type-caption text-muted-foreground">Leave this unassigned if either person may pay. Paying does not make a shared bill personal.</p>
           </Field>
           <Field label="Category">
             <Select
@@ -466,7 +497,7 @@ function PurposeDetails({
             </Select>
           </Field>
           {placementAmbiguous ? (
-            <Field label="Group for this visit">
+            <Field label="Household group">
               <Select onValueChange={(next) => { if (next === "bills" || next === "everyday" || next === "saved") onGroup(next) }} value={groupOverride ?? "unset"}>
                 <SelectTrigger className={CONTROL}><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -474,7 +505,7 @@ function PurposeDetails({
                   {GROUPS.map((item) => <SelectItem key={item} value={item}>{groupTitle(item)}</SelectItem>)}
                 </SelectContent>
               </Select>
-              <p className="type-caption text-muted-foreground">{copy.groupNotStored}</p>
+              <p className="type-caption text-muted-foreground">This only changes how purposes are grouped on this page. It does not change who benefits or the accounting.</p>
             </Field>
           ) : null}
         </>
@@ -486,6 +517,12 @@ function PurposeDetails({
         </p>
       )}
       <div className="sm:col-span-2">
+        {editing ? (
+          <div className="space-y-1">
+            <Button className={CONTROL} onClick={onRemove} type="button" variant="outline">Remove from this draft</Button>
+            <p className="type-caption text-muted-foreground">The published agreement, purpose, and saved balance stay unchanged.</p>
+          </div>
+        ) : null}
         {line.fundingBehaviour === "accumulating" && !line.dueOn ? (
           <p className="type-body-small">
             Contribution {formatCents(isCents(line.contributionCents) ? line.contributionCents : null)}. Saved {fact?.savedCents ? formatCents(fact.savedCents) : "not in this read"}. These are different facts.

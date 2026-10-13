@@ -17,6 +17,7 @@ import { buildReviewPayload, newCommandId, refundComponent, reviewDecisionForSav
 import { copy } from "@/domain/budget/copy"
 import { memberName, type MemberRef } from "@/domain/budget/members"
 import { randsToCents } from "@/domain/budget/move"
+import { formatCents } from "@/domain/budget/money"
 import type { RefundablePurchase, ReviewFund } from "@/domain/budget/review"
 import { writeBudgetRpc } from "./rpc"
 
@@ -85,6 +86,7 @@ export function PurchaseReview({
   const [saving, setSaving] = useState(false)
   const [outstanding, setOutstanding] = useState(false)
   const heldRef = useRef<HeldCommand | null>(null)
+  const nextSplitKey = useRef(2)
   const needsSplit = mixed || siblingCount > 1
 
   async function save(
@@ -226,10 +228,26 @@ export function PurchaseReview({
   }
 
   function saveSplit() {
-    const components = rows.flatMap((row) => {
+    if (rows.length < 2) {
+      setError(copy.mixedNeedsSplit)
+      return
+    }
+    const amounts = rows.map((row) => randsToCents(row.amount))
+    if (amounts.some((cents) => !cents || cents === "0")) {
+      setError("Enter an amount for every part of the purchase.")
+      return
+    }
+    const signedAmounts = amounts.map((cents) => cents!.startsWith("-") ? cents! : `-${cents!}`)
+    const total = signedAmounts.reduce((sum, cents) => sum + BigInt(cents), BigInt(0))
+    if (!/^[-]?\d+$/.test(amountCents) || total !== BigInt(amountCents)) {
+      setError(`The parts must add up to ${formatCents(amountCents)}.`)
+      return
+    }
+    const components = rows.flatMap((row, index) => {
       const cents = randsToCents(row.amount)
       if (!cents || cents === "0" || !row.fundId || !row.categoryId || !row.whose) return []
-      const signed = cents.startsWith("-") ? cents : `-${cents}`
+      const signed = signedAmounts[index]
+      if (!signed) return []
       return [
         {
           amountCents: signed,
@@ -241,8 +259,8 @@ export function PurchaseReview({
         },
       ]
     })
-    if (components.length < 2) {
-      setError(copy.mixedNeedsSplit)
+    if (components.length !== rows.length) {
+      setError("Choose a purpose, category, and who benefits for every part.")
       return
     }
     const decision = bankDecision(true)
@@ -307,8 +325,13 @@ export function PurchaseReview({
                   {members.map((member) => <SelectItem key={member.id} value={member.id}>{memberName(members, member.id)}</SelectItem>)}
                 </SelectContent>
               </Select>
+              {rows.length > 2 ? <Button className={TOUCH} onClick={() => setRows(rows.filter((entry) => entry.key !== row.key))} type="button" variant="outline">Remove part</Button> : null}
             </div>
           ))}
+          <Button className={TOUCH} onClick={() => {
+            const key = String.fromCharCode(97 + nextSplitKey.current++)
+            setRows([...rows, { key, amount: "", fundId: "", categoryId: "", whose: null }])
+          }} type="button" variant="outline">Add another part</Button>
           <Input aria-label="Split reason" onChange={(event) => setSplitReason(event.target.value)} placeholder="Why this purchase is mixed" value={splitReason} />
           {utilityEntryId === null && !decisionsConfirmed ? (
             <CategorySelect categories={categories} categoryId={categoryId} onChange={setCategoryId} />

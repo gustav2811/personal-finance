@@ -22,7 +22,7 @@ import { readCutover, type CutoverFund, type CutoverWorkspace } from "@/domain/b
 import { addMonths, currentCycle, cycleLabel } from "@/domain/budget/cycle"
 import { issuesFound, leadChecks, projectChecks, savedFactsFromOverview, type BudgetCheck, type CheckSeverity } from "@/domain/budget/checks"
 import { contributionsInput, projectCapacity } from "@/domain/budget/capacity"
-import type { MemberRef } from "@/domain/budget/members"
+import { memberName, type MemberRef } from "@/domain/budget/members"
 import { localDateKey } from "@/lib/format/date"
 import { formatCents } from "@/domain/budget/money"
 import { planDiff, readDraftReceipt, readPublishReceipt, readStoredPlan, readVersionPage, selectDraft, applicablePublished, latestPublished, cloneLines, blankLine, contributionsReady, toDraftLines, type PlanLine, type StoredPlan, type VersionHeader } from "@/domain/budget/plan"
@@ -127,6 +127,7 @@ export function AgreementView({ initialCycle = "this" }: { initialCycle?: "this"
   const [historicalId, setHistoricalId] = useState<string | null>(null)
   const [lines, setLines] = useState<PlanLine[]>([])
   const [income, setIncome] = useState<IncomeForm[]>([])
+  const [sourceReferences, setSourceReferences] = useState<StoredPlan["sourceReferences"]>([])
   const [reason, setReason] = useState("")
   const [overrides, setOverrides] = useState<Map<string, PurposeGroup>>(new Map())
   const [draft, setDraft] = useState<Hold["receipt"]>(null)
@@ -136,10 +137,12 @@ export function AgreementView({ initialCycle = "this" }: { initialCycle?: "this"
   const [showAllChecks, setShowAllChecks] = useState(false)
   const [positionOpen, setPositionOpen] = useState(false)
   const [pending, setPending] = useState(false)
+  const [checkingConflict, setCheckingConflict] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const [prerequisiteHref, setPrerequisiteHref] = useState<string | null>(null)
   const [status, setStatus] = useState<string | null>(null)
   const [conflict, setConflict] = useState<StoredPlan | null>(null)
+  const [conflictKind, setConflictKind] = useState<"draft" | "published" | null>(null)
   const [committedScale, setCommittedScale] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const pendingRef = useRef(false)
@@ -197,6 +200,28 @@ export function AgreementView({ initialCycle = "this" }: { initialCycle?: "this"
 
   const members: MemberRef[] = workspace?.members ?? []
   const memberIds = members.map((member) => member.id)
+  const groupingKey = `budget-purpose-groups:${[...memberIds].sort().join(":") || "household"}`
+  const [groupsReadyFor, setGroupsReadyFor] = useState<string | null>(null)
+  useEffect(() => {
+    let stored: Record<string, PurposeGroup> = {}
+    try {
+      const parsed: unknown = JSON.parse(localStorage.getItem(groupingKey) ?? "{}")
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) stored = parsed as Record<string, PurposeGroup>
+    } catch {
+      stored = {}
+    }
+    const valid = new Map(Object.entries(stored).filter((entry): entry is [string, PurposeGroup] => entry[1] === "bills" || entry[1] === "everyday" || entry[1] === "saved"))
+    setOverrides(valid)
+    setGroupsReadyFor(groupingKey)
+  }, [groupingKey])
+  useEffect(() => {
+    if (groupsReadyFor !== groupingKey) return
+    try {
+      localStorage.setItem(groupingKey, JSON.stringify(Object.fromEntries(overrides)))
+    } catch {
+      // Keep the in-memory household grouping when browser storage is unavailable.
+    }
+  }, [groupingKey, groupsReadyFor, overrides])
   const applicable = applicablePublished(headers, cycleStart)
   const publishedPlan = applicable ? plans.get(applicable.versionId) ?? null : null
   const draftPick = selectDraft(headers, cycleStart)
@@ -245,6 +270,7 @@ export function AgreementView({ initialCycle = "this" }: { initialCycle?: "this"
     groupOverrides: overrides,
     saved,
     reviewItems,
+    historical: Boolean(historicalPlan),
   }) : []
   const visibleChecks = showAllChecks ? checks : leadChecks(checks)
   const cycleText = cycleLabel(cycleStart, addMonths(cycleStart, 1))
@@ -280,12 +306,13 @@ export function AgreementView({ initialCycle = "this" }: { initialCycle?: "this"
     setIncome(incomeFromPlan(source?.incomeAssumptions ?? [], memberIds.length > 0 ? memberIds : (source?.incomeAssumptions.map((entry) => entry.memberId) ?? [])))
     if (!source && memberIds.length > 0) setIncome(memberIds.map((id) => blankIncome(id)))
     setReason(source?.reason || nextReason)
+    setSourceReferences(source?.sourceReferences ?? [])
     setDraft(receipt)
     setParentId(receipt ? source?.parentVersionId ?? publishedPlan?.versionId ?? null : publishedPlan?.versionId ?? null)
-    setOverrides(new Map())
     setMode("edit")
     setReviewing(false)
     setConflict(null)
+    setConflictKind(null)
     setHistoricalId(null)
   }
 
@@ -303,10 +330,12 @@ export function AgreementView({ initialCycle = "this" }: { initialCycle?: "this"
     setCycleStart(today)
     setLines([])
     setIncome(memberIds.map((id) => blankIncome(id)))
+    setSourceReferences([])
     setReason(copy.createBudget)
     setDraft(null)
     setParentId(null)
-    setOverrides(new Map())
+    setConflict(null)
+    setConflictKind(null)
     setMode("edit")
     setReviewing(false)
     setHistoricalId(null)
@@ -351,18 +380,25 @@ export function AgreementView({ initialCycle = "this" }: { initialCycle?: "this"
     const nextHeaders = await loadHeaders()
     setHeaders(nextHeaders)
     const id = draft?.versionId
-    if (id && !raw.includes("draft published")) {
-      const newer = readStoredPlan(await readVersion(id))
-      setConflict(newer)
-      if (newer.draftRevision) setDraft({ versionId: newer.versionId, draftRevision: newer.draftRevision })
-      return
+    if (id && !raw.includes("latest version")) {
+      const currentDraft = readStoredPlan(await readVersion(id))
+      if (currentDraft.state === "draft") {
+        setConflict(currentDraft)
+        setConflictKind("draft")
+        setPlans((current) => new Map(current).set(currentDraft.versionId, currentDraft))
+        if (currentDraft.draftRevision) setDraft({ versionId: currentDraft.versionId, draftRevision: currentDraft.draftRevision })
+        return
+      }
     }
     const nextApplicable = applicablePublished(nextHeaders, cycleStart)
-    if (!nextApplicable) return
+    if (!nextApplicable) {
+      setActionError("Your edits are still here, but this cycle has no published agreement to compare. Reload before continuing.")
+      return
+    }
     const newer = readStoredPlan(await readVersion(nextApplicable.versionId))
     setPlans((current) => new Map(current).set(newer.versionId, newer))
     setConflict(newer)
-    setParentId(newer.versionId)
+    setConflictKind("published")
     if (raw.includes("draft published")) setDraft(null)
   }
 
@@ -389,13 +425,13 @@ export function AgreementView({ initialCycle = "this" }: { initialCycle?: "this"
       startsOnCycle: cycleStart,
       lines: cloneLines(lines),
       incomeAssumptions: assumptions,
-      sourceReferences: publishedPlan?.sourceReferences ?? [],
+      sourceReferences,
     }))
     setDraft(receipt)
   }
 
   function saveHold(): Hold {
-    const fingerprint = JSON.stringify({ cycleStart, reason: reason.trim(), lines, income: incomePayload(income), parentId, latest })
+    const fingerprint = JSON.stringify({ cycleStart, reason: reason.trim(), lines, income: incomePayload(income), sourceReferences, parentId, latest })
     const previous = holdRef.current
     if (previous && previous.fingerprint === fingerprint) return previous
     return {
@@ -411,7 +447,7 @@ export function AgreementView({ initialCycle = "this" }: { initialCycle?: "this"
           reason,
           lines: toDraftLines(lines),
           incomeAssumptions: incomePayload(income),
-          sourceReferences: publishedPlan?.sourceReferences ?? [],
+          sourceReferences,
         }),
       }, newCommandId),
       receipt: draft,
@@ -432,7 +468,10 @@ export function AgreementView({ initialCycle = "this" }: { initialCycle?: "this"
   function failSave(hold: Hold, caught: unknown) {
     const raw = commandFailureText(caught)
     if (raw.includes("budget_stale")) {
-      void rememberConflict(raw).catch(() => undefined)
+      setCheckingConflict(true)
+      void rememberConflict(raw)
+        .catch(() => setActionError("Your edits are still here, but the changed agreement could not be loaded. Reload before continuing."))
+        .finally(() => setCheckingConflict(false))
       setActionError(copy.numbersChanged)
       holdRef.current = null
     } else if (commandFailureIsUncertain(raw)) {
@@ -448,7 +487,7 @@ export function AgreementView({ initialCycle = "this" }: { initialCycle?: "this"
   }
 
   async function onSave(): Promise<boolean> {
-    if (pendingRef.current) return false
+    if (pendingRef.current || checkingConflict) return false
     if (holdRef.current?.uncertain && holdRef.current.phase === "publish") {
       setActionError(copy.retryOutstandingMovement)
       return false
@@ -477,7 +516,7 @@ export function AgreementView({ initialCycle = "this" }: { initialCycle?: "this"
   }
 
   async function onPublish() {
-    if (pendingRef.current) return
+    if (pendingRef.current || checkingConflict) return
     const problem = incomeProblem(income)
     if (!holdRef.current?.uncertain && (problem || !contributionsReady(lines) || !reason.trim())) {
       setActionError(problem ?? copy.publishReason)
@@ -529,7 +568,7 @@ export function AgreementView({ initialCycle = "this" }: { initialCycle?: "this"
     }
   }
 
-  async function onCreate(name: string, group: PurposeGroup) {
+  async function onCreate(name: string, group: PurposeGroup, kind: PlanLine["kind"]) {
     if (pendingRef.current) return
     pendingRef.current = true
     setPending(true)
@@ -538,7 +577,7 @@ export function AgreementView({ initialCycle = "this" }: { initialCycle?: "this"
       const fundId = readString(readRecord(result) ?? {}, "fund_id")
       if (!fundId) throw new Error(copy.couldNotSave)
       const created = blankLine({ fundId, name, stableLineId: crypto.randomUUID() })
-      const funding = startingFunding(group)
+      const funding = startingFunding(group, kind)
       setLines((current) => [...current, { ...created, ...funding, contributionCents: "" }])
       setOverrides((current) => new Map(current).set(created.stableLineId, group))
       setExpandedId(created.stableLineId)
@@ -719,7 +758,7 @@ export function AgreementView({ initialCycle = "this" }: { initialCycle?: "this"
             members={members}
             onAddFund={onAddFund}
             onCommitScale={commitScale}
-            onCreate={(nextName, group) => void onCreate(nextName, group)}
+            onCreate={(nextName, group, kind) => void onCreate(nextName, group, kind)}
             onExpand={setExpandedId}
             onLines={setLines}
             onOverrides={setOverrides}
@@ -770,12 +809,52 @@ export function AgreementView({ initialCycle = "this" }: { initialCycle?: "this"
           <h2 className="type-section-title">{editing ? "Change summary" : "This cycle"}</h2>
           {conflict ? (
             <div className="space-y-2">
-              <p className="type-body">A newer agreement was saved. Your edits are still here.</p>
-              <ul className="space-y-1">
+              <p className="type-body">
+                {conflictKind === "draft"
+                  ? "Another edit was saved to this draft. Your edits are still here."
+                  : `Version ${conflict.versionNumber} is now the applicable published agreement. Your edits are still here.`}
+              </p>
+              <p className="type-caption text-muted-foreground">Saved agreement · {conflict.lines.length} purposes · {conflict.incomeAssumptions.length} income assumptions · {conflict.sourceReferences.length} references</p>
+              <ul className="space-y-1" aria-label="Saved agreement purpose comparison">
                 {planDiff(conflict.lines, lines).filter((row) => !row.unchanged).map((row) => <li key={row.stableLineId}>{row.text}</li>)}
               </ul>
-              <Button className={CONTROL} onClick={() => setConflict(null)} type="button" variant="outline">Keep my edits</Button>
-              <Button className={CONTROL} onClick={() => { setLines(cloneLines(conflict.lines)); setIncome(incomeFromPlan(conflict.incomeAssumptions, memberIds)); setConflict(null) }} type="button" variant="outline">Use the newer agreement</Button>
+              <ul className="space-y-1" aria-label="Saved agreement income assumptions">
+                {conflict.incomeAssumptions.map((entry, index) => (
+                  <li key={`${entry.memberId}-${entry.expectedOn}-${index}`}>{memberName(members, entry.memberId) ?? "Household member"}: {formatCents(entry.expectedNetCents)} on {entry.expectedOn} · {entry.provenance}</li>
+                ))}
+              </ul>
+              <p className="type-caption text-muted-foreground">Your version · {lines.length} purposes · {incomePayload(income).length} income assumptions · {sourceReferences.length} references</p>
+              <ul className="space-y-1" aria-label="Your income assumptions">
+                {incomePayload(income).map((entry, index) => (
+                  <li key={`${entry.memberId}-${entry.expectedOn}-${index}`}>{memberName(members, entry.memberId) ?? "Household member"}: {formatCents(entry.expectedNetCents)} on {entry.expectedOn} · {entry.provenance}</li>
+                ))}
+              </ul>
+              <Button className={CONTROL} onClick={() => {
+                if (conflictKind === "published") {
+                  setParentId(conflict.versionId)
+                } else if (conflict.draftRevision) {
+                  setDraft({ versionId: conflict.versionId, draftRevision: conflict.draftRevision })
+                  setParentId(conflict.parentVersionId)
+                }
+                holdRef.current = null
+                setConflict(null)
+                setConflictKind(null)
+              }} type="button" variant="outline">Keep my edits against this version</Button>
+              <Button className={CONTROL} onClick={() => {
+                setLines(cloneLines(conflict.lines))
+                setIncome(incomeFromPlan(conflict.incomeAssumptions, memberIds))
+                setSourceReferences(conflict.sourceReferences)
+                setReason(conflict.reason ?? reason)
+                if (conflictKind === "published") {
+                  setParentId(conflict.versionId)
+                } else if (conflict.draftRevision) {
+                  setDraft({ versionId: conflict.versionId, draftRevision: conflict.draftRevision })
+                  setParentId(conflict.parentVersionId)
+                }
+                holdRef.current = null
+                setConflict(null)
+                setConflictKind(null)
+              }} type="button" variant="outline">Use this saved version</Button>
             </div>
           ) : null}
           <ul className="space-y-2">
@@ -791,7 +870,7 @@ export function AgreementView({ initialCycle = "this" }: { initialCycle?: "this"
               </div>
               <p className="type-caption text-muted-foreground">{copy.contributionNotMove} Cash balances are not part of these totals.</p>
               <div className="flex flex-wrap gap-2">
-                <Button className={CONTROL} disabled={pending} onClick={() => void onSave()} type="button" variant="outline">{copy.saveDraft}</Button>
+                <Button className={CONTROL} disabled={pending || checkingConflict} onClick={() => void onSave()} type="button" variant="outline">{copy.saveDraft}</Button>
                 <Button
                   className={CONTROL}
                   onClick={() => {
@@ -810,7 +889,7 @@ export function AgreementView({ initialCycle = "this" }: { initialCycle?: "this"
                 </Button>
               </div>
               {reviewing ? (
-                <Button className={CONTROL} disabled={pending} onClick={() => void onPublish()} type="button">{copy.publishBudget}</Button>
+                <Button className={CONTROL} disabled={pending || checkingConflict} onClick={() => void onPublish()} type="button">{copy.publishBudget}</Button>
               ) : null}
               <p className="type-caption text-muted-foreground">{where === "later" ? `Effective cycle ${cycleText}. This does not change the current cycle.` : `Effective cycle ${cycleText}.`}</p>
             </>

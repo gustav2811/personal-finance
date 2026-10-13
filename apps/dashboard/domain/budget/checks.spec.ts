@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
-import { issuesFound, leadChecks, projectChecks } from "./checks"
+import { issuesFound, leadChecks, projectChecks, savedFactsFromOverview } from "./checks"
 import type { PlanLine } from "./plan"
 
 function line(patch: Partial<PlanLine> = {}): PlanLine {
@@ -44,6 +44,23 @@ function base(patch: Partial<Parameters<typeof projectChecks>[0]> = {}) {
 }
 
 describe("projectChecks", () => {
+  it("withholds saved balances from incomplete overview reads", () => {
+    assert.equal(savedFactsFromOverview({ complete: false, reasons: [], funds: [{ fund_id: "fund-1", balance_cents: "25000" }] }), null)
+    assert.equal(savedFactsFromOverview({ complete: true, reasons: [{ code: "resource_balance_unknown" }], funds: [{ fund_id: "fund-1", balance_cents: "25000" }] }), null)
+    assert.equal(savedFactsFromOverview({ complete: true, reasons: [], funds: [{ fund_id: "fund-1", balance_cents: "25000" }], unassigned_cents: "0" })?.get("fund-1")?.savedCents, "25000")
+  })
+
+  it("does not infer a historical target outcome from today's saved balance", () => {
+    const checks = base({
+      today: "2026-10-11",
+      historical: true,
+      lines: [line({ fundingBehaviour: "target_by_date", targetCents: "600000", dueOn: "2026-01-01" })],
+      saved: new Map([["fund-1", { fundId: "fund-1", savedCents: "250000", restrictedCents: "0", accessibleOn: null }]]),
+    })
+    assert.equal(checks.some((check) => check.id.startsWith("target-past")), false)
+    assert.equal(checks.find((check) => check.id.startsWith("target-historical"))?.severity, "info")
+  })
+
   it("names an affordability gap without blocking language and without treating unknown income as zero", () => {
     const over = base({ gapCents: "-120000" })
     assert.equal(over[0]?.id, "affordability")

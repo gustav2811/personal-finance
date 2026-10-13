@@ -10,10 +10,11 @@ export type IncomeForm = {
   memberId: string
   centsText: string
   expectedOn: string
+  provenance: string
 }
 
 export function blankIncome(memberId: string, expectedOn = ""): IncomeForm {
-  return { memberId, centsText: "", expectedOn }
+  return { memberId, centsText: "", expectedOn, provenance: "household" }
 }
 
 function dateOrNull(value: string): string | null {
@@ -42,28 +43,24 @@ export function incomePayload(rows: readonly IncomeForm[]): IncomeAssumptionInpu
     const cents = randsToCents(row.centsText)
     const expectedOn = dateOrNull(row.expectedOn)
     if (!cents || cents.startsWith("-") || !expectedOn) return []
-    return [{ memberId: row.memberId, expectedNetCents: cents, expectedOn, provenance: "household" }]
+    return [{ memberId: row.memberId, expectedNetCents: cents, expectedOn, provenance: row.provenance }]
   })
 }
 
 export function incomeFromPlan(entries: readonly IncomeAssumptionInput[], memberIds: readonly string[]): IncomeForm[] {
-  const byMember = new Map(entries.map((entry) => [entry.memberId, entry]))
   const ids = [...memberIds]
   for (const entry of entries) {
     if (!ids.includes(entry.memberId)) ids.push(entry.memberId)
   }
   if (ids.length === 0) {
-    return entries.map((entry) => ({ memberId: entry.memberId, centsText: centsToRandsInput(entry.expectedNetCents), expectedOn: entry.expectedOn }))
+    return entries.map((entry) => ({ memberId: entry.memberId, centsText: centsToRandsInput(entry.expectedNetCents), expectedOn: entry.expectedOn, provenance: entry.provenance }))
   }
-  return ids.map((memberId) => {
-    const entry = byMember.get(memberId)
-    return entry
-      ? { memberId, centsText: centsToRandsInput(entry.expectedNetCents), expectedOn: entry.expectedOn }
-      : blankIncome(memberId)
-  })
+  const rows = entries.map((entry) => ({ memberId: entry.memberId, centsText: centsToRandsInput(entry.expectedNetCents), expectedOn: entry.expectedOn, provenance: entry.provenance }))
+  for (const memberId of ids) if (!entries.some((entry) => entry.memberId === memberId)) rows.push(blankIncome(memberId))
+  return rows
 }
 
-export function startingFunding(group: PurposeGroup): Pick<PlanLine, "kind" | "fundingBehaviour" | "recurrence"> {
-  if (group === "saved") return { kind: "consumption", fundingBehaviour: "accumulating", recurrence: "cycle" }
-  return { kind: "consumption", fundingBehaviour: "cycle_allowance", recurrence: "cycle" }
+export function startingFunding(group: PurposeGroup, kind: PlanLine["kind"] = "consumption"): Pick<PlanLine, "kind" | "fundingBehaviour" | "recurrence"> {
+  if (group === "saved") return { kind, fundingBehaviour: "accumulating", recurrence: "cycle" }
+  return { kind, fundingBehaviour: "cycle_allowance", recurrence: "cycle" }
 }
