@@ -45,6 +45,27 @@ describe("buildDraftPayload", () => {
 })
 
 describe("review economics", () => {
+  it("accepts a three-part mixed purchase only when every component sums to the source amount", () => {
+    const components = [
+      { amountCents: "-5000", beneficiaryScope: "shared" as const, effectKind: "consumption" as const, fundId: FUND, categoryId: LINE },
+      { amountCents: "-3000", beneficiaryScope: "shared" as const, effectKind: "consumption" as const, fundId: FUND, categoryId: LINE },
+      { amountCents: "-2000", beneficiaryScope: "member" as const, beneficiaryMemberId: LINE, effectKind: "consumption" as const, fundId: FUND, categoryId: LINE },
+    ]
+    const payload = buildReviewPayload({
+      transactionId: LINE,
+      expectedSourceFingerprint: "source-v1",
+      sourceAmountCents: "-10000",
+      mixed: true,
+      components,
+      evidence: { splitReviewReason: "Receipt has three purposes" },
+    })
+    assert.equal((payload.components as unknown[]).length, 3)
+    assert.throws(
+      () => buildReviewPayload({ transactionId: LINE, expectedSourceFingerprint: "source-v1", sourceAmountCents: "-10001", mixed: true, components }),
+      (error: unknown) => error instanceof Error && error.message === "budget_invalid: split",
+    )
+  })
+
   it("refuses a mixed purchase as one line and still allows a drifted single purchase", () => {
     const components = [
       {
@@ -104,6 +125,26 @@ describe("review economics", () => {
         }),
       (error: unknown) => error instanceof Error && error.message === "budget_invalid: refund",
     )
+  })
+})
+
+describe("draft agreement payload", () => {
+  it("round-trips multiple dated incomes and existing source references", () => {
+    const payload = buildDraftPayload({
+      startsOnCycle: "2026-10-23",
+      reason: "Update contributions",
+      lines: [line()],
+      incomeAssumptions: [
+        { memberId: LINE, expectedNetCents: "720000", expectedOn: "2026-10-25", provenance: "salary" },
+        { memberId: LINE, expectedNetCents: "180000", expectedOn: "2026-10-30", provenance: "rental income" },
+      ],
+      sourceReferences: [{ source: "household note", reference: "income discussion" }],
+    })
+    assert.deepEqual(payload.income_assumptions, [
+      { member_id: LINE, expected_net_cents: "720000", expected_on: "2026-10-25", provenance: "salary" },
+      { member_id: LINE, expected_net_cents: "180000", expected_on: "2026-10-30", provenance: "rental income" },
+    ])
+    assert.deepEqual(payload.source_references, [{ source: "household note", reference: "income discussion" }])
   })
 })
 

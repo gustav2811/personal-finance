@@ -33,6 +33,10 @@ export type VersionHeader = {
   state: "draft" | "published"
   versionNumber: string | null
   startsOnCycle: string | null
+  draftRevision: string | null
+  parentVersionId: string | null
+  reason: string | null
+  createdAt: string | null
 }
 
 export type AgreementSelection = {
@@ -49,6 +53,24 @@ export type PublishedPlan = {
   incomeAssumptions: IncomeAssumptionInput[]
   sourceReferences: SourceReferenceInput[]
 }
+
+export type StoredPlan = {
+  versionId: string
+  state: "draft" | "published"
+  versionNumber: string | null
+  draftRevision: string | null
+  parentVersionId: string | null
+  reason: string | null
+  startsOnCycle: string
+  lines: PlanLine[]
+  incomeAssumptions: IncomeAssumptionInput[]
+  sourceReferences: SourceReferenceInput[]
+}
+
+export type DraftPick =
+  | { status: "none" }
+  | { status: "ready"; draft: VersionHeader }
+  | { status: "ambiguous" }
 
 export type PlanDiff = {
   stableLineId: string
@@ -141,6 +163,10 @@ function versionHeader(value: unknown): VersionHeader {
     state,
     versionNumber,
     startsOnCycle: startsOnCycle ? requireDate(startsOnCycle) : null,
+    draftRevision: countString(record.draft_revision),
+    parentVersionId: readString(record, "parent_version_id"),
+    reason: readString(record, "reason"),
+    createdAt: readString(record, "created_at"),
   }
 }
 
@@ -232,13 +258,7 @@ export function latestPublished(versions: readonly VersionHeader[]): VersionHead
   return best
 }
 
-export function readPublishedPlan(payload: unknown): PublishedPlan {
-  const root = readRecord(payload)
-  const version = root ? readRecord(root.version) : null
-  if (!version || version.state !== "published") throw unreadable()
-  const versionId = readString(version, "version_id")
-  const startsOnCycle = readString(version, "starts_on_cycle")
-  if (!versionId || !startsOnCycle) throw unreadable()
+function storedLines(version: Record<string, unknown>): PlanLine[] {
   const lines = Array.isArray(version.lines) ? version.lines.map(lineOf) : null
   if (!lines) throw unreadable()
   const fundIds = new Set<string>()
@@ -248,14 +268,76 @@ export function readPublishedPlan(payload: unknown): PublishedPlan {
     fundIds.add(line.fundId)
     lineIds.add(line.stableLineId)
   }
+  return lines
+}
+
+export function readPublishedPlan(payload: unknown): PublishedPlan {
+  const stored = readStoredPlan(payload)
+  if (stored.state !== "published" || !stored.versionNumber) throw unreadable()
+  return {
+    versionId: stored.versionId,
+    versionNumber: stored.versionNumber,
+    startsOnCycle: stored.startsOnCycle,
+    lines: stored.lines,
+    incomeAssumptions: stored.incomeAssumptions,
+    sourceReferences: stored.sourceReferences,
+  }
+}
+
+export function readStoredPlan(payload: unknown): StoredPlan {
+  const root = readRecord(payload)
+  const version = root ? readRecord(root.version) : null
+  if (!version || (version.state !== "published" && version.state !== "draft")) throw unreadable()
+  const versionId = readString(version, "version_id")
+  const startsOnCycle = readString(version, "starts_on_cycle")
+  if (!versionId || !startsOnCycle) throw unreadable()
+  const versionNumber = countString(version.version_number)
+  if (version.state === "published" && !versionNumber) throw unreadable()
+  const draftRevision = countString(version.draft_revision)
+  if (version.state === "draft" && !draftRevision) throw unreadable()
   return {
     versionId,
-    versionNumber: requireCount(version.version_number),
+    state: version.state,
+    versionNumber,
+    draftRevision,
+    parentVersionId: readString(version, "parent_version_id"),
+    reason: readString(version, "reason"),
     startsOnCycle: requireDate(startsOnCycle),
-    lines,
+    lines: storedLines(version),
     incomeAssumptions: Array.isArray(version.income_assumptions) ? version.income_assumptions.map(incomeOf) : [],
     sourceReferences: Array.isArray(version.source_references) ? version.source_references.map(sourceOf) : [],
   }
+}
+
+function createdMillis(value: string | null): number | null {
+  if (!value) return null
+  const time = Date.parse(value)
+  return Number.isNaN(time) ? null : time
+}
+
+export function selectDraft(versions: readonly VersionHeader[], cycleStart: string): DraftPick {
+  const cycle = assertIsoDate(cycleStart)
+  const matches = versions.filter((version) => version.state === "draft" && version.startsOnCycle === cycle)
+  if (matches.length === 0) return { status: "none" }
+  if (matches.length === 1) return { status: "ready", draft: matches[0] }
+  const ranked = matches.flatMap((version) => {
+    const created = createdMillis(version.createdAt)
+    return created === null ? [] : [{ version, created }]
+  })
+  if (ranked.length !== matches.length) return { status: "ambiguous" }
+  ranked.sort((left, right) => right.created - left.created || right.version.versionId.localeCompare(left.version.versionId))
+  const draft = ranked[0]?.version
+  if (!draft) return { status: "ambiguous" }
+  return { status: "ready", draft }
+}
+
+export function readPublishReceipt(payload: unknown): { versionId: string; versionNumber: string } {
+  const record = readRecord(payload)
+  if (!record) throw new Error(copy.couldNotSave)
+  const versionId = readString(record, "version_id")
+  const versionNumber = countString(record.version_number)
+  if (!versionId || !versionNumber) throw new Error(copy.couldNotSave)
+  return { versionId, versionNumber }
 }
 
 export function cloneLines(lines: readonly PlanLine[]): PlanLine[] {

@@ -12,9 +12,12 @@ import {
   publishReady,
   readDraftReceipt,
   readPublishedPlan,
+  readStoredPlan,
   readVersionPage,
+  selectDraft,
   toDraftLines,
   type PlanLine,
+  type VersionHeader,
 } from "./plan"
 
 function line(contributionCents: string, stableLineId = "line-1"): PlanLine {
@@ -212,8 +215,26 @@ describe("published plan", () => {
   })
 
   it("uses this cycle or the following cycle and does not block a larger contribution", () => {
-    const standing = { versionId: "standing", state: "published" as const, versionNumber: "1", startsOnCycle: "2026-08-23" }
-    const future = { versionId: "future", state: "published" as const, versionNumber: "2", startsOnCycle: "2026-10-23" }
+    const standing = {
+      versionId: "standing",
+      state: "published" as const,
+      versionNumber: "1",
+      startsOnCycle: "2026-08-23",
+      draftRevision: null,
+      parentVersionId: null,
+      reason: null,
+      createdAt: null,
+    }
+    const future = {
+      versionId: "future",
+      state: "published" as const,
+      versionNumber: "2",
+      startsOnCycle: "2026-10-23",
+      draftRevision: null,
+      parentVersionId: null,
+      reason: null,
+      createdAt: null,
+    }
     const thisCycle = selectAgreement([standing, future], "2026-09-23", "this")
     const nextCycle = selectAgreement([standing, future], "2026-09-23", "next")
     assert.equal(thisCycle.cycleStart, "2026-09-23")
@@ -227,5 +248,48 @@ describe("published plan", () => {
     assert.equal(chosenStartsOn("2026-12-23", "next"), "2027-01-23")
     assert.equal(publishReady("", [line("999999999")]), false)
     assert.equal(publishReady("reviewed", [line("999999999")]), true)
+  })
+})
+
+describe("stored draft", () => {
+  function header(patch: Partial<VersionHeader> & Pick<VersionHeader, "versionId" | "state">): VersionHeader {
+    return {
+      versionNumber: null,
+      startsOnCycle: "2026-10-23",
+      draftRevision: "1",
+      parentVersionId: null,
+      reason: "draft",
+      createdAt: "2026-10-11T08:00:00.000Z",
+      ...patch,
+    }
+  }
+
+  it("reads a draft without treating it as published", () => {
+    const stored = readStoredPlan({
+      version: {
+        version_id: "draft-1",
+        state: "draft",
+        version_number: null,
+        draft_revision: 2,
+        starts_on_cycle: "2026-10-23",
+        reason: "Create this cycle's budget",
+        lines: [wireLine("50000")],
+      },
+    })
+    assert.equal(stored.state, "draft")
+    assert.equal(stored.draftRevision, "2")
+    assert.equal(stored.lines[0]?.contributionCents, "50000")
+    assert.throws(() => readPublishedPlan({ version: { version_id: "draft-1", state: "draft", starts_on_cycle: "2026-10-23", draft_revision: 2, lines: [] } }))
+  })
+
+  it("resumes the newest draft for the cycle and does not guess when timestamps are missing", () => {
+    const older = header({ versionId: "older", state: "draft", createdAt: "2026-10-10T08:00:00.000Z" })
+    const newer = header({ versionId: "newer", state: "draft", createdAt: "2026-10-11T08:00:00.000Z" })
+    const otherCycle = header({ versionId: "next", state: "draft", startsOnCycle: "2026-11-23" })
+    assert.equal(selectDraft([older, newer, otherCycle], "2026-10-23").status, "ready")
+    const picked = selectDraft([older, newer, otherCycle], "2026-10-23")
+    assert.equal(picked.status === "ready" ? picked.draft.versionId : null, "newer")
+    assert.equal(selectDraft([header({ versionId: "a", state: "draft", createdAt: null }), header({ versionId: "b", state: "draft", createdAt: null })], "2026-10-23").status, "ambiguous")
+    assert.equal(selectDraft([otherCycle], "2026-10-23").status, "none")
   })
 })

@@ -39,6 +39,20 @@ export function centsToRandsInput(cents: string): string {
   return negative ? `-${whole}.${frac}` : `${whole}.${frac}`
 }
 
+export function addCents(values: readonly string[]): string | null {
+  let total = BigInt(0)
+  for (const value of values) {
+    if (!isCents(value) || isNegativeCents(value)) return null
+    total += BigInt(value)
+  }
+  return total.toString()
+}
+
+export function absoluteCents(cents: string): string | null {
+  if (!isCents(cents)) return null
+  return isNegativeCents(cents) ? cents.slice(1) : cents.replace(/^-/, "")
+}
+
 export function formatCents(cents: string | null): string {
   if (cents === null || !isCents(cents)) return "—"
   const negative = isNegativeCents(cents)
