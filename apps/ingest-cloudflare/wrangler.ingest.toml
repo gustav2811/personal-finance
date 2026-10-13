@@ -7,6 +7,12 @@ compatibility_flags = ["nodejs_compat"]
 # Preserve plain-text vars set in the dashboard (Wrangler’s default is to delete unlisted vars).
 keep_vars = true
 
+# The shared automation receiver currently enables Gustav's mailbox evidence.
+# Cara's deliveries remain captured and marked unverified until her baseline is
+# explicitly enabled.
+[vars]
+INGEST_OWNER_PROFILES = "gustav"
+
 [observability]
 [observability.logs]
 enabled = true

@@ -178,6 +178,25 @@ async function processEmailIngestMessage(
       continuationScheduled = true;
     },
   });
+  // A routed Bank Zero receipt should wake publication immediately. The
+  // scheduled publisher remains the recovery backstop; a wake failure must
+  // not turn durable evidence processing into an email retry.
+  if (!continuationScheduled && body.route_key && body.route_key !== "unverified") {
+    try {
+      await env.BANK_ZERO_PUBLISH_QUEUE.send(
+        createBankZeroPublishJob(body.received_at ?? new Date().toISOString()),
+      );
+    } catch (error) {
+      console.log(JSON.stringify({
+        level: "warn",
+        msg: "bank_zero_publish_wake_failed",
+        component: "ingest-consumer",
+        job_id: body.job_id,
+        route_key: body.route_key,
+        error: error instanceof Error ? error.message : String(error),
+      }));
+    }
+  }
   return continuationScheduled;
 }
 

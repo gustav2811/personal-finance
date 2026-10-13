@@ -8,7 +8,7 @@ import {
 import { type ConsumerEnv, getConsumerConfig } from "../config.js";
 import { logSummary, runConsumptionSync } from "../ismrt/run.js";
 import { budgetedFetch, SubrequestBudget } from "./budget.js";
-import type { Job, IsmrtSyncJob } from "./jobs.js";
+import { createBankZeroPublishJob, type Job, type IsmrtSyncJob } from "./jobs.js";
 import {
   handleTuyaDay,
   planTuyaDays,
@@ -84,6 +84,22 @@ export async function runJob(
         level: "info", msg: "bank_zero_publication_batch_completed",
         component: "ingest-consumer", job_id: job.jobId, ...result,
       }));
+      if (result.claimed > 0 && (result.deferred > 0 || result.claimed >= 5)) {
+        try {
+          await env.BANK_ZERO_PUBLISH_QUEUE.send(
+            createBankZeroPublishJob(new Date().toISOString()),
+            { delaySeconds: 1 },
+          );
+        } catch (error) {
+          // The minute cron remains the recovery backstop. Do not fail the
+          // completed batch because its best-effort follow-up wake failed.
+          console.log(JSON.stringify({
+            level: "warn", msg: "bank_zero_publish_followup_wake_failed",
+            component: "ingest-consumer", job_id: job.jobId,
+            error: error instanceof Error ? error.message : String(error),
+          }));
+        }
+      }
       return;
     }
     case "bank-zero-statement":
