@@ -19,6 +19,17 @@ export class ConsumptionRpc {
     return this.call(RPC_NAME, { p_payload: batch });
   }
 
+  provisionIsmrtOwnership(
+    householdId: string,
+    walletExternalId: string,
+  ): Promise<unknown> {
+    return this.call("provision_ismrt_consumption_ownership_v1", {
+      p_household_id: householdId,
+      p_wallet_external_id: walletExternalId,
+      p_evidence: "ISMRT_HOUSEHOLD_ID configured on the ingest consumer",
+    });
+  }
+
   recordFailure(input: {
     startedAt: string;
     windowStart: string;

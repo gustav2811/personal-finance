@@ -19,6 +19,7 @@ export interface ConsumerEnv {
   CATEGORISATION_MIN_CONFIDENCE?: string;
   ISMRT_USERNAME?: string;
   ISMRT_PASSWORD?: string;
+  ISMRT_HOUSEHOLD_ID?: string;
   ISMRT_LOOKBACK_DAYS?: string;
   TUYA_DEVICE_ID: string;
   TUYA_ACCESS_ID: string;
