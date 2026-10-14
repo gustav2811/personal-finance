@@ -7,6 +7,7 @@ import type { SubrequestUsage } from "../jobs/budget.js";
 export type ConsumptionEnv = {
   ISMRT_USERNAME: string;
   ISMRT_PASSWORD: string;
+  ISMRT_HOUSEHOLD_ID: string;
   SUPABASE_URL: string;
   SUPABASE_SERVICE_KEY: string;
   ISMRT_LOOKBACK_DAYS?: string;
@@ -33,12 +34,20 @@ export async function runConsumptionSync(
   const window = closedWindow(now, lookback);
   const rpc = openRpc(env, fetchImpl);
   try {
+    const householdId = requiredHouseholdId(env.ISMRT_HOUSEHOLD_ID);
     const batch = await pullBatch(credentials(env), window, startedAt, fetchImpl);
     const result = await rpc.ingest(batch);
+    const wallets = batch.devices.filter(
+      (device) => device.source === "ismrt" && device.kind === "wallet",
+    );
+    for (const wallet of wallets) {
+      if (typeof wallet.external_id !== "string" || wallet.external_id.length === 0) {
+        throw new Error("ISMRT batch contains a wallet without an external ID");
+      }
+      await rpc.provisionIsmrtOwnership(householdId, wallet.external_id);
+    }
     return {
-      wallets: Array.isArray(batch.devices)
-        ? batch.devices.filter((device) => device.kind === "wallet").length
-        : 0,
+      wallets: wallets.length,
       readings: batch.readings.length,
       ledgerEntries: batch.ledger_entries.length,
       documents: batch.documents.length,
@@ -66,6 +75,19 @@ export async function runConsumptionSync(
     });
     throw err;
   }
+}
+
+function requiredHouseholdId(value: string | undefined): string {
+  const householdId = value?.trim();
+  if (!householdId) {
+    throw new Error("missing ISMRT_HOUSEHOLD_ID; utility ownership cannot be provisioned");
+  }
+  const uuidPattern =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!uuidPattern.test(householdId)) {
+    throw new Error("ISMRT_HOUSEHOLD_ID must be a UUID");
+  }
+  return householdId;
 }
 
 async function pullBatch(

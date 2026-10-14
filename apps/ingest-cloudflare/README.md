@@ -40,7 +40,14 @@ Set production secrets (from `apps/ingest-cloudflare`):
 yarn wrangler secret put INGEST_TOKEN -c wrangler.ingest.toml
 yarn wrangler secret put FINWISE_API_KEY -c wrangler.consumer.toml
 yarn wrangler secret put SUPABASE_SERVICE_KEY -c wrangler.consumer.toml
+yarn wrangler secret put ISMRT_HOUSEHOLD_ID -c wrangler.consumer.toml
 ```
+
+Set `ISMRT_HOUSEHOLD_ID` to the UUID of the household that owns the ISMRT
+wallets. This explicit binding is required because utility ownership is not
+inferred from device names, locations, or the number of households in Supabase.
+The consumer provisions each wallet and its child devices after a successful
+ISMRT ingest, and associates existing ledger entries with that household.
 
 ## Full documentation
 

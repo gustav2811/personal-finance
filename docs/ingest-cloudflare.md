@@ -130,6 +130,13 @@ Set via Wrangler (run from `apps/ingest-cloudflare`):
 | Consumer | `yarn wrangler secret put SUPABASE_SERVICE_KEY -c wrangler.consumer.toml` | Supabase service role key |
 | Consumer | `yarn wrangler secret put ISMRT_USERNAME -c wrangler.consumer.toml` | ISMRT login. Omit to skip the daily consumption pull |
 | Consumer | `yarn wrangler secret put ISMRT_PASSWORD -c wrangler.consumer.toml` | ISMRT password |
+| Consumer | `yarn wrangler secret put ISMRT_HOUSEHOLD_ID -c wrangler.consumer.toml` | UUID of the household that owns ISMRT utility devices |
+
+`ISMRT_HOUSEHOLD_ID` is required when the ISMRT login is configured. The
+consumer uses this explicit binding to assign the wallet, its utility devices,
+and existing ledger entries to the household after each successful sync. Apply
+the `provision_ismrt_consumption_ownership` Supabase migration before deploying
+the consumer update. For local development, set the same value in `.dev.vars`.
 
 **`SUPABASE_URL`** and optional **`BANK_ZERO_ACCOUNT_ID`** are **not** in the committed `wrangler.consumer.toml`. Keep them in the **Cloudflare dashboard** (or `.dev.vars` locally) under **Workers → `investments-ingest-consumer` → Settings → Variables**. Bank Zero account rows live in `apps/ingest-cloudflare/src/bank-zero-accounts.ts`. The TOML only sets **`FINWISE_BASE_URL`** and **`UPLOAD_TO_FINWISE`**, and **`keep_vars = true`** ensures dashboard vars survive deploy (see warning section above).
 

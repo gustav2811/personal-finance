@@ -10,6 +10,8 @@ FINWISE_API_KEY=
 SUPABASE_SERVICE_KEY=
 ISMRT_USERNAME=
 ISMRT_PASSWORD=
+# Required when ISMRT credentials are set: UUID of the household that owns the ISMRT wallet.
+ISMRT_HOUSEHOLD_ID=
 
 # Optional for local consumer (override wrangler.consumer.toml [vars]):
 # SUPABASE_URL=
