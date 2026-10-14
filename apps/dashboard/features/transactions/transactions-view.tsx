@@ -1,5 +1,6 @@
 "use client"
 
+import { demoEnabled } from "@/lib/demo/transactions"
 import { useEffect, useMemo, useRef, useState } from "react"
 import {
   ArrowLeftRight,
@@ -42,14 +43,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { setTransactionCategory, setTransactionTreatment, undoTransactionCategory } from "./mutations"
+import { undoTransactionCategory } from "./mutations"
 import { getTransactionFilters, listTransactions } from "./queries"
+import { writeTransactionReview } from "./rpc"
 import { SignInRequiredError } from "./rpc"
 import type {
   AccountOption,
   CategoryOption,
-  ReviewState,
   TransactionFeedItem,
   TransactionFilters,
 } from "./model"
@@ -57,14 +57,13 @@ import { TransactionBudget } from "@/features/budget/transaction-budget"
 import { Inspector } from "./inspector"
 import {
   commandId,
-  needsReview,
   formatAmount,
   moneyDirection,
   relativeDay,
   subject,
 } from "./copy"
 
-type ReviewFilter = "all" | "needs_review" | ReviewState
+type ReviewFilter = "all" | "needs_review"
 
 type UndoOffer = {
   categoryId: string | null
@@ -104,7 +103,9 @@ function rememberCategory(id: string) {
 }
 
 export function TransactionsView({ initialTransactionId = null }: { initialTransactionId?: string | null }) {
-  const { signIn } = useHousehold()
+  const { signIn, email } = useHousehold()
+  const seenKey = `ledger-seen:${demoEnabled() ? "demo" : email}`
+  const [seenIds, setSeenIds] = useState<Set<string>>(new Set())
   const requestRef = useRef(0)
   const [items, setItems] = useState<TransactionFeedItem[]>([])
   const [nextCursor, setNextCursor] = useState<string | null>(null)
@@ -114,7 +115,6 @@ export function TransactionsView({ initialTransactionId = null }: { initialTrans
   const [accounts, setAccounts] = useState<AccountOption[]>([])
   const [categories, setCategories] = useState<CategoryOption[]>([])
   const [review, setReview] = useState<ReviewFilter>("all")
-  const [reviewCount, setReviewCount] = useState<string | null>(null)
   const [accountId, setAccountId] = useState("all")
   const [categoryId, setCategoryId] = useState("all")
   const [search, setSearch] = useState("")
@@ -123,25 +123,19 @@ export function TransactionsView({ initialTransactionId = null }: { initialTrans
   const [fromDate, setFromDate] = useState("")
   const [toDate, setToDate] = useState("")
   const [direction, setDirection] = useState<"all" | "debit" | "credit">("all")
+  const [editorKey, setEditorKey] = useState(0)
+  const [editorDirty, setEditorDirty] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(initialTransactionId)
   const [overlays, setOverlays] = useState<Record<string, RowOverlay>>({})
   const [signInHint, setSignInHint] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
-    let cancelled = false
-    void listTransactions({ filters: { reviewState: "needs_review" }, limit: 100 })
-      .then((page) => {
-        if (cancelled) return
-        setReviewCount(page.nextCursor ? "100+" : String(page.items.length))
-      })
-      .catch(() => {
-        if (!cancelled) setReviewCount(null)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [reloadKey])
+    try {
+      const stored: unknown = JSON.parse(localStorage.getItem(seenKey) ?? "[]")
+      setSeenIds(new Set(Array.isArray(stored) ? stored.filter((id): id is string => typeof id === "string") : []))
+    } catch { setSeenIds(new Set()) }
+  }, [seenKey])
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 300)
@@ -198,15 +192,18 @@ export function TransactionsView({ initialTransactionId = null }: { initialTrans
   const visibleItems = items.map((item) => overlays[item.id]?.item ?? item)
   const selected = visibleItems.find((item) => item.id === selectedId) ?? null
   const selectedOverlay = selectedId ? overlays[selectedId] : undefined
+  useEffect(() => {
+    if (!selected) return
+    setSeenIds((current) => {
+      if (current.has(selected.id)) return current
+      const next = new Set(current).add(selected.id)
+      try { localStorage.setItem(seenKey, JSON.stringify([...next].slice(-10000))) } catch { /* Keep the current session usable when storage is unavailable. */ }
+      return next
+    })
+  }, [selected?.id, seenKey])
   const activeCategories = [...categories.filter((category) => category.lifecycleStatus === "active")].sort(
     (first, second) => recentRank(first.id) - recentRank(second.id),
   )
-
-  function focusCategory(id: string) {
-    window.setTimeout(() => {
-      document.querySelector<HTMLInputElement>(`[data-category-for="${CSS.escape(id)}"] input`)?.focus()
-    }, 0)
-  }
 
   async function loadOlder() {
     if (!nextCursor || loadingMore) return
@@ -222,114 +219,51 @@ export function TransactionsView({ initialTransactionId = null }: { initialTrans
     }
   }
 
-  async function classify(item: TransactionFeedItem, category: CategoryOption) {
-    const priorCategoryId = item.category.id
-    const rollback = optimisticLeave(item)
-    rememberCategory(category.id)
-    setSignInHint(false)
-    try {
-      const result = await setTransactionCategory({
-        categoryId: category.id,
-        expectedConfirmedClassificationId: item.revision.confirmedClassificationId,
-        expectedProposedClassificationId: item.revision.proposedClassificationId,
-        reviewCommandId: commandId(),
-        transactionId: item.id,
-      })
-      if (result.conflict || needsReview(result.item)) {
-        rollback()
-        setOverlays((current) => ({
-          ...current,
-          [item.id]: {
-            error: result.conflict ? "This movement changed. Showing the current decision." : null,
-            item: result.item,
-            pending: false,
-            undo: null,
-          },
-        }))
-        return
-      }
-      if (review !== "needs_review") {
-        setOverlays((current) => ({
-          ...current,
-          [item.id]: {
-            error: null,
-            item: result.item,
-            pending: false,
-            undo:
-              priorCategoryId !== category.id
-                ? {
-                    categoryId: priorCategoryId,
-                    expectedConfirmedClassificationId: result.item.revision.confirmedClassificationId,
-                  }
-                : null,
-          },
-        }))
-      }
-    } catch (error) {
-      rollback()
-      if (error instanceof SignInRequiredError) setSignInHint(true)
-      focusCategory(item.id)
-      setOverlays((current) => ({
-        ...current,
-        [item.id]: {
-          error: error instanceof Error ? error.message : "The decision could not be saved.",
-          item,
-          pending: false,
-          undo: null,
-        },
-      }))
-    }
-  }
-
   async function confirmTreatment(
     item: TransactionFeedItem,
-    input: { isTransfer: boolean; excludeFromSpend: boolean; nature: string | null },
+    input: { isTransfer: boolean | null; excludeFromSpend: boolean | null; nature: string | null; categoryId: string | null; description: string; notes: string | null },
   ): Promise<string | null> {
-    const rollback = optimisticLeave(item)
-    const categoryConfirmed = item.category.state === "confirmed" && item.category.id != null
+    let currentItem = item
+    const priorCategoryId = item.category.id
+    const update = (pending: boolean, error: string | null = null) => {
+      setOverlays((current) => ({ ...current, [item.id]: { item: currentItem, pending, error, undo: null } }))
+    }
+    update(true)
     try {
-      if (item.category.id && !categoryConfirmed) {
-        const categoryResult = await setTransactionCategory({
-          categoryId: item.category.id,
-          expectedConfirmedClassificationId: item.revision.confirmedClassificationId,
-          expectedProposedClassificationId: item.revision.proposedClassificationId,
-          reviewCommandId: commandId(),
-          transactionId: item.id,
-        })
-        if (categoryResult.conflict || needsReview(categoryResult.item)) {
-          rollback()
-          return categoryResult.conflict ? "This movement changed. Showing the current decision." : null
-        }
-      }
-      const result = await setTransactionTreatment({
-        excludeFromSpend: input.excludeFromSpend,
-        expectedConfirmedTreatmentId: item.revision.confirmedTreatmentId,
-        expectedProposedTreatmentId: item.revision.proposedTreatmentId,
-        isTransfer: input.isTransfer,
-        nature: input.nature,
-        reviewCommandId: commandId(),
-        transactionId: item.id,
+      const result = await writeTransactionReview({
+        p_transaction_id: item.id,
+        p_category_id: input.categoryId,
+        p_description: input.description,
+        p_notes: input.notes,
+        p_is_transfer: item.event ? null : input.isTransfer,
+        p_exclude_from_spend: item.event ? null : input.excludeFromSpend,
+        p_nature: input.nature,
+        p_expected: { description: item.description, notes: item.notes ?? null, ...item.revision },
+        p_review_command_id: commandId(),
       })
-      if (result.conflict) {
-        if (categoryConfirmed) rollback()
-        return "Treatment changed. Showing the current decision."
-      }
-      if (review !== "needs_review") {
-        setOverlays((current) => ({
-          ...current,
-          [item.id]: {
-            error: null,
-            item: result.item,
-            pending: false,
-            undo: current[item.id]?.undo ?? null,
-          },
-        }))
+      currentItem = result.item
+      if (result.conflict) throw new Error("This transaction changed elsewhere. Nothing from this save was applied. Your draft is still here; close and reopen to check the latest details.")
+      if (input.categoryId) rememberCategory(input.categoryId)
+      const completed = currentItem.reviewState === "confirmed"
+      setOverlays((current) => ({ ...current, [item.id]: {
+        item: currentItem, pending: false, error: null,
+        undo: priorCategoryId !== currentItem.category.id ? {
+          categoryId: priorCategoryId,
+          expectedConfirmedClassificationId: currentItem.revision.confirmedClassificationId,
+        } : null,
+      } }))
+      if (completed && review === "needs_review") {
+        const index = visibleItems.findIndex((entry) => entry.id === item.id)
+        setItems((current) => current.filter((entry) => entry.id !== item.id))
+        setEditorDirty(false)
+        setSelectedId(visibleItems[index + 1]?.id ?? visibleItems[index - 1]?.id ?? null)
       }
       return null
     } catch (error) {
-      if (!categoryConfirmed) rollback()
       if (error instanceof SignInRequiredError) setSignInHint(true)
-      return error instanceof Error ? error.message : "Treatment could not be saved."
+      const message = error instanceof Error ? error.message : "Changes could not be saved. Your draft is still here."
+      update(false, message)
+      return message
     }
   }
 
@@ -345,6 +279,10 @@ export function TransactionsView({ initialTransactionId = null }: { initialTrans
         reviewCommandId: commandId(),
         transactionId: item.id,
       })
+      if (!result.conflict) {
+        setEditorDirty(false)
+        setEditorKey((key) => key + 1)
+      }
       setOverlays((current) => ({
         ...current,
         [item.id]: {
@@ -367,46 +305,11 @@ export function TransactionsView({ initialTransactionId = null }: { initialTrans
     }
   }
 
-  function optimisticLeave(item: TransactionFeedItem): () => void {
-    if (!needsReview(item) || !item.category.id) return () => {}
-    const index = visibleItems.findIndex((entry) => entry.id === item.id)
-    const followingId = visibleItems[index + 1]?.id ?? null
-    const snapshot = {
-      items,
-      overlay: overlays[item.id],
-      reviewCount,
-      selectedId,
-    }
-    if (review === "needs_review") {
-      setItems((current) => current.filter((entry) => entry.id !== item.id))
-      setSelectedId(followingId)
-      setReviewCount((count) => {
-        if (count == null || count.endsWith("+")) return count
-        const value = Number(count)
-        return Number.isFinite(value) ? String(Math.max(0, value - 1)) : count
-      })
-    } else {
-      setOverlays((current) => ({
-        ...current,
-        [item.id]: {
-          error: null,
-          item: { ...item, reviewState: "confirmed" },
-          pending: false,
-          undo: current[item.id]?.undo ?? null,
-        },
-      }))
-    }
-    return () => {
-      setItems(snapshot.items)
-      setSelectedId(snapshot.selectedId)
-      setReviewCount(snapshot.reviewCount)
-      setOverlays((current) => {
-        const next = { ...current }
-        if (snapshot.overlay) next[item.id] = snapshot.overlay
-        else delete next[item.id]
-        return next
-      })
-    }
+  function selectTransaction(id: string | null) {
+    if (selectedOverlay?.pending) return
+    if (editorDirty && !window.confirm("Discard unsaved transaction changes?")) return
+    setEditorDirty(false)
+    setSelectedId(id)
   }
 
   function clearFilters() {
@@ -421,23 +324,24 @@ export function TransactionsView({ initialTransactionId = null }: { initialTrans
 
   const inspector = selected ? (
     <Inspector
+      key={`${selected.id}:${editorKey}`}
       categories={activeCategories}
       categoryError={selectedOverlay?.error ?? null}
       item={selected}
-      onClassify={(category) => void classify(selected, category)}
       onConfirm={(input) => confirmTreatment(selected, input)}
+      onDirtyChange={setEditorDirty}
       onUndo={() => {
         if (selectedOverlay?.undo) void undo(selected, selectedOverlay.undo)
       }}
       pending={Boolean(selectedOverlay?.pending)}
       undo={Boolean(selectedOverlay?.undo)}
-      budget={<TransactionBudget transactionId={selected.id} />}
+      budget={demoEnabled() ? undefined : <TransactionBudget transactionId={selected.id} />}
     />
   ) : null
 
   return (
     <div className="space-y-6">
-      <PageHeader description="Newest first. Open a row to change it." title="Transactions" />
+      <PageHeader description="Newest first. A dot marks transactions you haven’t opened." title="Transactions" />
       {signInHint ? (
         <Alert>
           <AlertTitle>Sign in to keep this decision</AlertTitle>
@@ -449,24 +353,9 @@ export function TransactionsView({ initialTransactionId = null }: { initialTrans
         </Alert>
       ) : null}
       <div className="flex flex-wrap items-center gap-2">
-        <ToggleGroup
-          onValueChange={(value) => {
-            if (value === "all" || value === "needs_review") setReview(value)
-          }}
-          size="sm"
-          spacing={0}
-          type="single"
-          value={review === "needs_review" ? "needs_review" : "all"}
-          variant="outline"
-        >
-          <ToggleGroupItem value="all">All</ToggleGroupItem>
-          <ToggleGroupItem
-            className="data-[state=on]:bg-electric-blue-600 data-[state=on]:text-white"
-            value="needs_review"
-          >
-            Review{reviewCount ? ` ${reviewCount}` : ""}
-          </ToggleGroupItem>
-        </ToggleGroup>
+        {review === "needs_review" ? (
+          <Button onClick={() => setReview("all")} size="sm" variant="outline">Needs review · Clear</Button>
+        ) : null}
         <div className="ml-auto flex items-center gap-2">
           <div className="relative">
             <Search className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -492,6 +381,16 @@ export function TransactionsView({ initialTransactionId = null }: { initialTrans
       </div>
       {showMore ? (
         <div className="flex flex-wrap items-end gap-3">
+          <div className="grid gap-1.5">
+            <Label htmlFor="filter-review">Show</Label>
+            <Select value={review} onValueChange={(value) => { if (value === "all" || value === "needs_review") setReview(value) }}>
+              <SelectTrigger className="w-44" id="filter-review"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All transactions</SelectItem>
+                <SelectItem value="needs_review">Needs review</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <div className="grid gap-1.5">
             <Label htmlFor="filter-account">Account</Label>
             <Select onValueChange={setAccountId} value={accountId}>
@@ -570,10 +469,10 @@ export function TransactionsView({ initialTransactionId = null }: { initialTrans
           {feedState === "ready" && visibleItems.length === 0 ? (
             <Empty className="border">
               <EmptyHeader>
-                <EmptyTitle>Nothing matches</EmptyTitle>
+                <EmptyTitle>{review === "needs_review" ? "All caught up" : "Nothing matches"}</EmptyTitle>
                 <EmptyDescription>
                   {review === "needs_review"
-                    ? "Nothing is waiting."
+                    ? "No transactions are waiting in this view."
                     : "Clear the filters to see the newest movements."}
                 </EmptyDescription>
               </EmptyHeader>
@@ -598,8 +497,9 @@ export function TransactionsView({ initialTransactionId = null }: { initialTrans
                   <MovementRow
                     item={item}
                     key={item.id}
-                    onOpen={() => setSelectedId(item.id)}
+                    onOpen={() => selectTransaction(item.id)}
                     pending={Boolean(overlays[item.id]?.pending)}
+                    unseen={!seenIds.has(item.id) && item.reviewState !== "confirmed"}
                   />
                 ))}
               </TableBody>
@@ -618,19 +518,19 @@ export function TransactionsView({ initialTransactionId = null }: { initialTrans
           ) : null}
         </div>
       </div>
-      <Dialog onOpenChange={(open) => { if (!open) setSelectedId(null) }} open={Boolean(selected)}>
-        <DialogContent className="sm:max-w-lg">
+      <Dialog onOpenChange={(open) => { if (!open) selectTransaction(null) }} open={Boolean(selected)}>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
           <DialogTitle className="sr-only">{selected ? subject(selected) : "Movement"}</DialogTitle>
           <DialogDescription className="sr-only">Category and treatment for this movement.</DialogDescription>
           {selected ? (
             <div className="mb-2 flex items-center justify-end gap-1 pr-8">
               <Button
                 aria-label="Previous movement"
-                disabled={!visibleItems.some((entry, index) => entry.id === selected.id && index > 0)}
+                disabled={Boolean(selectedOverlay?.pending) || !visibleItems.some((entry, index) => entry.id === selected.id && index > 0)}
                 onClick={() => {
                   const index = visibleItems.findIndex((entry) => entry.id === selected.id)
                   const previous = visibleItems[index - 1]
-                  if (previous) setSelectedId(previous.id)
+                  if (previous) selectTransaction(previous.id)
                 }}
                 size="icon-sm"
                 variant="ghost"
@@ -639,11 +539,11 @@ export function TransactionsView({ initialTransactionId = null }: { initialTrans
               </Button>
               <Button
                 aria-label="Next movement"
-                disabled={!visibleItems.some((entry, index) => entry.id === selected.id && index < visibleItems.length - 1)}
+                disabled={Boolean(selectedOverlay?.pending) || !visibleItems.some((entry, index) => entry.id === selected.id && index < visibleItems.length - 1)}
                 onClick={() => {
                   const index = visibleItems.findIndex((entry) => entry.id === selected.id)
                   const following = visibleItems[index + 1]
-                  if (following) setSelectedId(following.id)
+                  if (following) selectTransaction(following.id)
                 }}
                 size="icon-sm"
                 variant="ghost"
@@ -669,15 +569,16 @@ function MovementRow({
   item,
   onOpen,
   pending,
+  unseen,
 }: {
   item: TransactionFeedItem
   onOpen: () => void
   pending: boolean
+  unseen: boolean
 }) {
   const direction = moneyDirection(item.amount)
   const merchant = subject(item)
   const detail = item.description !== merchant ? item.description : null
-  const waiting = needsReview(item)
 
   return (
     <TableRow
@@ -698,7 +599,8 @@ function MovementRow({
       </TableCell>
       <TableCell className="max-w-56">
         <span className="flex min-w-0 items-center gap-1.5">
-          <span className="truncate font-medium">{merchant}</span>
+          {unseen ? <span className="size-1.5 shrink-0 rounded-full bg-info" role="img" aria-label="Unseen transaction" title="Unseen transaction" /> : null}
+          <span className={unseen ? "truncate font-semibold" : "truncate font-medium"}>{merchant}</span>
           {item.source.isPending ? <Clock aria-label="Pending" className="size-3.5 text-muted-foreground" /> : null}
           {item.treatment.isTransfer ? (
             <ArrowLeftRight aria-label="Transfer" className="size-3.5 text-muted-foreground" />
@@ -715,7 +617,7 @@ function MovementRow({
       <TableCell className="hidden max-w-40 text-muted-foreground sm:table-cell">
         <span className="flex items-center gap-1.5">
           <span className="truncate">{item.category.name ?? "Uncategorised"}</span>
-          {waiting ? <span className="shrink-0 text-electric-blue-700">Review</span> : null}
+
         </span>
       </TableCell>
       <TableCell

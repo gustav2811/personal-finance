@@ -1,7 +1,16 @@
-import { type NextRequest } from "next/server"
+import { NextResponse, type NextRequest } from "next/server"
+import { demoEnabled } from "@/lib/demo/transactions"
 import { updateSession } from "@/lib/supabase/session"
 
 export async function proxy(request: NextRequest) {
+  if (demoEnabled()) {
+    const { pathname } = request.nextUrl
+    if (pathname === "/transactions" || pathname === "/api/categories/suggest") return NextResponse.next()
+    const url = request.nextUrl.clone()
+    url.pathname = "/transactions"
+    url.search = ""
+    return NextResponse.redirect(url)
+  }
   return updateSession(request)
 }
 

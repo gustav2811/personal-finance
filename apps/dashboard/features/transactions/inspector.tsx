@@ -2,6 +2,9 @@
 
 import { useEffect, useState, type ReactNode } from "react"
 import { ArrowLeftRight, Copy } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import {
   Combobox,
@@ -22,9 +25,9 @@ export function Inspector({
   categories,
   categoryError,
   item,
-  onClassify,
   onConfirm,
   onUndo,
+  onDirtyChange,
   pending,
   undo,
   budget,
@@ -32,12 +35,15 @@ export function Inspector({
   categories: CategoryOption[]
   categoryError: string | null
   item: TransactionFeedItem
-  onClassify: (category: CategoryOption) => void
   onConfirm: (input: {
-    isTransfer: boolean
-    excludeFromSpend: boolean
+    isTransfer: boolean | null
+    excludeFromSpend: boolean | null
     nature: string | null
+    categoryId: string | null
+    description: string
+    notes: string | null
   }) => Promise<string | null>
+  onDirtyChange: (dirty: boolean) => void
   onUndo: () => void
   pending: boolean
   undo: boolean
@@ -53,7 +59,9 @@ export function Inspector({
   const [savingTreatment, setSavingTreatment] = useState(false)
   const [inspection, setInspection] = useState<TransactionInspection | null>(null)
   const direction = moneyDirection(item.amount)
-  const selectedCategory = categoryValue(categories, item)
+  const [selectedCategory, setSelectedCategory] = useState(() => categoryValue(categories, item))
+  const [description, setDescription] = useState(item.description)
+  const [notes, setNotes] = useState(item.notes ?? "")
   const categoryItems = selectedCategory && !categories.some((entry) => entry.id === selectedCategory.id)
     ? [selectedCategory, ...categories]
     : categories
@@ -69,6 +77,11 @@ export function Inspector({
     String(item.treatment.excludeFromSpend),
     item.treatment.nature ?? "",
   ].join(":")
+
+  const dirty = description.trim() !== item.description || (notes.trim() || null) !== (item.notes ?? null)
+    || (selectedCategory?.id ?? null) !== item.category.id
+    || isTransfer !== item.treatment.isTransfer || excludeFromSpend !== item.treatment.excludeFromSpend
+  useEffect(() => { onDirtyChange(dirty) }, [dirty, onDirtyChange])
 
   useEffect(() => {
     setIsTransfer(item.treatment.isTransfer)
@@ -94,16 +107,19 @@ export function Inspector({
     return () => {
       cancelled = true
     }
-  }, [item.id])
+  }, [item.id, item.revision.confirmedClassificationId])
 
   async function saveTreatment() {
-    if (isTransfer == null || excludeFromSpend == null) return
+    if (!description.trim()) return
     setSavingTreatment(true)
     setTreatmentError(null)
     try {
       const error = await onConfirm({
         excludeFromSpend,
         isTransfer,
+        categoryId: selectedCategory?.id ?? null,
+        description: description.trim(),
+        notes: notes.trim() || null,
         nature: nature.trim() || null,
       })
       setTreatmentError(error)
@@ -131,7 +147,15 @@ export function Inspector({
       </div>
 
       <div className="divide-y rounded-lg border">
-        <Fact label="Description" value={item.description} />
+        <div className="space-y-2 px-3 py-2">
+          <Label htmlFor="transaction-description">Description</Label>
+          <Input id="transaction-description" value={description} onChange={(event) => { setDescription(event.target.value); setTreatmentSaved(false) }} disabled={savingTreatment} />
+          {item.originalDescription && item.originalDescription !== description ? <p className="type-caption text-muted-foreground">Original: {item.originalDescription}</p> : null}
+        </div>
+        <div className="space-y-2 px-3 py-2">
+          <Label htmlFor="transaction-notes">Notes</Label>
+          <Textarea rows={3} id="transaction-notes" placeholder="Add a note about this transaction" value={notes} onChange={(event) => { setNotes(event.target.value); setTreatmentSaved(false) }} disabled={savingTreatment} />
+        </div>
         <Fact label="Merchant" value={item.merchant.name ?? "None"} />
         <Fact label="Posted" value={shortDate(item.occurredOn)} />
         <Fact label="Account" value={item.account.name} />
@@ -177,14 +201,27 @@ export function Inspector({
             items={categoryItems}
             itemToStringLabel={categoryLabel}
             itemToStringValue={(category) => category.id}
+            isItemEqualToValue={(first, second) => first.id === second.id}
             onInputValueChange={setCategoryInput}
             onValueChange={(category) => {
-              if (category) onClassify(category)
+              if (category) { setSelectedCategory(category); setTreatmentSaved(false) }
             }}
             value={selectedCategory}
           >
-            <ComboboxInput aria-label="Category" disabled={pending} placeholder="Uncategorised" showClear={false} />
-            <ComboboxContent>
+            <ComboboxInput
+              aria-label="Category"
+              disabled={pending || savingTreatment}
+              onFocus={(event) => event.currentTarget.select()}
+              onClick={(event) => {
+                if (selectedCategory && event.currentTarget.value === categoryLabel(selectedCategory)) {
+                  event.currentTarget.select()
+                }
+              }}
+              placeholder="Uncategorised"
+              showClear={false}
+            />
+            {/* The popup is portalled outside Radix Dialog, whose modal layer disables outside mouse events. */}
+            <ComboboxContent className="pointer-events-auto">
               <ComboboxEmpty>{ranking ? "Matching…" : "No category"}</ComboboxEmpty>
               <ComboboxList>
                 {(category: CategoryOption) => {
@@ -222,6 +259,7 @@ export function Inspector({
             <div className="grid grid-cols-[8rem_minmax(0,1fr)] items-center gap-3 px-3 py-2">
               <span className="text-muted-foreground">Transfer</span>
               <ToggleGroup
+                disabled={savingTreatment || pending}
                 aria-label="Transfer"
                 onValueChange={(value) => {
                   if (value === "yes" || value === "no") setIsTransfer(value === "yes")
@@ -242,6 +280,7 @@ export function Inspector({
             <div className="grid grid-cols-[8rem_minmax(0,1fr)] items-center gap-3 px-3 py-2">
               <span className="text-muted-foreground">Spend</span>
               <ToggleGroup
+                disabled={savingTreatment || pending}
                 aria-label="Spend"
                 onValueChange={(value) => {
                   if (value === "include" || value === "exclude") setExcludeFromSpend(value === "exclude")
@@ -265,19 +304,17 @@ export function Inspector({
           </>
         )}
       </div>
+      <p className="type-caption text-muted-foreground">{item.reviewState === "confirmed" ? "Reviewed" : "Not reviewed"} · Changes are saved when you select Save.</p>
       <div className="flex items-center justify-end gap-2">
-        {categoryError ? (
+        {categoryError && categoryError !== treatmentError ? (
           <p className="type-caption text-destructive" role="status">
             {categoryError}
           </p>
         ) : null}
         {undo ? (
-          <Button onClick={onUndo} size="sm" variant="ghost">
+          <Button disabled={pending || savingTreatment} onClick={onUndo} size="sm" variant="ghost">
             Undo
           </Button>
-        ) : null}
-        {item.event ? null : isTransfer == null || excludeFromSpend == null ? (
-          <p className="type-caption">Set transfer and spend before saving.</p>
         ) : null}
         {treatmentError ? (
           <p className="type-caption text-destructive" role="status">
@@ -288,20 +325,13 @@ export function Inspector({
             Saved
           </p>
         ) : null}
-        {item.event ? null : (
-          <Button
-            disabled={savingTreatment || isTransfer == null || excludeFromSpend == null}
+        <Button
+            disabled={pending || savingTreatment || !description.trim()}
             onClick={() => void saveTreatment()}
             size="sm"
-            title={
-              isTransfer == null || excludeFromSpend == null
-                ? "Set transfer and spend before saving."
-                : undefined
-            }
           >
-            {savingTreatment ? "Saving…" : "Save"}
+            {savingTreatment ? "Saving…" : item.reviewState === "confirmed" || !selectedCategory ? "Save changes" : "Save & mark reviewed"}
           </Button>
-        )}
       </div>
       {budget}
     </div>

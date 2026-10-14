@@ -30,6 +30,7 @@ export type TransactionFeedItem = {
   occurredOn: string
   description: string
   originalDescription: string | null
+  notes?: string | null
   amount: string
   currencyCode: string
   merchant: { id: string | null; name: string | null }
@@ -105,7 +106,7 @@ export type TransactionFilters = {
   toDate?: string
   accountId?: string
   categoryId?: string
-  reviewState?: ReviewState | "needs_review"
+  reviewState?: ReviewState | "needs_review" | "not_reviewed"
   sourceSystem?: string
   transfer?: "yes" | "no" | "unknown"
   spend?: "included" | "excluded" | "unknown"

@@ -24,6 +24,11 @@ const reportOnlyCsp = [
 
 const nextConfig = {
   reactStrictMode: true,
+  env: {
+    // Safe to expose: this is only a local development switch, and the
+    // fixture adapter also requires NODE_ENV=development before enabling.
+    DASHBOARD_DEMO_MODE: process.env.DASHBOARD_DEMO_MODE,
+  },
   async headers() {
     return [
       {

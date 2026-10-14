@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "types": "tsc --noEmit",
-    "test": "tsx --test domain/budget/*.spec.ts"
+    "test": "tsx --test domain/budget/*.spec.ts",
+    "test:transactions": "NODE_ENV=development DASHBOARD_DEMO_MODE=true tsx --test lib/demo/transactions.spec.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

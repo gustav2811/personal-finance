@@ -1,3 +1,4 @@
+import { demoEnabled, demoRpc } from "@/lib/demo/transactions"
 import type { Database, Json } from "@/lib/supabase/database.types"
 import { getBrowserClient } from "@/lib/supabase/browser"
 import type { MutationResult, TransactionFeedItem } from "./model"
@@ -46,12 +47,14 @@ function friendlyError(message: string): Error {
 export async function readTransactionList(
   args: Functions["finance_list_transactions_v1"]["Args"],
 ): Promise<Json> {
+  if (demoEnabled()) return demoRpc("finance_list_transactions_v1", args) as Json
   const { data, error } = await getBrowserClient().rpc("finance_list_transactions_v1", args)
   if (error) throw friendlyError(error.message)
   return data
 }
 
 export async function readTransactionFilters(): Promise<Json> {
+  if (demoEnabled()) return demoRpc("finance_get_transaction_filters_v1", {}) as Json
   const { data, error } = await getBrowserClient().rpc("finance_get_transaction_filters_v1")
   if (error) throw friendlyError(error.message)
   return data
@@ -59,6 +62,7 @@ export async function readTransactionFilters(): Promise<Json> {
 
 export async function readTransactionDetail(transactionId: string): Promise<Json> {
   const args = { p_transaction_id: transactionId }
+  if (demoEnabled()) return demoRpc("finance_get_transaction_v1", args) as Json
   const { data, error } = await getBrowserClient().rpc("finance_get_transaction_v1", args)
   if (error) throw friendlyError(error.message)
   return data
@@ -79,6 +83,7 @@ function mutationResult(data: Json): MutationResult {
 export async function writeTransactionCategory(args: {
   [Key in keyof CategoryArgs]: CategoryArgs[Key] | null
 }): Promise<MutationResult> {
+  if (demoEnabled()) return mutationResult(demoRpc("finance_set_transaction_category_v1", args) as Json)
   const supabase = getBrowserClient()
   const { data, error } = await supabase.rpc(
     "finance_set_transaction_category_v1",
@@ -91,6 +96,7 @@ export async function writeTransactionCategory(args: {
 export async function writeTransactionUndo(args: {
   [Key in keyof UndoArgs]: UndoArgs[Key] | null
 }): Promise<MutationResult> {
+  if (demoEnabled()) return mutationResult(demoRpc("finance_undo_transaction_category_v1", args) as Json)
   const supabase = getBrowserClient()
   const { data, error } = await supabase.rpc(
     "finance_undo_transaction_category_v1",
@@ -103,10 +109,40 @@ export async function writeTransactionUndo(args: {
 export async function writeTransactionTreatment(args: {
   [Key in keyof TreatmentArgs]: TreatmentArgs[Key] | null
 }): Promise<MutationResult> {
+  if (demoEnabled()) return mutationResult(demoRpc("finance_set_transaction_treatment_v1", args) as Json)
   const supabase = getBrowserClient()
   const { data, error } = await supabase.rpc(
     "finance_set_transaction_treatment_v1",
     args as TreatmentArgs,
+  )
+  if (error) throw friendlyError(error.message)
+  return mutationResult(data)
+}
+
+
+export async function writeTransactionReview(args: {
+  p_transaction_id: string
+  p_category_id: string | null
+  p_description: string
+  p_notes: string | null
+  p_is_transfer: boolean | null
+  p_exclude_from_spend: boolean | null
+  p_nature: string | null
+  p_expected: {
+    description: string
+    notes: string | null
+    confirmedClassificationId: string | null
+    proposedClassificationId: string | null
+    confirmedTreatmentId: string | null
+    proposedTreatmentId: string | null
+  }
+  p_review_command_id: string
+}): Promise<MutationResult> {
+  if (demoEnabled()) return mutationResult(demoRpc("finance_review_transaction_v1", args) as Json)
+  // Introduced by the review migration; keep the generated database types untouched.
+  const { data, error } = await getBrowserClient().rpc(
+    "finance_review_transaction_v1" as never,
+    args as never,
   )
   if (error) throw friendlyError(error.message)
   return mutationResult(data)
