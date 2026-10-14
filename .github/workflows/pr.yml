@@ -84,6 +84,12 @@ jobs:
         working-directory: apps/dashboard
         run: yarn types
 
+      - name: Test dashboard
+        working-directory: apps/dashboard
+        run: |
+          yarn test
+          yarn test:transactions
+
       - name: Build dashboard
         working-directory: apps/dashboard
         run: yarn build

@@ -1,6 +1,7 @@
 import { CATEGORY_CRITERIA } from "../../../../../../libs/categoriser/src/criteria"
 import { createClient } from "@/lib/supabase/server"
 import type { CategoryOption } from "@/features/transactions/model"
+import { demoEnabled, demoRpc } from "@/lib/demo/transactions"
 
 const GATEWAY_ID = "household-frontend"
 const MAX_TEXT = 80
@@ -38,6 +39,20 @@ export async function POST(request: Request) {
   const body: unknown = await request.json().catch(() => null)
   const text = isRecord(body) && typeof body.text === "string" ? body.text.trim().slice(0, MAX_TEXT) : ""
   if (text.length < 2) return Response.json({ error: "Expected { text }" }, { status: 400 })
+
+  if (demoEnabled()) {
+    const data = demoRpc("finance_get_transaction_filters_v1") as { categories?: CategoryOption[] }
+    const ranked = (data.categories ?? [])
+      .map((category) => {
+        const haystack = `${category.name} ${category.group ?? ""}`.toLowerCase()
+        const needle = text.toLowerCase()
+        const probability = haystack.includes(needle) ? 0.95 : haystack.split(" ").some((word) => word.startsWith(needle)) ? 0.6 : 0.01
+        return { id: category.id, probability }
+      })
+      .filter((entry) => entry.probability >= 0.02)
+      .sort((first, second) => second.probability - first.probability)
+    return Response.json({ ranked })
+  }
 
   const supabase = await createClient()
   const { data, error } = await supabase.rpc("finance_get_transaction_filters_v1")
