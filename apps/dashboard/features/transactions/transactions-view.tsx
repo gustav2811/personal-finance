@@ -11,6 +11,7 @@ import {
   Landmark,
   Search,
   SlidersHorizontal,
+  X,
   Wallet,
 } from "lucide-react"
 import { PageHeader } from "@/components/patterns/page-header"
@@ -18,12 +19,6 @@ import { DateField } from "@/components/patterns/date-field"
 import { useHousehold } from "@/components/shell/household-context"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -54,7 +49,8 @@ import type {
   TransactionFilters,
 } from "./model"
 import { TransactionBudget } from "@/features/budget/transaction-budget"
-import { Inspector } from "./inspector"
+import { TransactionReviewFrame } from "./review-dialog"
+import { Inspector, type InspectorSave } from "./inspector"
 import {
   commandId,
   formatAmount,
@@ -123,6 +119,9 @@ export function TransactionsView({ initialTransactionId = null }: { initialTrans
   const [fromDate, setFromDate] = useState("")
   const [toDate, setToDate] = useState("")
   const [direction, setDirection] = useState<"all" | "debit" | "credit">("all")
+  const editorItemRef = useRef<TransactionFeedItem | null>(null)
+  const inspectorSave = useRef<InspectorSave>(null)
+  const navigating = useRef(false)
   const [editorKey, setEditorKey] = useState(0)
   const [editorDirty, setEditorDirty] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(initialTransactionId)
@@ -192,6 +191,8 @@ export function TransactionsView({ initialTransactionId = null }: { initialTrans
   const visibleItems = items.map((item) => overlays[item.id]?.item ?? item)
   const selected = visibleItems.find((item) => item.id === selectedId) ?? null
   const selectedOverlay = selectedId ? overlays[selectedId] : undefined
+  if (selected && !selectedOverlay?.pending) editorItemRef.current = selected
+  const editorItem = selectedOverlay?.pending && editorItemRef.current?.id === selectedId ? editorItemRef.current : selected
   useEffect(() => {
     if (!selected) return
     setSeenIds((current) => {
@@ -222,11 +223,16 @@ export function TransactionsView({ initialTransactionId = null }: { initialTrans
   async function confirmTreatment(
     item: TransactionFeedItem,
     input: { isTransfer: boolean | null; excludeFromSpend: boolean | null; nature: string | null; categoryId: string | null; description: string; notes: string | null },
+    options?: { advance?: boolean },
   ): Promise<string | null> {
     let currentItem = item
     const priorCategoryId = item.category.id
     const update = (pending: boolean, error: string | null = null) => {
-      setOverlays((current) => ({ ...current, [item.id]: { item: currentItem, pending, error, undo: null } }))
+      setOverlays((current) => ({ ...current, [item.id]: { item: pending ? {
+        ...currentItem, description: input.description, notes: input.notes,
+        treatment: currentItem.event ? currentItem.treatment : { ...currentItem.treatment, isTransfer: input.isTransfer, excludeFromSpend: input.excludeFromSpend, nature: input.nature },
+        category: input.categoryId ? { ...currentItem.category, id: input.categoryId, name: categories.find((entry) => entry.id === input.categoryId)?.name ?? currentItem.category.name } : currentItem.category,
+      } : currentItem, pending, error, undo: null } }))
     }
     update(true)
     try {
@@ -242,9 +248,9 @@ export function TransactionsView({ initialTransactionId = null }: { initialTrans
         p_review_command_id: commandId(),
       })
       currentItem = result.item
-      if (result.conflict) throw new Error("This transaction changed elsewhere. Nothing from this save was applied. Your draft is still here; close and reopen to check the latest details.")
+      if (result.conflict) throw new Error("This transaction changed elsewhere. Nothing from this save was applied. Your draft is still here. Check the latest details before retrying.")
+      editorItemRef.current = currentItem
       if (input.categoryId) rememberCategory(input.categoryId)
-      const completed = currentItem.reviewState === "confirmed"
       setOverlays((current) => ({ ...current, [item.id]: {
         item: currentItem, pending: false, error: null,
         undo: priorCategoryId !== currentItem.category.id ? {
@@ -252,7 +258,7 @@ export function TransactionsView({ initialTransactionId = null }: { initialTrans
           expectedConfirmedClassificationId: currentItem.revision.confirmedClassificationId,
         } : null,
       } }))
-      if (completed && review === "needs_review") {
+      if (options?.advance && review === "needs_review" && currentItem.reviewState === "confirmed") {
         const index = visibleItems.findIndex((entry) => entry.id === item.id)
         setItems((current) => current.filter((entry) => entry.id !== item.id))
         setEditorDirty(false)
@@ -305,11 +311,18 @@ export function TransactionsView({ initialTransactionId = null }: { initialTrans
     }
   }
 
-  function selectTransaction(id: string | null) {
-    if (selectedOverlay?.pending) return
-    if (editorDirty && !window.confirm("Discard unsaved transaction changes?")) return
-    setEditorDirty(false)
-    setSelectedId(id)
+  async function selectTransaction(id: string | null) {
+    if (navigating.current) return
+    navigating.current = true
+    try {
+      if (inspectorSave.current && !await inspectorSave.current.flush()) return
+      if (review === "needs_review" && editorItemRef.current?.reviewState === "confirmed" && id !== editorItemRef.current.id) {
+        const reviewedId = editorItemRef.current.id
+        setItems((current) => current.filter((entry) => entry.id !== reviewedId))
+      }
+      setEditorDirty(false)
+      setSelectedId(id)
+    } finally { navigating.current = false }
   }
 
   function clearFilters() {
@@ -322,14 +335,16 @@ export function TransactionsView({ initialTransactionId = null }: { initialTrans
     setDirection("all")
   }
 
-  const inspector = selected ? (
+  const inspector = selected && editorItem ? (
     <Inspector
       key={`${selected.id}:${editorKey}`}
       categories={activeCategories}
       categoryError={selectedOverlay?.error ?? null}
-      item={selected}
-      onConfirm={(input) => confirmTreatment(selected, input)}
+      item={editorItem}
+      onConfirm={(input, options) => confirmTreatment(editorItem, input, options)}
+      saveRef={inspectorSave}
       onDirtyChange={setEditorDirty}
+      onDiscard={() => { setEditorDirty(false); setSelectedId(null) }}
       onUndo={() => {
         if (selectedOverlay?.undo) void undo(selected, selectedOverlay.undo)
       }}
@@ -518,15 +533,12 @@ export function TransactionsView({ initialTransactionId = null }: { initialTrans
           ) : null}
         </div>
       </div>
-      <Dialog onOpenChange={(open) => { if (!open) selectTransaction(null) }} open={Boolean(selected)}>
-        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
-          <DialogTitle className="sr-only">{selected ? subject(selected) : "Movement"}</DialogTitle>
-          <DialogDescription className="sr-only">Category and treatment for this movement.</DialogDescription>
+      <TransactionReviewFrame open={Boolean(selected)} title={selected ? subject(selected) : "Movement"} onClose={() => void selectTransaction(null)}>
           {selected ? (
-            <div className="mb-2 flex items-center justify-end gap-1 pr-8">
+            <div className="mb-2 flex shrink-0 items-center justify-end gap-1">
               <Button
                 aria-label="Previous movement"
-                disabled={Boolean(selectedOverlay?.pending) || !visibleItems.some((entry, index) => entry.id === selected.id && index > 0)}
+                disabled={!visibleItems.some((entry, index) => entry.id === selected.id && index > 0)}
                 onClick={() => {
                   const index = visibleItems.findIndex((entry) => entry.id === selected.id)
                   const previous = visibleItems[index - 1]
@@ -539,7 +551,7 @@ export function TransactionsView({ initialTransactionId = null }: { initialTrans
               </Button>
               <Button
                 aria-label="Next movement"
-                disabled={Boolean(selectedOverlay?.pending) || !visibleItems.some((entry, index) => entry.id === selected.id && index < visibleItems.length - 1)}
+                disabled={!visibleItems.some((entry, index) => entry.id === selected.id && index < visibleItems.length - 1)}
                 onClick={() => {
                   const index = visibleItems.findIndex((entry) => entry.id === selected.id)
                   const following = visibleItems[index + 1]
@@ -550,11 +562,11 @@ export function TransactionsView({ initialTransactionId = null }: { initialTrans
               >
                 <ChevronRight />
               </Button>
+              <Button aria-label="Close" onClick={() => void selectTransaction(null)} size="icon-sm" variant="ghost"><X /></Button>
             </div>
           ) : null}
           {inspector}
-        </DialogContent>
-      </Dialog>
+      </TransactionReviewFrame>
     </div>
   )
 }
