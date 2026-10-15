@@ -9,7 +9,8 @@
     "types": "tsc --noEmit",
     "test": "tsx --test domain/budget/*.spec.ts",
     "test:transactions": "NODE_ENV=development DASHBOARD_DEMO_MODE=true tsx --test lib/demo/transactions.spec.ts features/transactions/*.spec.ts features/transactions/*.spec.tsx",
-    "test:analysis": "tsx --test features/analysis/*.spec.ts features/analysis/*.spec.tsx"
+    "test:analysis": "tsx --test features/analysis/*.spec.ts features/analysis/*.spec.tsx",
+    "test:overview": "tsx --test domain/overview/*.spec.ts features/overview/*.spec.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

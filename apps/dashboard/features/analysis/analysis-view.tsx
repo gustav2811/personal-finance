@@ -190,7 +190,7 @@ function exportRows(rows: unknown[][], name: string) {
   link.click()
   URL.revokeObjectURL(url)
 }
-function useAnalysisSettings() {
+function useAnalysisSettings(initialCategoryIds: string[] = []) {
   const [view, setView] = useState<View>("breakdown")
   const [dimension, setDimension] = useState<AnalysisDimension>("category")
   const [metric, setMetric] = useState<AnalysisMetric>("expensesNet")
@@ -198,7 +198,9 @@ function useAnalysisSettings() {
   const [tablePeriod, setTablePeriod] = useState<AnalysisGranularity>("month")
   const granularity = view === "table" ? tablePeriod : trendPeriod
   const setGranularity = view === "table" ? setTablePeriod : setTrendPeriod
-  const [filters, setFilters] = useState<AnalysisFilter>({})
+  const [filters, setFilters] = useState<AnalysisFilter>(() =>
+    initialCategoryIds.length ? { categoryIds: initialCategoryIds } : {},
+  )
   const [currency, setCurrency] = useState("")
   return {
     view,
@@ -216,15 +218,25 @@ function useAnalysisSettings() {
   }
 }
 
-export function AnalysisView() {
-  const settings = useAnalysisSettings()
+export function AnalysisView({
+  initialRange,
+  initialCategoryIds,
+}: {
+  initialRange?: { from: string; to: string }
+  initialCategoryIds?: string[]
+} = {}) {
+  const settings = useAnalysisSettings(initialCategoryIds)
   const today = new Date(
     new Intl.DateTimeFormat("en-CA", {
       timeZone: "Africa/Johannesburg",
     }).format(new Date()) + "T12:00:00",
   )
-  const [from, setFrom] = useState(() => iso(startOfMonth(today)))
-  const [to, setTo] = useState(() => iso(endOfMonth(today)))
+  const [from, setFrom] = useState(
+    () => initialRange?.from ?? iso(startOfMonth(today)),
+  )
+  const [to, setTo] = useState(
+    () => initialRange?.to ?? iso(endOfMonth(today)),
+  )
   const load = useCallback(() => loadAnalysisData(from, to), [from, to])
   const rangeStart = new Date(`${from}T12:00:00`)
   const wholeMonth =
@@ -233,9 +245,14 @@ export function AnalysisView() {
     ? format(rangeStart, "MMMM yyyy")
     : `${format(rangeStart, "d MMM")} – ${format(new Date(`${to}T12:00:00`), "d MMM yyyy")}`
   function shift(delta: number) {
-    const base = addMonths(new Date(`${from}T12:00:00`), delta)
-    setFrom(iso(startOfMonth(base)))
-    setTo(iso(endOfMonth(base)))
+    if (wholeMonth) {
+      const base = addMonths(rangeStart, delta)
+      setFrom(iso(startOfMonth(base)))
+      setTo(iso(endOfMonth(base)))
+      return
+    }
+    setFrom(iso(addMonths(new Date(`${from}T12:00:00`), delta)))
+    setTo(iso(addMonths(new Date(`${to}T12:00:00`), delta)))
   }
   return (
     <div className="space-y-6 min-w-0">
@@ -260,7 +277,7 @@ export function AnalysisView() {
             >
               <div className="flex items-center justify-between">
                 <Button
-                  aria-label="Previous month"
+                  aria-label="Previous period"
                   variant="ghost"
                   size="icon"
                   onClick={() => shift(-1)}
@@ -269,7 +286,7 @@ export function AnalysisView() {
                 </Button>
                 <span className="type-label">Date range</span>
                 <Button
-                  aria-label="Next month"
+                  aria-label="Next period"
                   variant="ghost"
                   size="icon"
                   onClick={() => shift(1)}

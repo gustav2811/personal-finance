@@ -16,8 +16,10 @@ type UtilityTab = "electricity" | "water" | "wallet"
 
 export function UtilitiesView({
   initialTab = "electricity",
+  initialRange,
 }: {
   initialTab?: UtilityTab
+  initialRange?: { from: string; to: string }
 }) {
   const router = useRouter()
   const [window, setWindow] = useState<HistoryWindow>(6)
@@ -32,12 +34,22 @@ export function UtilitiesView({
         <ToggleGroup
           aria-label="Utilities view"
           onValueChange={(next) => {
-            if (next === "electricity" || next === "water" || next === "wallet") {
+            if (
+              next === "electricity" ||
+              next === "water" ||
+              next === "wallet"
+            ) {
               setTab(next)
-              router.push(
-                next === "electricity" ? "/utilities" : `/utilities?tab=${next}`,
-                { scroll: false },
-              )
+              const query = new URLSearchParams()
+              if (next !== "electricity") query.set("tab", next)
+              if (initialRange) {
+                query.set("from", initialRange.from)
+                query.set("to", initialRange.to)
+              }
+              const suffix = query.toString()
+              router.push(`/utilities${suffix ? `?${suffix}` : ""}`, {
+                scroll: false,
+              })
             }
           }}
           size="sm"
@@ -46,17 +58,28 @@ export function UtilitiesView({
           value={tab}
           variant="outline"
         >
-          <ToggleGroupItem className="pointer-coarse:h-9 pointer-coarse:px-3" value="electricity">
+          <ToggleGroupItem
+            className="pointer-coarse:h-9 pointer-coarse:px-3"
+            value="electricity"
+          >
             Electricity
           </ToggleGroupItem>
-          <ToggleGroupItem className="pointer-coarse:h-9 pointer-coarse:px-3" value="water">
+          <ToggleGroupItem
+            className="pointer-coarse:h-9 pointer-coarse:px-3"
+            value="water"
+          >
             Water
           </ToggleGroupItem>
-          <ToggleGroupItem className="pointer-coarse:h-9 pointer-coarse:px-3" value="wallet">
+          <ToggleGroupItem
+            className="pointer-coarse:h-9 pointer-coarse:px-3"
+            value="wallet"
+          >
             Wallet
           </ToggleGroupItem>
         </ToggleGroup>
-        {tab === "wallet" ? null : <HistoryControl onChange={setWindow} value={window} />}
+        {tab === "wallet" ? null : (
+          <HistoryControl onChange={setWindow} value={window} />
+        )}
       </div>
       {tab === "wallet" ? (
         <WalletView />
@@ -64,7 +87,7 @@ export function UtilitiesView({
         <DataGate load={getEnergyData}>
           {(data) =>
             tab === "electricity" ? (
-              <EnergyPanel data={data} window={window} />
+              <EnergyPanel data={data} window={window} period={initialRange} />
             ) : (
               <WaterPanel data={data} window={window} />
             )

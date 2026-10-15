@@ -1,0 +1,118 @@
+.orbit {
+  position: relative;
+  width: 100%;
+  max-width: 34rem;
+  margin-inline: auto;
+}
+.arc {
+  cursor: pointer;
+}
+.arc path {
+  transition: opacity 240ms ease-out;
+}
+.arc path:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 4px;
+}
+.orbitCentre {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.centreDate {
+  font-size: clamp(0.625rem, 1.1cqi, 0.875rem);
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+.days {
+  margin-top: 0.35rem;
+  font-size: clamp(2rem, 7cqi, 5rem);
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+.centreCaption {
+  color: var(--muted-foreground);
+  font-size: clamp(0.625rem, 1.1cqi, 0.875rem);
+  margin-top: 0.25rem;
+}
+.closedLabel {
+  margin-top: 0.5rem;
+  font-size: clamp(0.875rem, 2.5cqi, 1.5rem);
+  font-weight: 500;
+}
+.timeline {
+  border-top: 1px solid var(--border);
+  padding-top: 1.5rem;
+  min-width: 0;
+  animation: focus-in 260ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes focus-in {
+  from {
+    clip-path: inset(0 0 0 3%);
+    opacity: 0.65;
+  }
+  to {
+    clip-path: inset(0);
+    opacity: 1;
+  }
+}
+.timelineHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+.timelineActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.dateReadout {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  min-height: 3rem;
+  margin-top: 1.25rem;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+.dateReadout strong {
+  font-size: 1.25rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--foreground);
+}
+.timelineFooter {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding-top: 0.5rem;
+}
+.empty {
+  display: grid;
+  place-items: center;
+  min-height: 12rem;
+  padding: 2rem;
+  text-align: center;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+}
+@media (prefers-reduced-motion: reduce) {
+  .arc path {
+    transition: none;
+  }
+  .timeline {
+    animation: none;
+  }
+}

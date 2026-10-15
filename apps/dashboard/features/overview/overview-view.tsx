@@ -1,211 +1,216 @@
 "use client"
 
-import { useMemo, useState } from "react"
-import { PageHeader } from "@/components/patterns/page-header"
-import { RangeControl } from "@/components/patterns/range-control"
-import { DataGate } from "@/components/patterns/data-gate"
-import { EnergyChart } from "@/domain/consumption/energy-chart"
-import { MoneyChart } from "@/domain/consumption/money-chart"
-import { Section } from "@/components/patterns/section"
-import { SourceList } from "@/domain/consumption/source-list"
-import { getOverviewData, type OverviewData } from "@/features/overview/queries"
-import { shortDate } from "@/lib/format/date"
-import { formatMoney, formatNumber, sum } from "@/lib/format/money"
+import { useCallback, useState, type CSSProperties } from "react"
 import {
-  buildEnergySeries,
-  buildMoneySeries,
-  isWithinRange,
-  type RangeDays,
-} from "@/domain/consumption/model"
-import type { LedgerRead } from "@/lib/supabase/rows"
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Coffee,
+  Fuel,
+  ShoppingBasket,
+  Utensils,
+  Zap,
+} from "lucide-react"
+import { PageHeader } from "@/components/patterns/page-header"
+import { DataGate } from "@/components/patterns/data-gate"
+import { Button } from "@/components/ui/button"
+import { addMonths, currentCycle, cycleLabel } from "@/domain/budget/cycle"
+import type { OverviewData, OverviewId } from "@/domain/overview/model"
+import {
+  OrbitChart,
+  SpendingTimeline,
+  OVERVIEW_COLOURS,
+} from "@/domain/overview/charts"
+import { formatMoney } from "@/lib/format/money"
+import { getOverviewData } from "./queries"
+import styles from "./overview.module.css"
 
-function rangeLabel(days: RangeDays): string {
-  if (days === 365) return "Last year"
-  return `Last ${days} days`
+const ICONS = {
+  electricity: Zap,
+  groceries: ShoppingBasket,
+  "eating-out": Utensils,
+  fuel: Fuel,
+  coffee: Coffee,
 }
 
-function OverviewBody({ data, days }: { data: OverviewData; days: RangeDays }) {
-  const series = useMemo(
-    () => buildEnergySeries(data.readings, days),
-    [data.readings, days],
-  )
-  const moneySeries = useMemo(
-    () => buildMoneySeries(data.ledgerEntries, days),
-    [data.ledgerEntries, days],
-  )
-  const homeTotal = sum(series.map((point) => point.homeKwh))
-  const espressoTotal = sum(series.map((point) => point.espressoKwh))
-  const electricityEntries = data.ledgerEntries.filter(
-    (entry) =>
-      entry.utility_type === "electricity" &&
-      entry.direction === "debit" &&
-      isWithinRange(entry.occurred_at ?? entry.posted_at, days),
-  )
-  const electricityCost = sum(electricityEntries.map((entry) => entry.amount))
-  const knownQuantity = sum(
-    electricityEntries.map((entry) => entry.quantity ?? 0).filter((quantity) => quantity > 0),
-  )
-  const weightedRate = knownQuantity > 0 ? electricityCost / knownQuantity : null
-  const latestSnapshot = [...data.financialSnapshots].sort((first, second) =>
-    second.date.localeCompare(first.date),
-  )[0]
-  const largestDay = series.reduce<(typeof series)[number] | null>(
-    (largest, point) => (!largest || point.homeKwh > largest.homeKwh ? point : largest),
-    null,
-  )
-  const walletTotal = sum(
-    data.ledgerEntries
-      .filter(
-        (entry) =>
-          entry.utility_type === "wallet" &&
-          entry.direction === "debit" &&
-          isWithinRange(entry.occurred_at ?? entry.posted_at, days),
-      )
-      .map((entry) => entry.amount),
-  )
-  const waterEntry = latestWater(data.ledgerEntries, days)
-
-  return (
-    <div className="space-y-6">
-      <dl className="grid gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-2 xl:grid-cols-4">
-        <Metric
-          detail={`${series.length} days with whole-home readings`}
-          label="Whole-home energy"
-          value={`${formatNumber(homeTotal)} kWh`}
-        />
-        <Metric
-          detail={`${formatNumber(espressoTotal)} kWh in range`}
-          label="Espresso share"
-          value={`${homeTotal > 0 ? formatNumber((espressoTotal / homeTotal) * 100) : "0.0"}%`}
-        />
-        <Metric
-          detail={weightedRate ? "Weighted from electricity charges" : "Rate not available"}
-          label="Effective rate"
-          value={weightedRate ? `R${formatNumber(weightedRate, 2)}` : "—"}
-        />
-        <Metric
-          detail={
-            latestSnapshot ? `As at ${shortDate(latestSnapshot.date)}` : "From wallet ledger"
-          }
-          label="Energy cost"
-          value={electricityCost ? formatMoney(electricityCost) : "—"}
-        />
-      </dl>
-
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(18rem,0.8fr)]">
-        <Section
-          description={`Native readings, aligned by local household date. ${rangeLabel(days)}.`}
-          title="Energy"
-        >
-          <EnergyChart series={series} />
-        </Section>
-        <Section description="Facts worth following in this window." title="What moved">
-          <div className="space-y-4">
-            <Fact
-              label="Highest home day"
-              value={largestDay ? `${formatNumber(largestDay.homeKwh)} kWh` : "—"}
-              detail={largestDay ? largestDay.label : "Waiting for a whole-home series."}
-            />
-            <Fact
-              label="Espresso share"
-              value={`${formatNumber(homeTotal > 0 ? (espressoTotal / homeTotal) * 100 : 0)}%`}
-              detail="Bianca's share of measured whole-home energy."
-            />
-            <Fact
-              label="Wallet charges"
-              value={formatMoney(walletTotal)}
-              detail="Fees and wallet-level movement."
-            />
-            <Fact
-              label="Water invoice"
-              value={waterEntry ? formatMoney(waterEntry.amount) : "—"}
-              detail={
-                waterEntry
-                  ? shortDate(waterEntry.occurred_at)
-                  : "Water is a monthly charge, not a meter reading."
-              }
-            />
-          </div>
-        </Section>
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-2">
-        <Section
-          description="Debit and credit movement from the utility wallet."
-          title="Money in motion"
-        >
-          <MoneyChart series={moneySeries} />
-        </Section>
-        <Section description={`${data.devices.length} connected`} title="Sources">
-          <SourceList devices={data.devices} readings={data.readings} />
-        </Section>
-      </div>
-    </div>
-  )
-}
-
-function latestWater(entries: LedgerRead[], days: RangeDays) {
-  return entries
-    .filter(
-      (entry) =>
-        entry.utility_type === "water" &&
-        entry.direction === "debit" &&
-        isWithinRange(entry.occurred_at ?? entry.posted_at, days),
-    )
-    .sort((first, second) =>
-      (second.occurred_at ?? "").localeCompare(first.occurred_at ?? ""),
-    )[0]
-}
-
-function Metric({
-  detail,
-  label,
-  value,
+export function OverviewBody({
+  data,
+  onRefresh,
 }: {
-  detail: string
-  label: string
-  value: string
+  data: OverviewData
+  onRefresh?: () => void
 }) {
+  const [selected, setSelected] = useState<OverviewId>("electricity")
+  const active =
+    data.items.find((item) => item.id === selected) ?? data.items[0]
   return (
-    <div className="bg-card px-4 py-3">
-      <dt className="type-label text-muted-foreground">{label}</dt>
-      <dd className="type-numeric mt-1 text-2xl font-semibold tracking-tight">{value}</dd>
-      <p className="type-caption mt-1">{detail}</p>
-    </div>
-  )
-}
-
-function Fact({
-  detail,
-  label,
-  value,
-}: {
-  detail: string
-  label: string
-  value: string
-}) {
-  return (
-    <div className="flex items-start justify-between gap-4 border-b pb-3 last:border-0 last:pb-0">
-      <div>
-        <p className="type-label">{label}</p>
-        <p className="type-caption">{detail}</p>
-      </div>
-      <p className="type-numeric text-sm font-medium">{value}</p>
+    <div className={styles.body}>
+      {data.demo ? (
+        <p className="type-caption text-muted-foreground">
+          Orbit preview · illustrative amounts and budgets
+        </p>
+      ) : null}
+      <section
+        className={styles.orbitLayout}
+        aria-label="Spending and remaining budgets"
+      >
+        <div className={styles.instrument}>
+          <OrbitChart data={data} selected={selected} onSelect={setSelected} />
+          <p className={styles.ringCaption}>
+            Each orbit is one category’s budget. Select one to explore.
+          </p>
+        </div>
+        <div className={styles.categories} aria-label="Headline categories">
+          {data.items.map((item, index) => {
+            const Icon = ICONS[item.id]
+            const percentage =
+              item.budget !== null && item.budget > 0 && item.spent !== null
+                ? Math.max(0, (item.spent / item.budget) * 100)
+                : null
+            return (
+              <Button
+                key={item.id}
+                variant="ghost"
+                aria-pressed={selected === item.id}
+                aria-controls="overview-timeline"
+                onClick={() => setSelected(item.id)}
+                className={styles.category}
+                style={
+                  {
+                    "--category-color": OVERVIEW_COLOURS[index],
+                  } as CSSProperties
+                }
+              >
+                <span className={styles.categoryIcon}>
+                  <Icon aria-hidden="true" />
+                </span>
+                <span className={styles.categoryContent}>
+                  <span className={styles.categoryName}>{item.label}</span>
+                  <span className={styles.amount}>
+                    {item.spent === null ? "—" : formatMoney(item.spent)}
+                  </span>
+                  {item.dataNote ? (
+                    <span className="type-caption text-warning">
+                      {item.dataNote}
+                    </span>
+                  ) : null}
+                </span>
+                <span className={styles.budgetContent}>
+                  <span
+                    className={`${styles.remaining} ${item.remaining !== null && item.remaining < 0 ? "text-warning" : ""}`}
+                  >
+                    {item.remaining === null
+                      ? "—"
+                      : `${formatMoney(Math.abs(item.remaining))} ${item.remaining < 0 ? "over" : "left"}`}
+                  </span>
+                  <span className={styles.budgetLabel}>
+                    {item.budget === null
+                      ? (item.budgetNote ?? "No budget linked")
+                      : `of ${formatMoney(item.budget)}`}
+                  </span>
+                </span>
+                <span className={styles.percentage}>
+                  {percentage === null ? "—" : `${Math.round(percentage)}%`}
+                </span>
+              </Button>
+            )
+          })}
+        </div>
+      </section>
+      {active ? (
+        <SpendingTimeline
+          key={`${data.cycleStart}-${active.id}`}
+          item={active}
+          index={data.items.indexOf(active)}
+        />
+      ) : null}
+      <details className={styles.provenance}>
+        <summary>
+          About this budget period
+          {data.warnings.length ? " · some data needs attention" : ""}
+        </summary>
+        <div className="mt-3 max-w-prose space-y-2">
+          <p>
+            All five categories use{" "}
+            {cycleLabel(data.cycleStart, data.endExclusive)} in Johannesburg
+            time. Electricity is incurred usage cost; wallet top-ups and fees
+            are excluded. Financial spending deducts explicitly marked refunds.
+          </p>
+          <p>
+            Remaining amounts come from linked budget funds. Shared or
+            incomplete budgets are left unfilled rather than estimated. These
+            five categories are not your total household spending.
+          </p>
+          {data.warnings.map((warning) => (
+            <p key={warning}>{warning}</p>
+          ))}
+          <p>
+            Read{" "}
+            {new Intl.DateTimeFormat("en-ZA", {
+              dateStyle: "medium",
+              timeStyle: "short",
+              timeZone: "Africa/Johannesburg",
+            }).format(new Date(data.fetchedAt))}
+            .
+          </p>
+          {onRefresh ? (
+            <Button variant="outline" size="sm" onClick={onRefresh}>
+              Refresh data
+            </Button>
+          ) : null}
+        </div>
+      </details>
     </div>
   )
 }
 
 export function OverviewView() {
-  const [days, setDays] = useState<RangeDays>(90)
-
+  const [cycleStart, setCycleStart] = useState(() => currentCycle().start)
+  const [refreshKey, setRefreshKey] = useState(0)
+  const endExclusive = addMonths(cycleStart, 1)
+  const load = useCallback(() => getOverviewData(cycleStart), [cycleStart])
   return (
-    <div className="space-y-6">
+    <div className={styles.page}>
       <PageHeader
-        actions={<RangeControl onChange={setDays} value={days} />}
-        description="Energy, money, and the signals that explain how the household moved."
         title="Overview"
+        actions={
+          <nav aria-label="Budget period" className={styles.periodControl}>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Previous budget period"
+              onClick={() => setCycleStart(addMonths(cycleStart, -1))}
+            >
+              <ChevronLeft />
+            </Button>
+            <Button
+              variant="ghost"
+              className="type-numeric"
+              aria-label={`Return to current budget period. Viewing ${cycleLabel(cycleStart, endExclusive)}`}
+              onClick={() => setCycleStart(currentCycle().start)}
+            >
+              <CalendarDays />
+              {cycleLabel(cycleStart, endExclusive)}
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Next budget period"
+              onClick={() => setCycleStart(addMonths(cycleStart, 1))}
+            >
+              <ChevronRight />
+            </Button>
+          </nav>
+        }
       />
-      <DataGate load={getOverviewData}>{(data) => <OverviewBody data={data} days={days} />}</DataGate>
+      <DataGate key={`${cycleStart}-${refreshKey}`} load={load}>
+        {(data) => (
+          <OverviewBody
+            data={data}
+            onRefresh={() => setRefreshKey((key) => key + 1)}
+          />
+        )}
+      </DataGate>
     </div>
   )
 }
