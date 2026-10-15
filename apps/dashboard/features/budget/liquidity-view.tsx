@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { FactGrid } from "@/components/patterns/fact-grid"
 import { PageHeader } from "@/components/patterns/page-header"
 import { Section } from "@/components/patterns/section"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -14,7 +15,7 @@ import {
 } from "@/components/ui/table"
 import { copy } from "@/domain/budget/copy"
 import { formatDayMonth } from "@/domain/budget/cycle"
-import { projectLiquidity, type LiquidityAmount, type LiquidityProjection } from "@/domain/budget/liquidity"
+import { projectLiquidity, type LiquidityProjection } from "@/domain/budget/liquidity"
 import type { MemberRef } from "@/domain/budget/members"
 import { readMemberDirectory } from "./members"
 import { readLiquidity } from "./rpc"
@@ -26,16 +27,6 @@ function shownAmount(amount: string | null): string {
 function shownDate(value: string | null): string {
   if (!value) return copy.withheld
   return formatDayMonth(value)
-}
-
-function Fact({ fact }: { fact: LiquidityAmount }) {
-  return (
-    <div className="space-y-1 bg-card px-4 py-3">
-      <p className="type-label text-muted-foreground">{fact.label}</p>
-      <p className="type-numeric text-2xl font-semibold tracking-tight">{shownAmount(fact.amount)}</p>
-      <p className="type-caption text-muted-foreground">{fact.caption}</p>
-    </div>
-  )
 }
 
 export function LiquidityView() {
@@ -139,11 +130,11 @@ function LiquidityBody({ view }: { view: LiquidityProjection }) {
       </Section>
 
       <Section description={copy.forecastDetail} title={copy.forecast}>
-        <dl className="grid gap-px overflow-hidden rounded-lg border bg-border @3xl/liquidity:grid-cols-3">
-          <Fact fact={view.expectedIncome} />
-          <Fact fact={view.expectedPayments} />
-          <Fact fact={view.gap} />
-        </dl>
+        <FactGrid items={[view.expectedIncome, view.expectedPayments, view.gap].map((fact) => ({
+          label: fact.label,
+          value: shownAmount(fact.amount),
+          detail: fact.caption,
+        }))} />
         {view.gap.caption.includes(copy.notStatementForecast) ? (
           <p className="type-caption text-muted-foreground">{copy.notStatementForecast}</p>
         ) : null}

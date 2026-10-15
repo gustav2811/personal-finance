@@ -46,12 +46,17 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { ChartEmpty } from "@/components/patterns/chart-empty"
+import { ChartTooltipSurface } from "@/components/patterns/chart-tooltip-surface"
+import { FactGrid } from "@/components/patterns/fact-grid"
+import { PageHeader } from "@/components/patterns/page-header"
+import { RangeControl } from "@/components/patterns/range-control"
+import { Section } from "@/components/patterns/section"
 import { HistoryControl } from "@/components/patterns/history-control"
 import { EnergyPanel } from "@/features/utilities/energy-panel"
 import { buildMockEnergyData } from "@/features/utilities/mock-data"
 import { WaterPanel } from "@/features/utilities/water-panel"
-import type { HistoryWindow } from "@/lib/range"
+import type { RangeDays, HistoryWindow } from "@/lib/range"
 
 const SWATCHES = [
   ["shocking-pink", "bg-shocking-pink-500"],
@@ -67,19 +72,47 @@ const chartConfig = {
 } satisfies ChartConfig
 
 export function UiGallery() {
-  const [range, setRange] = useState("90")
+  const [range, setRange] = useState<RangeDays>(90)
   const [history, setHistory] = useState<HistoryWindow>(6)
   const mock = useMemo(() => buildMockEnergyData(new Date()), [])
 
   return (
-    <main className="mx-auto flex max-w-5xl flex-col gap-10 p-6">
-      <header className="flex items-start justify-between gap-4">
-        <div>
-          <p className="type-label text-muted-foreground">Dev only</p>
-          <h1 className="type-page-title">UI foundations</h1>
+    <main className="@container/utilities mx-auto flex w-full min-w-0 max-w-5xl flex-col gap-10 p-4 md:p-6">
+      <PageHeader
+        title="Household UI reference"
+        description="Development-only fixtures. Start with shared patterns; keep formatting and decisions in the feature."
+        actions={<ThemeToggle />}
+      />
+
+      <Section title="Build a household screen" description="PageHeader → controls → Section → domain content. These are the production components, with illustrative values.">
+        <div className="flex flex-wrap items-center gap-3">
+          <RangeControl onChange={setRange} value={range} />
+          <span className="type-caption">Controls own selection; features own its meaning.</span>
         </div>
-        <ThemeToggle />
-      </header>
+        <FactGrid items={[
+          { label: "Usage", value: "235.4 kWh", detail: "Closed days only" },
+          { label: "Cost", value: "R780", detail: "Incurred charges" },
+          { label: "Reconciliation", value: "Needs attention", detail: "Do not turn unknown values into zero.", tone: "warning" },
+        ]} />
+        <FactGrid compact items={[
+          { label: "Projected month end", value: "521 kWh", detail: "R1 728" },
+          { label: "Highest day", value: "22.4 kWh", detail: "06 Oct" },
+          { label: "Daily average", value: "16.8 kWh" },
+        ]} />
+      </Section>
+
+      <Section title="Chart states" description="Use ChartTooltipContent for ordinary series. Use the shared surface only when the content needs a custom layout.">
+        <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+          <ChartEmpty title="No readings in this range" description="Choose a longer range to check earlier readings." />
+          <div className="flex items-center justify-center p-4">
+            <ChartTooltipSurface className="grid gap-1">
+              <p className="font-medium">14 Oct</p>
+              <p>Usage: 16.8 kWh</p>
+              <p>Cost: R56</p>
+            </ChartTooltipSurface>
+          </div>
+        </div>
+      </Section>
 
       <section className="space-y-2">
         <h2 className="type-section-title">Typography</h2>
@@ -92,7 +125,7 @@ export function UiGallery() {
 
       <section className="space-y-2">
         <h2 className="type-section-title">Accent palette</h2>
-        <div className="grid grid-cols-5 gap-2">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
           {SWATCHES.map(([name, tone]) => (
             <div key={name} className="space-y-1">
               <div className={`${tone} h-16 rounded-md`} />
@@ -125,20 +158,7 @@ export function UiGallery() {
             <SelectItem value="espresso">Espresso</SelectItem>
           </SelectContent>
         </Select>
-        <ToggleGroup
-          onValueChange={(value) => {
-            if (value) setRange(value)
-          }}
-          size="sm"
-          spacing={0}
-          type="single"
-          value={range}
-          variant="outline"
-        >
-          <ToggleGroupItem value="30">30 days</ToggleGroupItem>
-          <ToggleGroupItem value="90">90 days</ToggleGroupItem>
-          <ToggleGroupItem value="365">1 year</ToggleGroupItem>
-        </ToggleGroup>
+        <RangeControl onChange={setRange} value={range} />
       </section>
 
       <section className="space-y-3">

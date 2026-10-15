@@ -1,0 +1,1215 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-15T12:39:41.214225+00:00",
+  "title": "Design System: Household",
+  "extensions": {
+    "colorMeta": {
+      "background": {
+        "role": "neutral",
+        "displayName": "Background",
+        "canonical": "oklch(1 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "foreground": {
+        "role": "neutral",
+        "displayName": "Foreground",
+        "canonical": "oklch(0.145 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "card": {
+        "role": "neutral",
+        "displayName": "Card",
+        "canonical": "oklch(1 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "card-foreground": {
+        "role": "neutral",
+        "displayName": "Card Foreground",
+        "canonical": "oklch(0.145 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "popover": {
+        "role": "neutral",
+        "displayName": "Popover",
+        "canonical": "oklch(1 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "popover-foreground": {
+        "role": "neutral",
+        "displayName": "Popover Foreground",
+        "canonical": "oklch(0.145 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "primary": {
+        "role": "neutral",
+        "displayName": "Primary",
+        "canonical": "oklch(0.205 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "primary-foreground": {
+        "role": "neutral",
+        "displayName": "Primary Foreground",
+        "canonical": "oklch(0.985 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "secondary": {
+        "role": "neutral",
+        "displayName": "Secondary",
+        "canonical": "oklch(0.97 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "secondary-foreground": {
+        "role": "neutral",
+        "displayName": "Secondary Foreground",
+        "canonical": "oklch(0.205 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Muted",
+        "canonical": "oklch(0.97 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "muted-foreground": {
+        "role": "neutral",
+        "displayName": "Muted Foreground",
+        "canonical": "oklch(0.556 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "accent": {
+        "role": "neutral",
+        "displayName": "Accent",
+        "canonical": "oklch(0.97 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "accent-foreground": {
+        "role": "neutral",
+        "displayName": "Accent Foreground",
+        "canonical": "oklch(0.205 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "destructive": {
+        "role": "tertiary",
+        "displayName": "Destructive",
+        "canonical": "oklch(0.577 0.245 27.325)",
+        "tonalRamp": [
+          "oklch(0.15 0.245 27.325)",
+          "oklch(0.25 0.245 27.325)",
+          "oklch(0.35 0.245 27.325)",
+          "oklch(0.45 0.245 27.325)",
+          "oklch(0.55 0.245 27.325)",
+          "oklch(0.65 0.245 27.325)",
+          "oklch(0.8 0.245 27.325)",
+          "oklch(0.95 0.245 27.325)"
+        ]
+      },
+      "border": {
+        "role": "neutral",
+        "displayName": "Border",
+        "canonical": "oklch(0.922 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "input": {
+        "role": "neutral",
+        "displayName": "Input",
+        "canonical": "oklch(0.922 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "ring": {
+        "role": "neutral",
+        "displayName": "Ring",
+        "canonical": "oklch(0.708 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "chart-1": {
+        "role": "tertiary",
+        "displayName": "Chart 1",
+        "canonical": "#ff00bf",
+        "tonalRamp": [
+          "#330026",
+          "#66004c",
+          "#990073",
+          "#cc0099",
+          "#ff00bf",
+          "#ff33cc",
+          "#ff99e5",
+          "#ffe5f9"
+        ]
+      },
+      "chart-2": {
+        "role": "tertiary",
+        "displayName": "Chart 2",
+        "canonical": "#9500ff",
+        "tonalRamp": [
+          "#1e0033",
+          "#3b0066",
+          "#590099",
+          "#7700cc",
+          "#9500ff",
+          "#aa33ff",
+          "#d499ff",
+          "#f4e5ff"
+        ]
+      },
+      "chart-3": {
+        "role": "tertiary",
+        "displayName": "Chart 3",
+        "canonical": "#4800ff",
+        "tonalRamp": [
+          "#0e0033",
+          "#1d0066",
+          "#2b0099",
+          "#3a00cc",
+          "#4800ff",
+          "#6d33ff",
+          "#b699ff",
+          "#ede5ff"
+        ]
+      },
+      "chart-4": {
+        "role": "tertiary",
+        "displayName": "Chart 4",
+        "canonical": "#00b7ff",
+        "tonalRamp": [
+          "#002533",
+          "#004966",
+          "#006e99",
+          "#0092cc",
+          "#00b7ff",
+          "#33c5ff",
+          "#99e2ff",
+          "#e5f8ff"
+        ]
+      },
+      "chart-5": {
+        "role": "tertiary",
+        "displayName": "Chart 5",
+        "canonical": "#00fffb",
+        "tonalRamp": [
+          "#003332",
+          "#006664",
+          "#009996",
+          "#00ccc9",
+          "#00fffb",
+          "#33fffc",
+          "#99fffd",
+          "#e5ffff"
+        ]
+      },
+      "success": {
+        "role": "tertiary",
+        "displayName": "Success",
+        "canonical": "oklch(0.527 0.154 150.069)",
+        "tonalRamp": [
+          "oklch(0.15 0.154 150.069)",
+          "oklch(0.25 0.154 150.069)",
+          "oklch(0.35 0.154 150.069)",
+          "oklch(0.45 0.154 150.069)",
+          "oklch(0.55 0.154 150.069)",
+          "oklch(0.65 0.154 150.069)",
+          "oklch(0.8 0.154 150.069)",
+          "oklch(0.95 0.154 150.069)"
+        ]
+      },
+      "success-foreground": {
+        "role": "neutral",
+        "displayName": "Success Foreground",
+        "canonical": "oklch(0.985 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "warning": {
+        "role": "tertiary",
+        "displayName": "Warning",
+        "canonical": "oklch(0.681 0.162 75.834)",
+        "tonalRamp": [
+          "oklch(0.15 0.162 75.834)",
+          "oklch(0.25 0.162 75.834)",
+          "oklch(0.35 0.162 75.834)",
+          "oklch(0.45 0.162 75.834)",
+          "oklch(0.55 0.162 75.834)",
+          "oklch(0.65 0.162 75.834)",
+          "oklch(0.8 0.162 75.834)",
+          "oklch(0.95 0.162 75.834)"
+        ]
+      },
+      "warning-foreground": {
+        "role": "neutral",
+        "displayName": "Warning Foreground",
+        "canonical": "oklch(0.28 0.06 70)",
+        "tonalRamp": [
+          "oklch(0.15 0.06 70)",
+          "oklch(0.25 0.06 70)",
+          "oklch(0.35 0.06 70)",
+          "oklch(0.45 0.06 70)",
+          "oklch(0.55 0.06 70)",
+          "oklch(0.65 0.06 70)",
+          "oklch(0.8 0.06 70)",
+          "oklch(0.95 0.06 70)"
+        ]
+      },
+      "info": {
+        "role": "tertiary",
+        "displayName": "Info",
+        "canonical": "oklch(0.546 0.12 250.5)",
+        "tonalRamp": [
+          "oklch(0.15 0.12 250.5)",
+          "oklch(0.25 0.12 250.5)",
+          "oklch(0.35 0.12 250.5)",
+          "oklch(0.45 0.12 250.5)",
+          "oklch(0.55 0.12 250.5)",
+          "oklch(0.65 0.12 250.5)",
+          "oklch(0.8 0.12 250.5)",
+          "oklch(0.95 0.12 250.5)"
+        ]
+      },
+      "info-foreground": {
+        "role": "neutral",
+        "displayName": "Info Foreground",
+        "canonical": "oklch(0.985 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "sidebar": {
+        "role": "neutral",
+        "displayName": "Sidebar",
+        "canonical": "oklch(0.985 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "sidebar-foreground": {
+        "role": "neutral",
+        "displayName": "Sidebar Foreground",
+        "canonical": "oklch(0.145 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "sidebar-primary": {
+        "role": "neutral",
+        "displayName": "Sidebar Primary",
+        "canonical": "oklch(0.205 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "sidebar-primary-foreground": {
+        "role": "neutral",
+        "displayName": "Sidebar Primary Foreground",
+        "canonical": "oklch(0.985 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "sidebar-accent": {
+        "role": "neutral",
+        "displayName": "Sidebar Accent",
+        "canonical": "oklch(0.97 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "sidebar-accent-foreground": {
+        "role": "neutral",
+        "displayName": "Sidebar Accent Foreground",
+        "canonical": "oklch(0.205 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "sidebar-border": {
+        "role": "neutral",
+        "displayName": "Sidebar Border",
+        "canonical": "oklch(0.922 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "sidebar-ring": {
+        "role": "neutral",
+        "displayName": "Sidebar Ring",
+        "canonical": "oklch(0.708 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "background-dark": {
+        "role": "neutral",
+        "displayName": "Background Dark",
+        "canonical": "oklch(0.145 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "foreground-dark": {
+        "role": "neutral",
+        "displayName": "Foreground Dark",
+        "canonical": "oklch(0.985 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "card-dark": {
+        "role": "neutral",
+        "displayName": "Card Dark",
+        "canonical": "oklch(0.205 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "card-foreground-dark": {
+        "role": "neutral",
+        "displayName": "Card Foreground Dark",
+        "canonical": "oklch(0.985 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "popover-dark": {
+        "role": "neutral",
+        "displayName": "Popover Dark",
+        "canonical": "oklch(0.205 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "popover-foreground-dark": {
+        "role": "neutral",
+        "displayName": "Popover Foreground Dark",
+        "canonical": "oklch(0.985 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "primary-dark": {
+        "role": "neutral",
+        "displayName": "Primary Dark",
+        "canonical": "oklch(0.922 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "primary-foreground-dark": {
+        "role": "neutral",
+        "displayName": "Primary Foreground Dark",
+        "canonical": "oklch(0.205 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "secondary-dark": {
+        "role": "neutral",
+        "displayName": "Secondary Dark",
+        "canonical": "oklch(0.269 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "secondary-foreground-dark": {
+        "role": "neutral",
+        "displayName": "Secondary Foreground Dark",
+        "canonical": "oklch(0.985 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "muted-dark": {
+        "role": "neutral",
+        "displayName": "Muted Dark",
+        "canonical": "oklch(0.269 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "muted-foreground-dark": {
+        "role": "neutral",
+        "displayName": "Muted Foreground Dark",
+        "canonical": "oklch(0.708 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "accent-dark": {
+        "role": "neutral",
+        "displayName": "Accent Dark",
+        "canonical": "oklch(0.269 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "accent-foreground-dark": {
+        "role": "neutral",
+        "displayName": "Accent Foreground Dark",
+        "canonical": "oklch(0.985 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "destructive-dark": {
+        "role": "tertiary",
+        "displayName": "Destructive Dark",
+        "canonical": "oklch(0.704 0.191 22.216)",
+        "tonalRamp": [
+          "oklch(0.15 0.191 22.216)",
+          "oklch(0.25 0.191 22.216)",
+          "oklch(0.35 0.191 22.216)",
+          "oklch(0.45 0.191 22.216)",
+          "oklch(0.55 0.191 22.216)",
+          "oklch(0.65 0.191 22.216)",
+          "oklch(0.8 0.191 22.216)",
+          "oklch(0.95 0.191 22.216)"
+        ]
+      },
+      "border-dark": {
+        "role": "neutral",
+        "displayName": "Border Dark",
+        "canonical": "oklch(1 0 0 / 10%)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "input-dark": {
+        "role": "neutral",
+        "displayName": "Input Dark",
+        "canonical": "oklch(1 0 0 / 15%)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "ring-dark": {
+        "role": "neutral",
+        "displayName": "Ring Dark",
+        "canonical": "oklch(0.556 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "success-dark": {
+        "role": "tertiary",
+        "displayName": "Success Dark",
+        "canonical": "oklch(0.765 0.15 150)",
+        "tonalRamp": [
+          "oklch(0.15 0.15 150)",
+          "oklch(0.25 0.15 150)",
+          "oklch(0.35 0.15 150)",
+          "oklch(0.45 0.15 150)",
+          "oklch(0.55 0.15 150)",
+          "oklch(0.65 0.15 150)",
+          "oklch(0.8 0.15 150)",
+          "oklch(0.95 0.15 150)"
+        ]
+      },
+      "success-foreground-dark": {
+        "role": "neutral",
+        "displayName": "Success Foreground Dark",
+        "canonical": "oklch(0.2 0.04 150)",
+        "tonalRamp": [
+          "oklch(0.15 0.04 150)",
+          "oklch(0.25 0.04 150)",
+          "oklch(0.35 0.04 150)",
+          "oklch(0.45 0.04 150)",
+          "oklch(0.55 0.04 150)",
+          "oklch(0.65 0.04 150)",
+          "oklch(0.8 0.04 150)",
+          "oklch(0.95 0.04 150)"
+        ]
+      },
+      "warning-dark": {
+        "role": "tertiary",
+        "displayName": "Warning Dark",
+        "canonical": "oklch(0.82 0.14 85)",
+        "tonalRamp": [
+          "oklch(0.15 0.14 85)",
+          "oklch(0.25 0.14 85)",
+          "oklch(0.35 0.14 85)",
+          "oklch(0.45 0.14 85)",
+          "oklch(0.55 0.14 85)",
+          "oklch(0.65 0.14 85)",
+          "oklch(0.8 0.14 85)",
+          "oklch(0.95 0.14 85)"
+        ]
+      },
+      "info-dark": {
+        "role": "tertiary",
+        "displayName": "Info Dark",
+        "canonical": "oklch(0.78 0.1 240)",
+        "tonalRamp": [
+          "oklch(0.15 0.1 240)",
+          "oklch(0.25 0.1 240)",
+          "oklch(0.35 0.1 240)",
+          "oklch(0.45 0.1 240)",
+          "oklch(0.55 0.1 240)",
+          "oklch(0.65 0.1 240)",
+          "oklch(0.8 0.1 240)",
+          "oklch(0.95 0.1 240)"
+        ]
+      },
+      "info-foreground-dark": {
+        "role": "neutral",
+        "displayName": "Info Foreground Dark",
+        "canonical": "oklch(0.2 0.04 250)",
+        "tonalRamp": [
+          "oklch(0.15 0.04 250)",
+          "oklch(0.25 0.04 250)",
+          "oklch(0.35 0.04 250)",
+          "oklch(0.45 0.04 250)",
+          "oklch(0.55 0.04 250)",
+          "oklch(0.65 0.04 250)",
+          "oklch(0.8 0.04 250)",
+          "oklch(0.95 0.04 250)"
+        ]
+      },
+      "sidebar-dark": {
+        "role": "neutral",
+        "displayName": "Sidebar Dark",
+        "canonical": "oklch(0.205 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "sidebar-foreground-dark": {
+        "role": "neutral",
+        "displayName": "Sidebar Foreground Dark",
+        "canonical": "oklch(0.985 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "sidebar-primary-dark": {
+        "role": "neutral",
+        "displayName": "Sidebar Primary Dark",
+        "canonical": "oklch(0.488 0.243 264.376)",
+        "tonalRamp": [
+          "oklch(0.15 0.243 264.376)",
+          "oklch(0.25 0.243 264.376)",
+          "oklch(0.35 0.243 264.376)",
+          "oklch(0.45 0.243 264.376)",
+          "oklch(0.55 0.243 264.376)",
+          "oklch(0.65 0.243 264.376)",
+          "oklch(0.8 0.243 264.376)",
+          "oklch(0.95 0.243 264.376)"
+        ]
+      },
+      "sidebar-accent-dark": {
+        "role": "neutral",
+        "displayName": "Sidebar Accent Dark",
+        "canonical": "oklch(0.269 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "sidebar-accent-foreground-dark": {
+        "role": "neutral",
+        "displayName": "Sidebar Accent Foreground Dark",
+        "canonical": "oklch(0.985 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "sidebar-border-dark": {
+        "role": "neutral",
+        "displayName": "Sidebar Border Dark",
+        "canonical": "oklch(1 0 0 / 10%)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "sidebar-ring-dark": {
+        "role": "neutral",
+        "displayName": "Sidebar Ring Dark",
+        "canonical": "oklch(0.556 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.45 0 0)",
+          "oklch(0.55 0 0)",
+          "oklch(0.65 0 0)",
+          "oklch(0.8 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Shared display type role."
+      },
+      "page-title": {
+        "displayName": "Page Title",
+        "purpose": "Shared page-title type role."
+      },
+      "section-title": {
+        "displayName": "Section Title",
+        "purpose": "Shared section-title type role."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Shared body type role."
+      },
+      "body-small": {
+        "displayName": "Body Small",
+        "purpose": "Shared body-small type role."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Shared label type role."
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "Shared caption type role."
+      },
+      "control": {
+        "displayName": "Control",
+        "purpose": "Shared control type role."
+      }
+    },
+    "shadows": [
+      {
+        "name": "chart-tooltip",
+        "value": "0 20px 25px -5px rgb(0 0 0 / .1), 0 8px 10px -6px rgb(0 0 0 / .1)",
+        "purpose": "Floating custom chart readouts; not ordinary content."
+      }
+    ],
+    "motion": [
+      {
+        "name": "overview-selection",
+        "value": "220ms",
+        "purpose": "Category background and opacity changes."
+      },
+      {
+        "name": "overview-arc",
+        "value": "240ms ease-out",
+        "purpose": "Arc opacity selection."
+      },
+      {
+        "name": "overview-focus",
+        "value": "260ms cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Timeline focus transition; disabled with reduced motion."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "header-row",
+        "value": "40rem"
+      },
+      {
+        "name": "shell-padding",
+        "value": "48rem"
+      },
+      {
+        "name": "compact-facts-container",
+        "value": "36rem"
+      },
+      {
+        "name": "facts-and-utilities-container",
+        "value": "48rem"
+      },
+      {
+        "name": "overview-container",
+        "value": "50rem"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Rendered registry geometry translated to a portable preview; runtime behavior stays in shadcn.",
+      "html": "<button type=\"button\" class=\"ds-button-primary\">Primary</button>",
+      "css": ".ds-button-primary{font-family:Geist,sans-serif;font-size:14px;line-height:20px;font-weight:500;display:inline-flex;align-items:center;justify-content:center;height:32px;padding:0 10px;border:1px solid transparent;border-radius:10px;cursor:pointer;background:var(--primary, oklch(0.205 0 0));color:var(--primary-foreground, oklch(0.985 0 0));}.ds-button-primary:hover{background:color-mix(in oklab, var(--primary, oklch(0.205 0 0)) 90%, transparent);}.ds-button-primary:focus-visible{outline:2px solid var(--ring, oklch(0.708 0 0));outline-offset:2px;}.ds-button-primary:disabled{opacity:.5;pointer-events:none;}"
+    },
+    {
+      "name": "Secondary button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Rendered registry geometry translated to a portable preview; runtime behavior stays in shadcn.",
+      "html": "<button type=\"button\" class=\"ds-button-secondary\">Secondary</button>",
+      "css": ".ds-button-secondary{font-family:Geist,sans-serif;font-size:14px;line-height:20px;font-weight:500;display:inline-flex;align-items:center;justify-content:center;height:32px;padding:0 10px;border:1px solid transparent;border-radius:10px;cursor:pointer;background:var(--secondary, oklch(0.97 0 0));color:var(--secondary-foreground, oklch(0.205 0 0));}.ds-button-secondary:hover{background:color-mix(in oklab, var(--secondary, oklch(0.97 0 0)) 90%, transparent);}.ds-button-secondary:focus-visible{outline:2px solid var(--ring, oklch(0.708 0 0));outline-offset:2px;}.ds-button-secondary:disabled{opacity:.5;pointer-events:none;}"
+    },
+    {
+      "name": "Outline button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Rendered registry geometry translated to a portable preview; runtime behavior stays in shadcn.",
+      "html": "<button type=\"button\" class=\"ds-button-outline\">Outline</button>",
+      "css": ".ds-button-outline{font-family:Geist,sans-serif;font-size:14px;line-height:20px;font-weight:500;display:inline-flex;align-items:center;justify-content:center;height:32px;padding:0 10px;border:1px solid transparent;border-radius:10px;cursor:pointer;background:var(--background, oklch(1 0 0));color:var(--foreground, oklch(0.145 0 0));border-color:var(--border, oklch(0.922 0 0));}.ds-button-outline:hover{background:var(--accent, oklch(0.97 0 0));color:var(--accent-foreground, oklch(0.205 0 0));}.ds-button-outline:focus-visible{outline:2px solid var(--ring, oklch(0.708 0 0));outline-offset:2px;}.ds-button-outline:disabled{opacity:.5;pointer-events:none;}"
+    },
+    {
+      "name": "Ghost button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Rendered registry geometry translated to a portable preview; runtime behavior stays in shadcn.",
+      "html": "<button type=\"button\" class=\"ds-button-ghost\">Ghost</button>",
+      "css": ".ds-button-ghost{font-family:Geist,sans-serif;font-size:14px;line-height:20px;font-weight:500;display:inline-flex;align-items:center;justify-content:center;height:32px;padding:0 10px;border:1px solid transparent;border-radius:10px;cursor:pointer;background:transparent;color:var(--foreground, oklch(0.145 0 0));}.ds-button-ghost:hover{background:var(--accent, oklch(0.97 0 0));color:var(--accent-foreground, oklch(0.205 0 0));}.ds-button-ghost:focus-visible{outline:2px solid var(--ring, oklch(0.708 0 0));outline-offset:2px;}.ds-button-ghost:disabled{opacity:.5;pointer-events:none;}"
+    },
+    {
+      "name": "Destructive button",
+      "kind": "button",
+      "refersTo": "button-destructive",
+      "description": "Rendered registry geometry translated to a portable preview; runtime behavior stays in shadcn.",
+      "html": "<button type=\"button\" class=\"ds-button-destructive\">Destructive</button>",
+      "css": ".ds-button-destructive{font-family:Geist,sans-serif;font-size:14px;line-height:20px;font-weight:500;display:inline-flex;align-items:center;justify-content:center;height:32px;padding:0 10px;border:1px solid transparent;border-radius:10px;cursor:pointer;background:color-mix(in oklab, var(--destructive, oklch(0.577 0.245 27.325)) 10%, transparent);color:var(--destructive, oklch(0.577 0.245 27.325));}.ds-button-destructive:hover{background:color-mix(in oklab, var(--destructive, oklch(0.577 0.245 27.325)) 20%, transparent);}.ds-button-destructive:focus-visible{outline:2px solid var(--ring, oklch(0.708 0 0));outline-offset:2px;}.ds-button-destructive:disabled{opacity:.5;pointer-events:none;}"
+    },
+    {
+      "name": "Text field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Labelled registry text field, with inline focus and invalid states.",
+      "html": "<label class=\"ds-field\">Description<input class=\"ds-input\" placeholder=\"Merchant or description\" /></label>",
+      "css": ".ds-field{display:grid;gap:6px;font-family:Geist,sans-serif;font-size:14px;line-height:20px;color:var(--foreground, oklch(0.145 0 0));}.ds-input{font-family:Geist,sans-serif;font-size:14px;line-height:20px;height:32px;padding:4px 10px;border:1px solid var(--input, oklch(0.922 0 0));border-radius:10px;background:transparent;color:var(--foreground, oklch(0.145 0 0));}.ds-input:focus-visible{outline:2px solid var(--ring, oklch(0.708 0 0));outline-offset:2px;}.ds-input::placeholder{color:var(--muted-foreground, oklch(0.556 0 0));}.ds-input:disabled{opacity:.5;}.ds-input[aria-invalid=true]{border-color:var(--destructive, oklch(0.577 0.245 27.325));}"
+    },
+    {
+      "name": "Time-range choice",
+      "kind": "chip",
+      "refersTo": "range-choice",
+      "description": "Connected single-selection choices. Runtime uses ToggleGroup keyboard behavior.",
+      "html": "<div class=\"ds-choices\" role=\"group\" aria-label=\"Time range\"><button type=\"button\" aria-pressed=\"false\">30 days</button><button type=\"button\" aria-pressed=\"true\">90 days</button><button type=\"button\" aria-pressed=\"false\">1 year</button></div>",
+      "css": ".ds-choices{display:flex;}.ds-choices button{font-family:Geist,sans-serif;font-size:14px;line-height:20px;font-size:12.8px;font-weight:500;height:28px;padding:0 8px;background:transparent;color:var(--foreground, oklch(0.145 0 0));border:1px solid var(--border, oklch(0.922 0 0));cursor:pointer;}.ds-choices button+button{margin-left:-1px;}.ds-choices button:first-child{border-radius:10px 0 0 10px;}.ds-choices button:last-child{border-radius:0 10px 10px 0;}.ds-choices button[aria-pressed=true],.ds-choices button:hover{background:var(--muted, oklch(0.97 0 0));}.ds-choices button:focus-visible{outline:2px solid var(--ring, oklch(0.708 0 0));outline-offset:2px;position:relative;z-index:1;}"
+    },
+    {
+      "name": "Fact group",
+      "kind": "card",
+      "refersTo": "fact-grid",
+      "description": "Read-only labelled values. Illustrative amounts; not a generic dashboard card.",
+      "html": "<dl class=\"ds-facts\"><div><dt>Usage</dt><dd>235.4 kWh<small>Closed days only</small></dd></div><div><dt>Cost</dt><dd>R780<small>Incurred charges</small></dd></div></dl>",
+      "css": ".ds-facts{font-family:Geist,sans-serif;font-size:14px;line-height:20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1px;margin:0;overflow:hidden;border:1px solid var(--border, oklch(0.922 0 0));border-radius:10px;background:var(--border, oklch(0.922 0 0));color:var(--foreground, oklch(0.145 0 0));}.ds-facts>div{padding:12px 16px;background:var(--card, oklch(1 0 0));}.ds-facts dt{font-size:12px;font-weight:500;line-height:1.3;color:var(--muted-foreground, oklch(0.556 0 0));}.ds-facts dd{margin:4px 0 0;font-size:24px;font-weight:600;letter-spacing:-.025em;font-variant-numeric:tabular-nums;}.ds-facts small{display:block;font-size:12px;font-weight:400;line-height:1.4;letter-spacing:normal;color:var(--muted-foreground, oklch(0.556 0 0));}"
+    },
+    {
+      "name": "Custom chart tooltip",
+      "kind": "custom",
+      "refersTo": "chart-tooltip",
+      "description": "Domain-specific readout in the shared tooltip surface; illustrative values.",
+      "html": "<div class=\"ds-chart-tip\"><strong>14 Oct</strong><div>Usage: 16.8 kWh</div><div>Cost: R56</div></div>",
+      "css": ".ds-chart-tip{font-family:Geist,sans-serif;font-size:14px;line-height:20px;display:grid;gap:4px;width:fit-content;padding:6px 10px;border:1px solid var(--border, oklch(0.922 0 0));border-radius:10px;background:var(--background, oklch(1 0 0));color:var(--foreground, oklch(0.145 0 0));font-size:12px;line-height:16px;font-variant-numeric:tabular-nums;box-shadow:0 20px 25px -5px rgb(0 0 0 / .1),0 8px 10px -6px rgb(0 0 0 / .1);}"
+    },
+    {
+      "name": "Sidebar destination",
+      "kind": "nav",
+      "refersTo": "sidebar-item",
+      "description": "Neutral active destination; runtime Sidebar owns collapse, tooltip, and mobile sheet.",
+      "html": "<nav aria-label=\"Household\" class=\"ds-nav\"><a href=\"#overview\" aria-current=\"page\"><svg aria-hidden=\"true\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z\"/><path d=\"M9 21V12h6v9\"/></svg>Overview</a></nav>",
+      "css": ".ds-nav{font-family:Geist,sans-serif;font-size:14px;line-height:20px;}.ds-nav a{display:flex;align-items:center;gap:8px;padding:8px;border-radius:8px;text-decoration:none;color:var(--sidebar-foreground, oklch(0.145 0 0));}.ds-nav a[aria-current=page],.ds-nav a:hover{background:var(--sidebar-accent, oklch(0.97 0 0));color:var(--sidebar-accent-foreground, oklch(0.205 0 0));}.ds-nav a:focus-visible{outline:2px solid var(--ring, oklch(0.708 0 0));outline-offset:2px;}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Household observatory",
+    "overview": "A calm, clear, data-led view of household energy and money. Neutral surfaces recede so quantities, relationships, and exceptions carry the attention. Bright accents identify data; ordinary controls remain restrained.\n\nThe system is flat and restrained: small controls, clear labels, quiet dividers, and enough space to distinguish tasks. The orbit, timeline, and cash-flow drawing are instruments with their own geometry, composed within the same shell and theme.",
+    "keyCharacteristics": [
+      "Neutral surfaces with bright data accents.",
+      "One Geist type family with tabular quantities.",
+      "Flat content; elevated overlays.",
+      "Responsive compositions with explicit uncertainty."
+    ],
+    "rules": [
+      {
+        "name": "The Data Accent Rule",
+        "body": "Colour identifies a series or a state; labels and values must still explain it without colour.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Face Rule",
+        "body": "Keep the interface and quantities in Geist; distinguish hierarchy with role, size, weight, spacing, and numeric features.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat Content Rule",
+        "body": "Use spacing, a divider, or a surface change to separate content. Lift a surface only when it floats above the current task.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do compose registry primitives and shared patterns before adding a new component.",
+      "Do keep financial values signed and units explicit.",
+      "Do distinguish zero, unknown, stale, empty, loading, and failed states.",
+      "Do check narrow widths, both themes, keyboard focus, and reduced motion."
+    ],
+    "donts": [
+      "Don't create a second palette, primitive library, or generic dashboard widget framework.",
+      "Don't use chart colour as the only cue for status or selection.",
+      "Don't wrap every section in a card or put page filters in the sidebar.",
+      "Don't embed reference SVGs or hard-code their 600px canvas into the application."
+    ]
+  }
+}

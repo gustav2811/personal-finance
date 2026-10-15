@@ -1,5 +1,6 @@
 "use client"
 
+import { ChartTooltipSurface } from "@/components/patterns/chart-tooltip-surface"
 import { CartesianGrid, Line, LineChart, XAxis } from "recharts"
 import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/chart"
 import type { FundPoint } from "@/domain/budget/fund"
@@ -12,10 +13,10 @@ function Tip({ active, payload }: { active?: boolean; payload?: Array<{ payload?
   const point = payload?.[0]?.payload
   if (!active || !point) return null
   return (
-    <div className="type-numeric rounded-lg border bg-background px-2.5 py-1.5 text-xs shadow-xl">
+    <ChartTooltipSurface>
       <p>{point.when}</p>
       <p>{point.balanceText}</p>
-    </div>
+    </ChartTooltipSurface>
   )
 }
 

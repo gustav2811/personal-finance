@@ -11,7 +11,8 @@ export async function proxy(request: NextRequest) {
       pathname === "/transactions" ||
       pathname === "/analysis" ||
       pathname === "/api/categories/suggest" ||
-      pathname === "/api/dev/analysis-sample"
+      pathname === "/api/dev/analysis-sample" ||
+      pathname === "/dev/ui"
     )
       return NextResponse.next()
     const url = request.nextUrl.clone()

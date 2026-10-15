@@ -1,9 +1,10 @@
 "use client"
 
+import { ChartTooltipSurface } from "@/components/patterns/chart-tooltip-surface"
 import { useId } from "react"
 import { Bar, BarChart, ReferenceArea, XAxis, YAxis } from "recharts"
 import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/chart"
-import { Empty, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
+import { ChartEmpty } from "@/components/patterns/chart-empty"
 
 export type MonthBar = { label: string; month: string; value: number }
 export type BarMarker = { label: string; text: string }
@@ -52,11 +53,7 @@ export function MonthBars({
 
   if (bars.length === 0) {
     return (
-      <Empty className="min-h-48 border">
-        <EmptyHeader>
-          <EmptyTitle>{emptyLabel}</EmptyTitle>
-        </EmptyHeader>
-      </Empty>
+      <ChartEmpty title={emptyLabel} />
     )
   }
 
@@ -117,10 +114,10 @@ export function MonthBars({
             content={({ active: hovering, payload }) => {
               const item = payload?.[0]?.payload as MonthBar | undefined
               return hovering && item ? (
-                <div className="type-numeric rounded-lg border bg-background px-2.5 py-1.5 text-xs shadow-xl">
+                <ChartTooltipSurface>
                   <span className="text-muted-foreground">{item.label}</span>{" "}
                   <span className="font-medium">{format(item.value)}</span>
-                </div>
+                </ChartTooltipSurface>
               ) : null
             }}
             cursor={false}

@@ -1,5 +1,6 @@
 "use client"
 
+import { ChartTooltipSurface } from "@/components/patterns/chart-tooltip-surface"
 import { useMemo } from "react"
 import { Area, Bar, CartesianGrid, ComposedChart, Line, XAxis, YAxis } from "recharts"
 import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/chart"
@@ -31,7 +32,7 @@ type Row = {
 function TooltipBody({ row }: { row: Row }) {
   const { source } = row
   return (
-    <div className="grid min-w-40 gap-1.5 rounded-lg border bg-background px-2.5 py-1.5 text-xs shadow-xl">
+    <ChartTooltipSurface className="grid min-w-40 gap-1.5">
       <p className="font-medium">Day {row.day}</p>
       {source.kwh !== null ? (
         <p className="type-numeric flex justify-between gap-4">
@@ -61,7 +62,7 @@ function TooltipBody({ row }: { row: Row }) {
           <span>{formatMoney(source.fees, 2)}</span>
         </p>
       ) : null}
-    </div>
+    </ChartTooltipSurface>
   )
 }
 

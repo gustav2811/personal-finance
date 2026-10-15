@@ -9,7 +9,7 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart"
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
+import { ChartEmpty } from "@/components/patterns/chart-empty"
 import type { MoneyPoint } from "@/domain/consumption/model"
 import { formatMoney } from "@/lib/format/money"
 
@@ -21,12 +21,7 @@ const moneyConfig = {
 export function MoneyChart({ series }: { series: MoneyPoint[] }) {
   if (series.length === 0) {
     return (
-      <Empty className="min-h-48 border">
-        <EmptyHeader>
-          <EmptyTitle>No wallet movement</EmptyTitle>
-          <EmptyDescription>No wallet movement in this range.</EmptyDescription>
-        </EmptyHeader>
-      </Empty>
+      <ChartEmpty title="No wallet movement" description="No wallet movement in this range." />
     )
   }
 

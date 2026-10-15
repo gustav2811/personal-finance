@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
+import { FactGrid } from "@/components/patterns/fact-grid"
 import { PageHeader } from "@/components/patterns/page-header"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
@@ -15,7 +16,7 @@ import {
 import { copy } from "@/domain/budget/copy"
 import { currentCycle } from "@/domain/budget/cycle"
 import { readCutover } from "@/domain/budget/cutover"
-import { projectFund, type FundMoney, type FundView as FundDetail } from "@/domain/budget/fund"
+import { projectFund, type FundView as FundDetail } from "@/domain/budget/fund"
 import type { MemberRef } from "@/domain/budget/members"
 import { FundLine } from "@/domain/budget/fund-line"
 import { TargetBar } from "@/domain/budget/target-bar"
@@ -23,19 +24,6 @@ import { readMemberDirectory } from "./members"
 import { readCutover as readCutoverRpc, readFund } from "./rpc"
 
 const FUND_HISTORY_FROM = "2020-01-01"
-
-function Fact({ fact }: { fact: FundMoney }) {
-  const deficit = fact.amount.startsWith(copy.deficit)
-  return (
-    <div className="space-y-1 bg-card px-4 py-3">
-      <p className="type-label text-muted-foreground">{fact.label}</p>
-      <p className={`type-numeric text-2xl font-semibold tracking-tight ${deficit ? "text-warning" : ""}`}>
-        {fact.amount}
-      </p>
-      {fact.caption ? <p className="type-caption text-muted-foreground">{fact.caption}</p> : null}
-    </div>
-  )
-}
 
 function FundBody({ view }: { view: FundDetail }) {
   const facts = [view.available, view.ledger, view.assigned, view.restricted, view.suggestion].flatMap((fact) =>
@@ -75,11 +63,12 @@ function FundBody({ view }: { view: FundDetail }) {
         </p>
       ))}
 
-      <dl className="grid gap-px overflow-hidden rounded-lg border bg-border @3xl/fund:grid-cols-2">
-        {facts.map((fact) => (
-          <Fact fact={fact} key={fact.label} />
-        ))}
-      </dl>
+      <FactGrid columns={2} items={facts.map((fact) => ({
+        label: fact.label,
+        value: fact.amount,
+        detail: fact.caption,
+        tone: fact.amount.startsWith(copy.deficit) ? "warning" : "default",
+      }))} />
 
       {view.target ? (
         <div className="space-y-2">

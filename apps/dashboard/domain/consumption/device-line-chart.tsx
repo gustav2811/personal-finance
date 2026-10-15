@@ -1,8 +1,9 @@
 "use client"
 
+import { ChartTooltipSurface } from "@/components/patterns/chart-tooltip-surface"
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
 import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/chart"
-import { Empty, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
+import { ChartEmpty } from "@/components/patterns/chart-empty"
 import type { DeviceDayPoint } from "@/domain/consumption/energy-model"
 import { formatNumber } from "@/lib/format/money"
 
@@ -15,11 +16,7 @@ const lineConfig = {
 export function DeviceLineChart({ points }: { points: DeviceDayPoint[] }) {
   if (points.every((point) => point.current === null && point.previous === null)) {
     return (
-      <Empty className="min-h-48 border">
-        <EmptyHeader>
-          <EmptyTitle>No readings for this device in the last two months</EmptyTitle>
-        </EmptyHeader>
-      </Empty>
+      <ChartEmpty title="No readings for this device in the last two months" />
     )
   }
 
@@ -38,7 +35,7 @@ export function DeviceLineChart({ points }: { points: DeviceDayPoint[] }) {
           content={({ active, payload }) => {
             const row = payload?.[0]?.payload as DeviceDayPoint | undefined
             return active && row ? (
-              <div className="type-numeric grid min-w-36 gap-1 rounded-lg border bg-background px-2.5 py-1.5 text-xs shadow-xl">
+              <ChartTooltipSurface className="grid min-w-36 gap-1">
                 <p className="font-medium">Day {row.day}</p>
                 {row.current !== null ? (
                   <p className="flex justify-between gap-4">
@@ -52,7 +49,7 @@ export function DeviceLineChart({ points }: { points: DeviceDayPoint[] }) {
                     <span>{formatNumber(row.previous)} kWh</span>
                   </p>
                 ) : null}
-              </div>
+              </ChartTooltipSurface>
             ) : null
           }}
           cursor={{ stroke: "var(--border)", strokeWidth: 1 }}

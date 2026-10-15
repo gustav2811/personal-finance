@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react"
 import { Section } from "@/components/patterns/section"
-import { Empty, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
+import { ChartEmpty } from "@/components/patterns/chart-empty"
 import { historyMonths } from "@/domain/consumption/energy-model"
 import { MonthBars } from "@/domain/consumption/month-bars"
 import { buildWaterMonths } from "@/domain/consumption/water-model"
@@ -23,11 +23,7 @@ export function WaterPanel({ data, window }: { data: EnergyData; window: History
 
   if (!latest) {
     return (
-      <Empty className="min-h-48 border">
-        <EmptyHeader>
-          <EmptyTitle>No water invoices</EmptyTitle>
-        </EmptyHeader>
-      </Empty>
+      <ChartEmpty title="No water invoices" />
     )
   }
 

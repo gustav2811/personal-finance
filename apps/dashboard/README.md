@@ -1,8 +1,12 @@
 # Household
 
-Private household dashboard for energy, utility wallet movement, devices,
-and source freshness. The UI is the shadcn design system documented in
-`DESIGN.md`.
+Private household app for energy, utility wallet movement, financial analysis,
+budget planning, transaction review, devices, and source freshness.
+
+Start UI work with [DESIGN.md](DESIGN.md), then the
+[pattern contracts](components/patterns/README.md). Engineering boundaries live in
+[ARCHITECTURE.md](ARCHITECTURE.md). The portable design-panel previews are generated
+in `.impeccable/design.json`; the executable fixture reference is `/dev/ui`.
 
 ## Local development
 
@@ -55,13 +59,15 @@ The yellow sample-data banner confirms demo mode. Unsupported dashboard pages
 redirect here; category suggestions also use fixtures, with no live services.
 
 1. Open Takealot, type `gifts`, and click Gifts with the mouse. It stays selected.
-2. Edit Description and enter multiline Notes. Choose **Save & mark reviewed**.
-3. Close and reopen it: category, description, and notes remain saved.
+2. Edit Description or Notes. Changes save automatically after a short pause.
+3. Click Next or Close immediately after typing: the pending edit saves first.
+   On failure the editor stays open with your draft and a Retry button.
 4. Opening a transaction clears its unseen dot. Seen state is remembered in this
    browser, separately from review confirmation. The review queue is available
-   under **Filters → Show → Needs review**; saved reviews leave that queue.
-5. Verify keyboard selection with Arrow Down and Enter. Unsaved changes prompt
-   before closing or moving to another transaction.
+   under **Filters → Show → Needs review**. Explicit Save or Mark reviewed advances
+   to the next queued transaction; background autosave keeps the current editor open.
+5. Navigation and save feedback stay visible. Transaction details, classification
+   history, and budgeting controls are available in collapsed sections.
 6. Reload the page to reset the sample data.
 
 Run `yarn test:transactions` for fixture concurrency/filter/production-guard
@@ -69,3 +75,10 @@ checks, and `yarn types` for the dashboard type check. Database access and atomi
 save tests run in the disposable database with `./tools/budget-db-tests/run.sh`
 from the repository root. Apply the transaction review migration before deploying
 the dashboard changes to a real environment.
+
+## UI reference
+
+In development demo mode, open `/dev/ui` for reusable household compositions,
+tokens, controls, chart states, and utility fixtures. It is unavailable in
+production. Start new UI work with [the pattern index](components/patterns/README.md)
+and [the extraction review](../../docs/design/household-ui-system.md).

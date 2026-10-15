@@ -1,9 +1,10 @@
 "use client"
 
+import { ChartTooltipSurface } from "@/components/patterns/chart-tooltip-surface"
 import { useId } from "react"
 import { Bar, BarChart, ReferenceArea, XAxis, YAxis } from "recharts"
 import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/chart"
-import { Empty, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
+import { ChartEmpty } from "@/components/patterns/chart-empty"
 import type { WeekdayPoint } from "@/domain/consumption/energy-model"
 import { formatNumber } from "@/lib/format/money"
 
@@ -39,11 +40,7 @@ export function WeekdayChart({ points }: { points: WeekdayPoint[] }) {
 
   if (!peak || peak.kwh === null) {
     return (
-      <Empty className="min-h-48 border">
-        <EmptyHeader>
-          <EmptyTitle>No closed days this month</EmptyTitle>
-        </EmptyHeader>
-      </Empty>
+      <ChartEmpty title="No closed days this month" />
     )
   }
 
@@ -81,10 +78,10 @@ export function WeekdayChart({ points }: { points: WeekdayPoint[] }) {
             content={({ active, payload }) => {
               const item = payload?.[0]?.payload as WeekdayPoint | undefined
               return active && item && item.kwh !== null ? (
-                <div className="type-numeric rounded-lg border bg-background px-2.5 py-1.5 text-xs shadow-xl">
+                <ChartTooltipSurface>
                   <span className="text-muted-foreground">{item.label}</span>{" "}
                   <span className="font-medium">{formatNumber(item.kwh)} kWh</span>
-                </div>
+                </ChartTooltipSurface>
               ) : null
             }}
             cursor={false}

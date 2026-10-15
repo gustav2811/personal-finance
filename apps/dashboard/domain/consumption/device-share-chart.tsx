@@ -10,7 +10,7 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart"
-import { Empty, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
+import { ChartEmpty } from "@/components/patterns/chart-empty"
 import { REST_KEY, type DeviceShare } from "@/domain/consumption/energy-model"
 import { formatNumber } from "@/lib/format/money"
 
@@ -22,11 +22,7 @@ export function DeviceShareChart({ share }: { share: DeviceShare }) {
   const id = useId().replace(/:/g, "")
   if (share.series.length === 0 || share.points.length === 0) {
     return (
-      <Empty className="min-h-48 border">
-        <EmptyHeader>
-          <EmptyTitle>No device readings</EmptyTitle>
-        </EmptyHeader>
-      </Empty>
+      <ChartEmpty title="No device readings" />
     )
   }
 

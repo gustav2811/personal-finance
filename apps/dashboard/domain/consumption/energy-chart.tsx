@@ -9,7 +9,7 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart"
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
+import { ChartEmpty } from "@/components/patterns/chart-empty"
 import type { ChartPoint } from "@/domain/consumption/model"
 import { formatNumber } from "@/lib/format/money"
 
@@ -21,12 +21,7 @@ const energyConfig = {
 export function EnergyChart({ series }: { series: ChartPoint[] }) {
   if (series.length === 0) {
     return (
-      <Empty className="min-h-48 border">
-        <EmptyHeader>
-          <EmptyTitle>No energy readings</EmptyTitle>
-          <EmptyDescription>No daily energy readings in this range.</EmptyDescription>
-        </EmptyHeader>
-      </Empty>
+      <ChartEmpty title="No energy readings" description="No daily energy readings in this range." />
     )
   }
 

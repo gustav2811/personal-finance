@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { FactGrid } from "@/components/patterns/fact-grid"
 import { Section } from "@/components/patterns/section"
 import {
   Select,
@@ -172,26 +173,11 @@ export function EnergyPanel({
           </div>
 
           {summary ? (
-            <dl className="grid gap-px overflow-hidden rounded-lg border bg-border @xl/utilities:grid-cols-3">
-              <Stat
-                detail={
-                  summary.projectedRand === null
-                    ? undefined
-                    : formatMoney(summary.projectedRand)
-                }
-                label="Projected month end"
-                value={`${formatNumber(summary.projectedKwh, 0)} kWh`}
-              />
-              <Stat
-                detail={shortDate(`${summary.highestDay.key}T12:00:00+02:00`)}
-                label="Highest day"
-                value={`${formatNumber(summary.highestDay.kwh)} kWh`}
-              />
-              <Stat
-                label="Daily average"
-                value={`${formatNumber(summary.kwh / summary.lastClosedDay)} kWh`}
-              />
-            </dl>
+            <FactGrid compact items={[
+              { label: "Projected month end", value: `${formatNumber(summary.projectedKwh, 0)} kWh`, detail: summary.projectedRand === null ? undefined : formatMoney(summary.projectedRand) },
+              { label: "Highest day", value: `${formatNumber(summary.highestDay.kwh)} kWh`, detail: shortDate(`${summary.highestDay.key}T12:00:00+02:00`) },
+              { label: "Daily average", value: `${formatNumber(summary.kwh / summary.lastClosedDay)} kWh` },
+            ]} />
           ) : null}
         </section>
       )}
@@ -428,27 +414,5 @@ function PeriodSection({ period }: { period: PeriodData }) {
         </p>
       </div>
     </section>
-  )
-}
-
-function Stat({
-  detail,
-  label,
-  value,
-}: {
-  detail?: string
-  label: string
-  value: string
-}) {
-  return (
-    <div className="flex items-baseline justify-between gap-4 bg-card px-4 py-3 @xl/utilities:block">
-      <dt className="type-label text-muted-foreground">{label}</dt>
-      <dd className="flex flex-col items-end text-right @xl/utilities:mt-1 @xl/utilities:items-start @xl/utilities:text-left">
-        <span className="type-numeric text-lg font-semibold tracking-tight @xl/utilities:text-xl">
-          {value}
-        </span>
-        {detail ? <span className="type-caption">{detail}</span> : null}
-      </dd>
-    </div>
   )
 }

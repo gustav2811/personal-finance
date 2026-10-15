@@ -1,5 +1,6 @@
 "use client"
 
+import { ChartTooltipSurface } from "@/components/patterns/chart-tooltip-surface"
 import { Bar, BarChart, CartesianGrid, XAxis } from "recharts"
 import {
   ChartContainer,
@@ -27,7 +28,7 @@ function ComparisonTip({
   const row = payload?.[0]?.payload
   if (!active || !row) return null
   return (
-    <div className="type-numeric grid gap-1 rounded-lg border bg-background px-2.5 py-1.5 text-xs shadow-xl">
+    <ChartTooltipSurface className="grid gap-1">
       <p className="font-medium">{row.name}</p>
       <p>
         {copy.originalPlan}: {row.originalText}
@@ -38,7 +39,7 @@ function ComparisonTip({
       <p>
         {copy.spent}: {row.spentText}
       </p>
-    </div>
+    </ChartTooltipSurface>
   )
 }
 
