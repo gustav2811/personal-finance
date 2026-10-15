@@ -23,6 +23,8 @@ const reportOnlyCsp = [
 ].join("; ")
 
 const nextConfig = {
+  // Local financial snapshots must never enter a deployment's traced files.
+  outputFileTracingExcludes: { "/*": ["./.local/**/*"] },
   reactStrictMode: true,
   env: {
     // Safe to expose: this is only a local development switch, and the

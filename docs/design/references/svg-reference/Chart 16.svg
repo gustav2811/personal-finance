@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 930 420" fill="none">
+<title>Cash flow — Sankey reference (illustrative data)</title>
+<rect width="930" height="420" rx="16" fill="#171724"/>
+<g opacity=".35">
+<path d="M18 55 C198 55 280 90 460 90 L460 290 C280 290 198 255 18 255Z" fill="#6BCCFE"/>
+<path d="M18 300 C198 300 280 290 460 290 L460 330 C280 330 198 340 18 340Z" fill="#A08CFB"/>
+<path d="M470 90 C650 90 732 45 912 45 L912 155 C732 155 650 200 470 200Z" fill="#FF75D8"/>
+<path d="M470 200 C650 200 732 200 912 200 L912 260 C732 260 650 260 470 260Z" fill="#A08CFB"/>
+<path d="M470 260 C650 260 732 305 912 305 L912 335 C732 335 650 290 470 290Z" fill="#FF7133"/>
+<path d="M470 290 C650 290 732 370 912 370 L912 410 C732 410 650 330 470 330Z" fill="#7CF888"/>
+</g>
+<g fill="#6BCCFE"><rect x="10" y="55" width="7" height="200" rx="3"/><rect x="10" y="300" width="7" height="40" rx="3"/></g>
+<rect x="460" y="90" width="10" height="240" rx="5" fill="#A08CFB"/>
+<rect x="912" y="45" width="7" height="110" rx="3" fill="#FF75D8"/><rect x="912" y="200" width="7" height="60" rx="3" fill="#A08CFB"/><rect x="912" y="305" width="7" height="30" rx="3" fill="#FF7133"/><rect x="912" y="370" width="7" height="40" rx="3" fill="#7CF888"/>
+<g fill="white" font-family="sans-serif" font-size="14"><text x="28" y="148">Salary</text><text x="28" y="318">Other income</text><text x="898" y="95" text-anchor="end">Home</text><text x="898" y="225" text-anchor="end">Living</text><text x="898" y="320" text-anchor="end">Travel</text><text x="898" y="388" text-anchor="end">Surplus</text></g>
+</svg>
