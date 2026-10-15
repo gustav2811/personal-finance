@@ -1,6 +1,7 @@
 "use client"
 
 import {
+  ChartNoAxesCombined,
   Home,
   Landmark,
   List,
@@ -38,6 +39,7 @@ const HOUSEHOLD: NavItem[] = [
   { href: "/", icon: Home, label: "Overview" },
   { href: "/budget", icon: Scale, label: "Budget" },
   { href: "/money", icon: Wallet, label: "Money" },
+  { href: "/analysis", icon: ChartNoAxesCombined, label: "Analysis" },
   { href: "/transactions", icon: List, label: "Transactions" },
 ]
 

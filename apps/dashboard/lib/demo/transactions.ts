@@ -1,4 +1,4 @@
-import { REVIEW_QUEUE, type TransactionFeedItem } from "@/features/transactions/model"
+import { REVIEW_QUEUE, type TransactionFeedItem } from "@/lib/finance/transaction-model"
 
 /**
  * Login-free fixtures for the dashboard's local development loop.

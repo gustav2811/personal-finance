@@ -89,6 +89,7 @@ jobs:
         run: |
           yarn test
           yarn test:transactions
+          yarn test:analysis
 
       - name: Build dashboard
         working-directory: apps/dashboard

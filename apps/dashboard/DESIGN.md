@@ -14,6 +14,7 @@ domain/consumption/     energy and money charts, source list, series helpers
 features/overview/      page, queries.ts
 features/utilities/    electricity and water page, queries.ts, dev mock fixture
 features/money/
+features/analysis/      financial breakdowns, trends, flow, and period comparison
 features/sources/
 features/transactions/  ledger feed, inline category, inspector
 lib/supabase/           browser client and generated database types
@@ -102,6 +103,7 @@ Operational reads name their columns. Do not use `select("*")` on feeds the dash
 Household
   Overview        /
   Money           /money
+  Analysis        /analysis
   Transactions    /transactions
 Home
   Utilities       /utilities

@@ -48,3 +48,9 @@ The SVGs primarily answer **"how should this type of chart look?"**, not **"how 
 ## Overview
 
 The complete chart collection is also available as [`../smart-charts-kit.png`](../smart-charts-kit.png). Use it when choosing an appropriate chart pattern or comparing light and dark treatments. Use the individual SVG once a pattern has been selected.
+
+## Chart 16 — cash flow / Sankey
+
+[`Chart 16.svg`](<Chart 16.svg>) expands the reference family with a value-proportional cash-flow diagram inspired by the FinWise analysis surface. The values are illustrative. Like the other SVGs, this is a look reference, never an embedded app asset.
+
+Production implementation: `apps/dashboard/domain/analysis/charts.tsx` (`CashFlowChart`). It maps the reference colours onto the dashboard's `chart-*` tokens, uses Geist through inherited SVG typography, and supports both themes. Continuous translucent ribbons, rounded terminal bars, direct labels and quiet percentages carry the reference grammar. All columns use the same amount-to-height scale; surplus is a balancing outflow and deficit a balancing inflow. Category spacing does not inflate amounts. Labels and ribbons support pointer and keyboard drill-down. Narrow viewports scroll the diagram within its own container. Income and refunds are gross inflows here; the net expense view offsets refunds separately.

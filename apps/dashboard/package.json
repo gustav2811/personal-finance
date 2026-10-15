@@ -8,7 +8,8 @@
     "start": "next start",
     "types": "tsc --noEmit",
     "test": "tsx --test domain/budget/*.spec.ts",
-    "test:transactions": "NODE_ENV=development DASHBOARD_DEMO_MODE=true tsx --test lib/demo/transactions.spec.ts"
+    "test:transactions": "NODE_ENV=development DASHBOARD_DEMO_MODE=true tsx --test lib/demo/transactions.spec.ts",
+    "test:analysis": "tsx --test features/analysis/*.spec.ts features/analysis/*.spec.tsx"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
@@ -32,9 +33,13 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
+    "@types/jsdom": "^30.0.0",
     "@types/node": "^26.6.2",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.5",
+    "jsdom": "^30.1.2",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
