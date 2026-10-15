@@ -7,6 +7,7 @@ import {
   render,
   screen,
   within,
+  waitFor,
 } from "@testing-library/react"
 import { AnalysisView } from "./analysis-view"
 import { AnalysisBars } from "@/domain/analysis/charts"
@@ -115,10 +116,16 @@ test("data leads while refinements stay functional and Other opens its exact tra
       { target: { value: "Merchant 9" } },
     )
     assert.equal(within(dialog).getAllByRole("row").length, 2)
-    fireEvent.click(within(dialog).getByRole("button", { name: "Review Merchant 9" }))
-    assert.ok(await screen.findByRole("button", { name: "Close transaction review" }))
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Review Merchant 9" }),
+    )
+    assert.ok(
+      await screen.findByRole("button", { name: "Close transaction review" }),
+    )
     assert.ok(screen.getByRole("textbox", { name: "Description" }))
-    fireEvent.click(screen.getByRole("button", { name: "Close transaction review" }))
+    fireEvent.click(
+      screen.getByRole("button", { name: "Close transaction review" }),
+    )
     await screen.findByRole("textbox", { name: "Search transactions" })
     fireEvent.click(within(dialog).getByRole("button", { name: "Close" }))
     fireEvent.click(screen.getByRole("radio", { name: "Cash flow" }))
@@ -183,5 +190,118 @@ test("both trend series open the exact period with pointer and keyboard", async 
     assert.deepEqual(selected, ["2026-09", "2026-10", "2026-09", "2026-10"])
   } finally {
     cleanup()
+  }
+})
+
+test("overview handoff keeps every selected category and the budget-period dates", async () => {
+  const originalFetch = globalThis.fetch
+  const nodeEnv = process.env.NODE_ENV
+  const demo = process.env.DASHBOARD_DEMO_MODE
+  const { default: AnalysisPage } =
+    await import("../../app/(app)/analysis/page")
+  const data: AnalysisData = {
+    transactions: [0, 1, 2].map((index) => ({
+      ...transaction(index),
+      occurredOn: "2026-10-05",
+      occurredAt: "2026-10-05T12:00:00Z",
+    })),
+    accounts: [],
+    categories: [0, 1, 2].map((index) => ({
+      id: `c-${index}`,
+      name: `Category ${index}`,
+      group: null,
+      slug: `c-${index}`,
+      lifecycleStatus: "active",
+    })),
+  }
+  const requests: string[] = []
+  try {
+    Object.assign(process.env, {
+      NODE_ENV: "development",
+      DASHBOARD_DEMO_MODE: "true",
+    })
+    globalThis.fetch = async (url) => {
+      requests.push(String(url))
+      return Response.json(data)
+    }
+    const element = await AnalysisPage({
+      searchParams: Promise.resolve({
+        from: "2026-09-23",
+        to: "2026-10-22",
+        category: ["c-0", "c-1"],
+      }),
+    })
+    render(element)
+    await screen.findByText("Category 0")
+    assert.ok(screen.getByText("Category 1"))
+    assert.equal(screen.queryByText("Category 2"), null)
+    assert.ok(
+      requests.some((url) => url.includes("from=2026-09-23&to=2026-10-22")),
+    )
+    assert.match(
+      screen.getByRole("button", { name: "Choose analysis dates" })
+        .textContent ?? "",
+      /23 Sep.*22 Oct/,
+    )
+  } finally {
+    cleanup()
+    globalThis.fetch = originalFetch
+    Object.assign(process.env, { NODE_ENV: nodeEnv, DASHBOARD_DEMO_MODE: demo })
+  }
+})
+
+test("calendar-month navigation preserves complete months while budget navigation preserves its dates", async () => {
+  const originalFetch = globalThis.fetch
+  const nodeEnv = process.env.NODE_ENV
+  const demo = process.env.DASHBOARD_DEMO_MODE
+  const requests: string[] = []
+  try {
+    Object.assign(process.env, {
+      NODE_ENV: "development",
+      DASHBOARD_DEMO_MODE: "true",
+    })
+    globalThis.fetch = async (url) => {
+      requests.push(String(url))
+      return Response.json({ transactions: [], categories: [], accounts: [] })
+    }
+    render(
+      <AnalysisView initialRange={{ from: "2026-10-01", to: "2026-10-31" }} />,
+    )
+    await screen.findByText("No transactions in this view")
+    fireEvent.click(
+      screen.getByRole("button", { name: "Choose analysis dates" }),
+    )
+    fireEvent.click(screen.getByRole("button", { name: "Next period" }))
+    await waitFor(() =>
+      assert.ok(
+        requests.some((url) => url.includes("from=2026-11-01&to=2026-11-30")),
+      ),
+    )
+    requests.length = 0
+    fireEvent.click(screen.getByRole("button", { name: "Previous period" }))
+    await waitFor(() =>
+      assert.ok(
+        requests.some((url) => url.includes("from=2026-10-01&to=2026-10-31")),
+      ),
+    )
+    cleanup()
+    requests.length = 0
+    render(
+      <AnalysisView initialRange={{ from: "2026-09-23", to: "2026-10-22" }} />,
+    )
+    await screen.findByText("No transactions in this view")
+    fireEvent.click(
+      screen.getByRole("button", { name: "Choose analysis dates" }),
+    )
+    fireEvent.click(screen.getByRole("button", { name: "Next period" }))
+    await waitFor(() =>
+      assert.ok(
+        requests.some((url) => url.includes("from=2026-10-23&to=2026-11-22")),
+      ),
+    )
+  } finally {
+    cleanup()
+    globalThis.fetch = originalFetch
+    Object.assign(process.env, { NODE_ENV: nodeEnv, DASHBOARD_DEMO_MODE: demo })
   }
 })

@@ -1,6 +1,12 @@
 import type { DeviceRead, LedgerRead, ReadingRead } from "@/lib/supabase/rows"
 import { getBrowserClient, type BrowserClient } from "@/lib/supabase/browser"
-import { readDevices, readLedgerHistory, readReadingsHistory } from "@/lib/supabase/read"
+import {
+  readDevices,
+  readLedgerHistory,
+  readReadingsHistory,
+} from "@/lib/supabase/read"
+import { demoEnabled } from "@/lib/demo/transactions"
+import { buildMockEnergyData } from "./mock-data"
 
 export type EnergyData = {
   devices: DeviceRead[]
@@ -9,15 +15,23 @@ export type EnergyData = {
   fetchedAt: string
 }
 
-export async function loadEnergyData(client: BrowserClient): Promise<EnergyData> {
+export async function loadEnergyData(
+  client: BrowserClient,
+): Promise<EnergyData> {
   const [devices, readings, ledgerEntries] = await Promise.all([
     readDevices(client),
     readReadingsHistory(client),
     readLedgerHistory(client),
   ])
-  return { devices, readings, ledgerEntries, fetchedAt: new Date().toISOString() }
+  return {
+    devices,
+    readings,
+    ledgerEntries,
+    fetchedAt: new Date().toISOString(),
+  }
 }
 
 export function getEnergyData(): Promise<EnergyData> {
+  if (demoEnabled()) return Promise.resolve(buildMockEnergyData(new Date()))
   return loadEnergyData(getBrowserClient())
 }

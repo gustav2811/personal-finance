@@ -1,0 +1,184 @@
+.page {
+  container-type: inline-size;
+  min-width: 0;
+}
+.periodControl {
+  display: flex;
+  align-items: center;
+  gap: 0.125rem;
+}
+.body {
+  margin-top: 1rem;
+}
+.orbitLayout {
+  display: grid;
+  align-items: center;
+  gap: clamp(1.5rem, 4cqi, 4rem);
+  padding: 1.5rem 0 2.5rem;
+}
+.instrument {
+  min-width: 0;
+}
+.ringCaption {
+  margin: 0.25rem auto 0;
+  max-width: 26rem;
+  color: var(--muted-foreground);
+  text-align: center;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  text-wrap: balance;
+}
+.categories {
+  min-width: 0;
+}
+.category {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1.25rem minmax(0, 1fr) minmax(5rem, auto) 2.25rem;
+  column-gap: 0.75rem;
+  width: 100%;
+  height: auto;
+  min-height: 5rem;
+  padding: 1rem 0.5rem;
+  border-radius: 0;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  white-space: normal;
+  transition:
+    background-color 220ms,
+    opacity 220ms;
+}
+.category:last-child {
+  border-bottom-color: transparent;
+}
+.category[aria-pressed="true"] {
+  background: var(--muted);
+  border-radius: var(--radius);
+  border-bottom-color: transparent;
+}
+.category[aria-pressed="true"]::after {
+  content: "";
+  position: absolute;
+  bottom: 0.65rem;
+  left: 2.5rem;
+  height: 2px;
+  width: 1.5rem;
+  background: var(--category-color);
+}
+.categoryIcon {
+  align-self: center;
+  color: var(--category-color);
+}
+.categoryIcon svg {
+  height: 1.25rem;
+  width: 1.25rem;
+}
+.categoryContent {
+  display: grid;
+  gap: 0.125rem;
+  min-width: 0;
+}
+.categoryName {
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+.amount {
+  font-size: clamp(1.5rem, 3.3cqi, 2.75rem);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+  letter-spacing: -0.035em;
+}
+.budgetContent {
+  display: grid;
+  align-self: center;
+  gap: 0.2rem;
+  text-align: right;
+  min-width: 0;
+}
+.remaining {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.budgetLabel {
+  max-width: 10rem;
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  font-weight: 400;
+  text-wrap: balance;
+}
+.percentage {
+  align-self: center;
+  text-align: right;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+.provenance {
+  border-top: 1px solid var(--border);
+  margin-top: 2rem;
+  padding-top: 1rem;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+.provenance summary {
+  width: fit-content;
+  cursor: pointer;
+  border-radius: var(--radius);
+}
+.provenance summary:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 4px;
+}
+@container (min-width: 50rem) {
+  .orbitLayout {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    padding-top: 2rem;
+    padding-bottom: 3rem;
+    min-height: 31rem;
+  }
+  .category {
+    min-height: 5.5rem;
+    padding: 1.15rem 0.75rem;
+    grid-template-columns: 1.5rem minmax(0, 1fr) minmax(5rem, auto) 2.5rem;
+    column-gap: 1rem;
+  }
+  .categoryIcon svg {
+    width: 1.5rem;
+    height: 1.5rem;
+  }
+  .categoryName {
+    font-size: 0.875rem;
+  }
+  .remaining {
+    font-size: 0.9375rem;
+  }
+  .budgetLabel {
+    font-size: 0.75rem;
+  }
+}
+@container (max-width: 49.99rem) {
+  .orbitLayout {
+    gap: 1rem;
+    padding: 0.5rem 0 1.75rem;
+  }
+  .instrument {
+    width: min(58%, 17rem);
+    margin-inline: auto;
+  }
+  .ringCaption {
+    font-size: 0.625rem;
+  }
+  .category {
+    min-height: 4.125rem;
+    padding-block: 0.75rem;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .category {
+    transition: none;
+  }
+}

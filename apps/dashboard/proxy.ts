@@ -5,7 +5,15 @@ import { updateSession } from "@/lib/supabase/session"
 export async function proxy(request: NextRequest) {
   if (demoEnabled()) {
     const { pathname } = request.nextUrl
-    if (pathname === "/transactions" || pathname === "/analysis" || pathname === "/api/categories/suggest" || pathname === "/api/dev/analysis-sample") return NextResponse.next()
+    if (
+      pathname === "/" ||
+      pathname === "/utilities" ||
+      pathname === "/transactions" ||
+      pathname === "/analysis" ||
+      pathname === "/api/categories/suggest" ||
+      pathname === "/api/dev/analysis-sample"
+    )
+      return NextResponse.next()
     const url = request.nextUrl.clone()
     url.pathname = "/transactions"
     url.search = ""
