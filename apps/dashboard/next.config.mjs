@@ -11,11 +11,11 @@ const supabaseOrigin = (() => {
 
 const reportOnlyCsp = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://va.vercel-scripts.com",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self'",
-  `connect-src 'self' ${supabaseOrigin} https://*.supabase.co`,
+  `connect-src 'self' ${supabaseOrigin} https://*.supabase.co https://va.vercel-scripts.com https://vitals.vercel-insights.com`,
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",

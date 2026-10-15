@@ -3,6 +3,7 @@ import type { ReactNode } from "react"
 import { Geist } from "next/font/google"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
+import { Insights } from "@/components/shell/insights"
 import { ThemeProvider } from "@/components/shell/theme-provider"
 import { cn } from "@/lib/utils"
 import "./globals.css"
@@ -29,6 +30,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             <Toaster />
           </TooltipProvider>
         </ThemeProvider>
+        <Insights />
       </body>
     </html>
   )
