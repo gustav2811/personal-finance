@@ -91,6 +91,7 @@ jobs:
           yarn test:transactions
           yarn test:analysis
           yarn test:overview
+          yarn test:resources
 
       - name: Build dashboard
         working-directory: apps/dashboard
