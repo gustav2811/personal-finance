@@ -56,7 +56,7 @@ export function OverviewBody({
       >
         <div className={styles.instrument}>
           <OrbitChart data={data} selected={selected} onSelect={setSelected} />
-          <p className={styles.ringCaption}>
+          <p className={`type-caption ${styles.ringCaption}`}>
             Each orbit is one category’s budget. Select one to explore.
           </p>
         </div>
@@ -109,7 +109,7 @@ export function OverviewBody({
                       : `of ${formatMoney(item.budget)}`}
                   </span>
                 </span>
-                <span className={styles.percentage}>
+                <span className={`type-caption type-numeric ${styles.percentage}`}>
                   {percentage === null ? "—" : `${Math.round(percentage)}%`}
                 </span>
               </Button>
@@ -124,7 +124,7 @@ export function OverviewBody({
           index={data.items.indexOf(active)}
         />
       ) : null}
-      <details className={styles.provenance}>
+      <details className={`type-caption ${styles.provenance}`}>
         <summary>
           About this budget period
           {data.warnings.length ? " · some data needs attention" : ""}

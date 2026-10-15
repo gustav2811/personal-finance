@@ -1,9 +1,10 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { Info, TriangleAlert } from "lucide-react"
 import { PageHeader } from "@/components/patterns/page-header"
+import { ResourceFeedback } from "./read-feedback"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -24,6 +25,7 @@ import { issuesFound, leadChecks, projectChecks, savedFactsFromOverview, type Bu
 import { contributionsInput, projectCapacity } from "@/domain/budget/capacity"
 import { memberName, type MemberRef } from "@/domain/budget/members"
 import { localDateKey } from "@/lib/format/date"
+import { useResource } from "@/hooks/use-resource"
 import { formatCents } from "@/domain/budget/money"
 import { planDiff, readDraftReceipt, readPublishReceipt, readStoredPlan, readVersionPage, selectDraft, applicablePublished, latestPublished, cloneLines, blankLine, contributionsReady, toDraftLines, type PlanLine, type StoredPlan, type VersionHeader } from "@/domain/budget/plan"
 import { PlanCapacityChart } from "@/domain/budget/plan-capacity"
@@ -70,6 +72,40 @@ async function loadHeaders(): Promise<VersionHeader[]> {
   return headers
 }
 
+export type AgreementResourceData = {
+  headers: VersionHeader[]
+  plans: Map<string, StoredPlan>
+  workspace: CutoverWorkspace | null
+  reviewItems: boolean | null
+  overview: unknown | null
+  liquidity: unknown | null
+}
+
+async function loadAgreementResource(cycleStart: string): Promise<AgreementResourceData> {
+  const [nextHeaders, cutover, review, overview, liquidity] = await Promise.all([
+    loadHeaders(),
+    loadCutover().catch(() => null),
+    readReviewQueue(null).catch(() => null),
+    readOverview(cycleStart).catch(() => null),
+    readLiquidity().catch(() => null),
+  ])
+  const applicable = applicablePublished(nextHeaders, cycleStart)
+  const draftPick = selectDraft(nextHeaders, cycleStart)
+  const ids = new Set<string>()
+  if (applicable) ids.add(applicable.versionId)
+  if (draftPick.status === "ready") ids.add(draftPick.draft.versionId)
+  const plans = new Map<string, StoredPlan>()
+  for (const id of ids) plans.set(id, readStoredPlan(await readVersion(id)))
+  return {
+    headers: nextHeaders,
+    plans,
+    workspace: cutover ? readCutover(cutover) : null,
+    reviewItems: reviewHasItems(review),
+    overview,
+    liquidity,
+  }
+}
+
 function cycleOptions(today: string, headers: readonly VersionHeader[]): string[] {
   const cycles = new Set([today, addMonths(today, 1)])
   for (const header of headers) {
@@ -110,7 +146,10 @@ function severityLabel(severity: CheckSeverity): string {
   }
 }
 
-export function AgreementView({ initialCycle = "this" }: { initialCycle?: "this" | "next" }) {
+export function AgreementView({ initialCycle = "this", loadResource = loadAgreementResource }: {
+  initialCycle?: "this" | "next"
+  loadResource?: (cycleStart: string, signal: AbortSignal) => Promise<AgreementResourceData>
+}) {
   const today = currentCycle().start
   const [cycleStart, setCycleStart] = useState(() => (initialCycle === "next" ? addMonths(today, 1) : today))
   const [headers, setHeaders] = useState<VersionHeader[]>([])
@@ -119,9 +158,6 @@ export function AgreementView({ initialCycle = "this" }: { initialCycle?: "this"
   const [reviewItems, setReviewItems] = useState<boolean | null>(null)
   const [overview, setOverview] = useState<unknown | null>(null)
   const [liquidity, setLiquidity] = useState<unknown | null>(null)
-  const [loaded, setLoaded] = useState(false)
-  const [loadError, setLoadError] = useState<string | null>(null)
-  const [reloadKey, setReloadKey] = useState(0)
   const [mode, setMode] = useState<"read" | "edit">("read")
   const [reviewing, setReviewing] = useState(false)
   const [historicalId, setHistoricalId] = useState<string | null>(null)
@@ -148,49 +184,23 @@ export function AgreementView({ initialCycle = "this" }: { initialCycle?: "this"
   const pendingRef = useRef(false)
   const holdRef = useRef<Hold | null>(null)
   const statusRef = useRef<HTMLParagraphElement>(null)
+  const appliedResource = useRef<AgreementResourceData | null>(null)
+  const load = useCallback(async (signal: AbortSignal) => loadResource(cycleStart, signal), [cycleStart, loadResource])
+  const resource = useResource({ key: `budget-agreement:${cycleStart}`, load, retainData: true })
+  const snapshotReady = resource.hasData && resource.data === appliedResource.current
+  const actionsReady = (resource.status === "ready" || Boolean(holdRef.current?.uncertain))
 
   useEffect(() => {
-    let cancelled = false
-    setLoaded(false)
-    setLoadError(null)
-    void Promise.all([loadHeaders(), loadCutover().catch(() => null), readReviewQueue(null).catch(() => null)])
-      .then(async ([nextHeaders, cutover, review]) => {
-        if (cancelled) return
-        const applicable = applicablePublished(nextHeaders, cycleStart)
-        const draftPick = selectDraft(nextHeaders, cycleStart)
-        const ids = new Set<string>()
-        if (applicable) ids.add(applicable.versionId)
-        if (draftPick.status === "ready") ids.add(draftPick.draft.versionId)
-        const nextPlans = new Map<string, StoredPlan>()
-        for (const id of ids) nextPlans.set(id, readStoredPlan(await readVersion(id)))
-        if (cancelled) return
-        setHeaders(nextHeaders)
-        setPlans(nextPlans)
-        setWorkspace(cutover ? readCutover(cutover) : null)
-        setReviewItems(reviewHasItems(review))
-        setLoaded(true)
-      })
-      .catch((caught: unknown) => {
-        if (cancelled) return
-        setLoadError(message(caught, copy.couldNotRead))
-        setLoaded(true)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [cycleStart, reloadKey])
-
-  useEffect(() => {
-    let cancelled = false
-    void Promise.all([readOverview(cycleStart).catch(() => null), readLiquidity().catch(() => null)]).then(([nextOverview, nextLiquidity]) => {
-      if (cancelled) return
-      setOverview(nextOverview)
-      setLiquidity(nextLiquidity)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [cycleStart, reloadKey])
+    const data = resource.data
+    if (!resource.hasData || !data || data === appliedResource.current) return
+    appliedResource.current = data
+    setHeaders(data.headers)
+    setPlans(data.plans)
+    setWorkspace(data.workspace)
+    setReviewItems(data.reviewItems)
+    setOverview(data.overview)
+    setLiquidity(data.liquidity)
+  }, [resource.data, resource.hasData])
 
   useEffect(() => {
     if (!focusField || !expandedId) return
@@ -552,7 +562,7 @@ export function AgreementView({ initialCycle = "this" }: { initialCycle?: "this"
       const sentence = publishedSentence(published.versionNumber, cycleText)
       setNotice(sentence)
       announce(sentence)
-      setReloadKey((key) => key + 1)
+      void resource.reload()
     } catch (caught) {
       const raw = commandFailureText(caught)
       if (commandFailureIsUncertain(raw)) {
@@ -632,7 +642,7 @@ export function AgreementView({ initialCycle = "this" }: { initialCycle?: "this"
               }}
               value={historicalId ?? "current"}
             >
-              <SelectTrigger aria-label={copy.versionHistory} className={`w-44 ${CONTROL}`}><SelectValue placeholder={copy.versionHistory} /></SelectTrigger>
+              <SelectTrigger aria-label={copy.versionHistory} className={`w-44 ${CONTROL}`} disabled={!snapshotReady}><SelectValue placeholder={copy.versionHistory} /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="current">Current cycle</SelectItem>
                 {headers.filter((header) => header.state === "published" && header.versionNumber).map((header) => (
@@ -642,19 +652,19 @@ export function AgreementView({ initialCycle = "this" }: { initialCycle?: "this"
                 ))}
               </SelectContent>
             </Select>
-            {historicalPlan ? (
-              <Button className={CONTROL} onClick={() => { setHistoricalId(null); setCycleStart(today) }} type="button">Return to this cycle</Button>
+            {snapshotReady ? historicalPlan ? (
+              <Button className={CONTROL} disabled={!actionsReady} onClick={() => { setHistoricalId(null); setCycleStart(today) }} type="button">Return to this cycle</Button>
             ) : editing ? (
-              <Button className={CONTROL} onClick={() => { setReviewing(true); commitScale(); document.getElementById("review-changes")?.scrollIntoView({ block: "nearest" }) }} type="button">{copy.reviewChanges}</Button>
+              <Button className={CONTROL} disabled={!actionsReady} onClick={() => { setReviewing(true); commitScale(); document.getElementById("review-changes")?.scrollIntoView({ block: "nearest" }) }} type="button">{copy.reviewChanges}</Button>
             ) : draftPlan ? (
-              <Button className={CONTROL} onClick={startEdit} type="button">{copy.resumeDraft}</Button>
+              <Button className={CONTROL} disabled={!actionsReady} onClick={startEdit} type="button">{copy.resumeDraft}</Button>
             ) : publishedPlan && where !== "past" ? (
-              <Button className={CONTROL} onClick={startEdit} type="button">{copy.editBudget}</Button>
+              <Button className={CONTROL} disabled={!actionsReady} onClick={startEdit} type="button">{copy.editBudget}</Button>
             ) : !publishedPlan && where === "this" ? (
-              <Button className={CONTROL} onClick={startCreate} type="button">{copy.createBudget}</Button>
+              <Button className={CONTROL} disabled={!actionsReady} onClick={startCreate} type="button">{copy.createBudget}</Button>
             ) : (
-              <Button className={CONTROL} onClick={() => setCycleStart(today)} type="button">Return to this cycle</Button>
-            )}
+              <Button className={CONTROL} disabled={!actionsReady} onClick={() => setCycleStart(today)} type="button">Return to this cycle</Button>
+            ) : null}
           </div>
         }
         description={statusLine}
@@ -669,12 +679,7 @@ export function AgreementView({ initialCycle = "this" }: { initialCycle?: "this"
           <Link className="underline underline-offset-4" href="/budget">View the agreement</Link>
         </p>
       ) : null}
-      {loadError ? (
-        <Alert variant="destructive">
-          <AlertTitle>{copy.couldNotRead}</AlertTitle>
-          <AlertDescription>{loadError}</AlertDescription>
-        </Alert>
-      ) : null}
+      <ResourceFeedback loading="Reading the budget." resource={resource} saved={notice !== null} title="Budget agreement could not be loaded" />
       {actionError ? (
         <Alert variant="destructive">
           <AlertTitle>{copy.couldNotSave}</AlertTitle>
@@ -684,13 +689,13 @@ export function AgreementView({ initialCycle = "this" }: { initialCycle?: "this"
           </AlertDescription>
         </Alert>
       ) : null}
+      {snapshotReady ? <>
       {draftPick.status === "ambiguous" ? (
         <Alert>
           <AlertDescription>More than one draft exists for this cycle, and their save times could not be compared. No draft was chosen.</AlertDescription>
         </Alert>
       ) : null}
-      {!loaded && !loadError ? <p className="type-body text-muted-foreground">Reading the budget.</p> : null}
-      {loaded && !publishedPlan && !draftPlan && !editing && where === "this" ? (
+      {resource.hasData && !publishedPlan && !draftPlan && !editing && where === "this" ? (
         <div className="space-y-3">
           <h2 className="type-section-title">{copy.createBudget}</h2>
           <p className="type-body max-w-2xl">Create this cycle&apos;s budget for {cycleText}. This does not move money, and it does not import a spreadsheet.</p>
@@ -701,7 +706,7 @@ export function AgreementView({ initialCycle = "this" }: { initialCycle?: "this"
         <p className="type-body-small text-muted-foreground">Carried from {cycleLabel(publishedPlan.startsOnCycle, addMonths(publishedPlan.startsOnCycle, 1))}. Publishing creates a version for this cycle.</p>
       ) : null}
 
-      <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,1fr)_18rem]">
+      <fieldset className="contents" disabled={!actionsReady}><div className="grid items-start gap-10 lg:grid-cols-[minmax(0,1fr)_18rem]">
         <div className="space-y-8">
           {publishedPlan || draftPlan || editing || historicalPlan ? (
           <section className="space-y-3">
@@ -790,7 +795,7 @@ export function AgreementView({ initialCycle = "this" }: { initialCycle?: "this"
                 <MoveMoneyDialog
                   canAssign={position?.canAssign ?? false}
                   funds={(position ? [...position.purposes, ...position.commitments] : []).map((row) => ({ id: row.fundId, name: row.name, balanceLabel: row.available }))}
-                  onSaved={() => setReloadKey((key) => key + 1)}
+                  onSaved={() => void resource.reload()}
                   reconciliationFingerprint={position?.reconciliationFingerprint ?? null}
                   reconciliationId={position?.reconciliationId ?? null}
                   versionId={position?.versionId ?? null}
@@ -897,7 +902,8 @@ export function AgreementView({ initialCycle = "this" }: { initialCycle?: "this"
             <p className="type-body-small text-muted-foreground">{draftPlan ? `Resume the draft for ${cycleText}.` : "Edit the budget to propose a change."}</p>
           )}
         </aside>
-      </div>
+      </div></fieldset>
+      </> : null}
     </div>
   )
 }

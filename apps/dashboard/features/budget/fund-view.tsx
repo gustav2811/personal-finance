@@ -1,10 +1,12 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback } from "react"
 import Link from "next/link"
 import { FactGrid } from "@/components/patterns/fact-grid"
 import { PageHeader } from "@/components/patterns/page-header"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { ResourceFeedback } from "./read-feedback"
+import { useResource } from "@/hooks/use-resource"
 import {
   Table,
   TableBody,
@@ -149,39 +151,26 @@ function FundBody({ view }: { view: FundDetail }) {
 }
 
 export function FundView({ fundId }: { fundId: string }) {
-  const [wire, setWire] = useState<unknown>(null)
-  const [members, setMembers] = useState<MemberRef[]>([])
-  const [context, setContext] = useState<{
-    earmarks: Array<{ fundId: string; accountId: string; amountCents: string; effectiveOn: string }>
-    accountNames: Map<string, string>
-  }>({ earmarks: [], accountNames: new Map() })
-  const [error, setError] = useState<string | null>(null)
-  const [ready, setReady] = useState(false)
-
-  useEffect(() => {
-    let cancelled = false
+  const load = useCallback(async (_signal: AbortSignal) => {
     const cycle = currentCycle()
-    void Promise.all([readFund(fundId, FUND_HISTORY_FROM, cycle.endExclusive, null), readMemberDirectory(), readCutoverRpc()])
-      .then(([nextWire, nextMembers, cutoverWire]) => {
-        if (cancelled) return
-        const cutover = readCutover(cutoverWire)
-        setWire(nextWire)
-        setMembers(nextMembers)
-        setContext({
-          earmarks: cutover.earmarks,
-          accountNames: new Map(cutover.accounts.map((account) => [account.id, account.name])),
-        })
-        setReady(true)
-      })
-      .catch((caught: unknown) => {
-        if (!cancelled) setError(caught instanceof Error ? caught.message : copy.couldNotRead)
-      })
-    return () => {
-      cancelled = true
+    const [wire, members, cutoverWire] = await Promise.all([
+      readFund(fundId, FUND_HISTORY_FROM, cycle.endExclusive, null),
+      readMemberDirectory(),
+      readCutoverRpc(),
+    ])
+    const cutover = readCutover(cutoverWire)
+    return {
+      wire,
+      members,
+      context: {
+        earmarks: cutover.earmarks,
+        accountNames: new Map(cutover.accounts.map((account) => [account.id, account.name])),
+      },
     }
   }, [fundId])
-
-  const view = ready ? projectFund(wire, members, { fundId, ...context }) : null
+  const resource = useResource({ key: `fund:${fundId}`, load, retainData: false })
+  const loaded = resource.data
+  const view = loaded ? projectFund(loaded.wire, loaded.members, { fundId, ...loaded.context }) : null
   const title = view?.name ?? "Purpose"
 
   return (
@@ -190,13 +179,7 @@ export function FundView({ fundId }: { fundId: string }) {
         breadcrumbs={[{ href: "/budget", label: copy.pageTitle }, { label: title }]}
         title={title}
       />
-      {error ? (
-        <Alert>
-          <AlertTitle>{copy.couldNotRead}</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
-      {!view && !error ? <p className="type-body text-muted-foreground">Reading the budget.</p> : null}
+      <ResourceFeedback resource={resource} title="Fund data could not be loaded" loading="Reading the budget…" />
       {view ? <FundBody view={view} /> : null}
     </div>
   )

@@ -1,9 +1,11 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useState } from "react"
 import { PageHeader } from "@/components/patterns/page-header"
 import { Section } from "@/components/patterns/section"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { ResourceFeedback } from "./read-feedback"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { useResource } from "@/hooks/use-resource"
 import { copy } from "@/domain/budget/copy"
 import { currentCycle, formatDayMonth } from "@/domain/budget/cycle"
 import type { MemberRef } from "@/domain/budget/members"
@@ -45,10 +47,6 @@ function dayLabel(iso: string | null): string | null {
   }
 }
 
-function thrownMessage(caught: unknown, fallback: string): string {
-  return caught instanceof Error && caught.message.length > 0 ? caught.message : fallback
-}
-
 async function readCategories(): Promise<CategoryOption[]> {
   return parseCutover(await readCutover()).categories.map((category) => ({
     id: category.id,
@@ -88,46 +86,28 @@ function projectPages(
 }
 
 export function ReviewView() {
-  const [ready, setReady] = useState<Ready | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    void Promise.all([readQueuePages(), readOverview(currentCycle().start), readCategories(), readMemberDirectory()])
-      .then(async ([pages, overview, categories, members]) => {
-        if (cancelled) return
-        const funds = reviewFunds(overview)
-        const purchases = await loadRefundablePurchases({ funds, members }).catch(() => ({
-          purchases: [],
-          partial: false,
-          unread: true,
-        }))
-        if (cancelled) return
-        setReady({
-          queue: projectPages(pages, members),
-          funds,
-          categories,
-          members,
-          purchases,
-        })
-      })
-      .catch((caught: unknown) => {
-        if (!cancelled) setError(thrownMessage(caught, copy.couldNotRead))
-      })
-    return () => {
-      cancelled = true
-    }
+  const [saved, setSaved] = useState(false)
+  const load = useCallback(async (_signal: AbortSignal): Promise<Ready> => {
+    const [pages, overview, categories, members] = await Promise.all([
+      readQueuePages(),
+      readOverview(currentCycle().start),
+      readCategories(),
+      readMemberDirectory(),
+    ])
+    const funds = reviewFunds(overview)
+    const purchases = await loadRefundablePurchases({ funds, members }).catch(() => ({
+      purchases: [],
+      partial: false,
+      unread: true,
+    }))
+    return { queue: projectPages(pages, members), funds, categories, members, purchases }
   }, [])
-
-  async function reloadQueue() {
-    if (!ready) return
-    try {
-      const pages = await readQueuePages()
-      setReady({ ...ready, queue: projectPages(pages, ready.members) })
-    } catch (caught: unknown) {
-      setError(thrownMessage(caught, copy.couldNotRead))
-    }
-  }
+  const resource = useResource({ key: "budget:review", load, retainData: true })
+  const ready = resource.hasData ? resource.data : null
+  const reloadQueue = useCallback(async () => {
+    setSaved(true)
+    await resource.reload()
+  }, [resource.reload])
 
   return (
     <div className="@container/budget space-y-10">
@@ -136,13 +116,7 @@ export function ReviewView() {
         description={copy.theseChangeAnswers}
         title={copy.attentionQuestion}
       />
-      {error ? (
-        <Alert>
-          <AlertTitle>{copy.couldNotRead}</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
-      {!ready && !error ? <p className="type-body text-muted-foreground">Reading the budget.</p> : null}
+      <ResourceFeedback resource={resource} title="Budget review could not be loaded" loading="Reading the budget…" saved={saved} />
       {ready ? (
         <ReviewList
           categories={ready.categories}
@@ -151,19 +125,21 @@ export function ReviewView() {
           onSaved={reloadQueue}
           purchases={ready.purchases}
           queue={ready.queue}
+          actionsReady={resource.status === "ready"}
         />
       ) : null}
     </div>
   )
 }
 
-function ReviewList({
+export function ReviewList({
   categories,
   funds,
   members,
   onSaved,
   purchases,
   queue,
+  actionsReady,
 }: {
   categories: CategoryOption[]
   funds: ReviewFund[]
@@ -171,6 +147,7 @@ function ReviewList({
   onSaved: () => Promise<void>
   purchases: PurchaseList
   queue: ReviewQueue
+  actionsReady: boolean
 }) {
   return (
     <Section description={copy.purchasesDetail} title={copy.attentionQuestion}>
@@ -210,24 +187,26 @@ function ReviewList({
                 </Alert>
               ) : null}
               {item.submittable && item.sourceAmountCents && item.fingerprint ? (
-                <PurchaseReview
-                  amountCents={item.sourceAmountCents}
-                  categories={categories}
-                  decisionsConfirmed={item.decisionsConfirmed}
-                  drifted={item.drifted}
-                  fingerprint={item.fingerprint}
-                  fundId={item.fundId}
-                  funds={funds}
-                  members={members}
-                  onSaved={onSaved}
-                  purchases={purchases.purchases}
-                  purchasesPartial={purchases.partial}
-                  purchasesUnread={purchases.unread}
-                  setId={item.setId}
-                  siblingCount={item.siblingCount}
-                  sourceTransactionId={item.sourceTransactionId}
-                  utilityEntryId={item.utilityEntryId}
-                />
+                <fieldset disabled={!actionsReady} className="min-w-0 disabled:opacity-70">
+                  <PurchaseReview
+                    amountCents={item.sourceAmountCents}
+                    categories={categories}
+                    decisionsConfirmed={item.decisionsConfirmed}
+                    drifted={item.drifted}
+                    fingerprint={item.fingerprint}
+                    fundId={item.fundId}
+                    funds={funds}
+                    members={members}
+                    onSaved={onSaved}
+                    purchases={purchases.purchases}
+                    purchasesPartial={purchases.partial}
+                    purchasesUnread={purchases.unread}
+                    setId={item.setId}
+                    siblingCount={item.siblingCount}
+                    sourceTransactionId={item.sourceTransactionId}
+                    utilityEntryId={item.utilityEntryId}
+                  />
+                </fieldset>
               ) : null}
             </li>
           ))}

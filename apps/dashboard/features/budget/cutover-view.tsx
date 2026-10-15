@@ -1,7 +1,8 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useRef, useState } from "react"
 import { PageHeader } from "@/components/patterns/page-header"
+import { ResourceFeedback } from "./read-feedback"
 import { Section } from "@/components/patterns/section"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -38,42 +39,42 @@ import { readRecord, readString } from "@/domain/budget/wire"
 import { memberName } from "@/domain/budget/members"
 import { randsToCents } from "@/domain/budget/move"
 import { formatCents } from "@/domain/budget/money"
+import { useResource } from "@/hooks/use-resource"
 import { readCutover as loadCutover, readDevices, writeBudgetRpc } from "./rpc"
 
 function message(caught: unknown): string {
   return caught instanceof Error && caught.message.length > 0 ? caught.message : copy.couldNotSave
 }
 
-export function CutoverView() {
-  const [workspace, setWorkspace] = useState<CutoverWorkspace | null>(null)
-  const [devices, setDevices] = useState<Array<{ id: string; name: string }>>([])
-  const [error, setError] = useState<string | null>(null)
+export type CutoverResourceData = { workspace: CutoverWorkspace; devices: Array<{ id: string; name: string }> }
+
+async function defaultCutoverResource(_signal: AbortSignal): Promise<CutoverResourceData> {
+    const [payload, devicePayload] = await Promise.all([loadCutover(), readDevices().catch(() => null)])
+    const record = devicePayload && typeof devicePayload === "object" ? (devicePayload as { devices?: Array<{ id?: string; name?: string }> }) : null
+    return {
+      workspace: readCutover(payload),
+      devices: (record?.devices ?? []).flatMap((device) => device.id && device.name ? [{ id: device.id, name: device.name }] : []),
+    }
+}
+
+export function CutoverView({ loadResource = defaultCutoverResource, write = writeBudgetRpc }: {
+  loadResource?: (signal: AbortSignal) => Promise<CutoverResourceData>
+  write?: typeof writeBudgetRpc
+}) {
+  const load = useCallback((signal: AbortSignal) => loadResource(signal), [loadResource])
+  const resource = useResource({ key: "budget-cutover", load, retainData: true })
+  const workspace = resource.hasData ? resource.data!.workspace : null
+  const devices = resource.hasData ? resource.data!.devices : []
+  const [actionError, setActionError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const [reloadKey, setReloadKey] = useState(0)
   const heldRef = useRef<HeldCommand | null>(null)
   const [outstanding, setOutstanding] = useState(false)
-
-  useEffect(() => {
-    let cancelled = false
-    void Promise.all([loadCutover(), readDevices().catch(() => null)])
-      .then(([payload, devicePayload]) => {
-        if (cancelled) return
-        setWorkspace(readCutover(payload))
-        const record = devicePayload && typeof devicePayload === "object" ? (devicePayload as { devices?: Array<{ id?: string; name?: string }> }) : null
-        setDevices((record?.devices ?? []).flatMap((device) => device.id && device.name ? [{ id: device.id, name: device.name }] : []))
-      })
-      .catch((caught: unknown) => {
-        if (!cancelled) setError(message(caught))
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [reloadKey])
+  const actionsReady = (resource.status === "ready" || outstanding)
 
   async function run(name: string, payload: Record<string, unknown>) {
     const heldNow = heldRef.current
     if (outstanding && heldNow && (heldNow.name !== name || JSON.stringify(heldNow.payload) !== JSON.stringify(payload))) {
-      setError(copy.retryOutstandingMovement)
+      setActionError(copy.retryOutstandingMovement)
       return
     }
     const held = holdCommand(
@@ -82,14 +83,14 @@ export function CutoverView() {
       newCommandId,
     )
     heldRef.current = held
-    setError(null)
+    setActionError(null)
     setNotice(null)
     try {
-      const result = await writeBudgetRpc(held.name, held.id, held.payload)
+      const result = await write(held.name, held.id, held.payload)
       heldRef.current = null
       setOutstanding(false)
       setNotice(savedNotice(held.name, result, workspace?.accounts ?? []))
-      setReloadKey((key) => key + 1)
+      void resource.reload()
     } catch (caught: unknown) {
       const uncertain = commandFailureIsUncertain(commandFailureText(caught))
       if (!uncertain) {
@@ -98,7 +99,7 @@ export function CutoverView() {
       } else {
         setOutstanding(true)
       }
-      setError(message(caught))
+      setActionError(message(caught))
     }
   }
 
@@ -117,10 +118,10 @@ export function CutoverView() {
           </AlertDescription>
         </Alert>
       ) : null}
-      {error ? <Alert><AlertTitle>{copy.couldNotSave}</AlertTitle><AlertDescription>{error}</AlertDescription></Alert> : null}
+      <ResourceFeedback loading="Reading the budget." resource={resource} saved={notice !== null} title="Budget reconciliation could not be loaded" />
+      {actionError ? <Alert><AlertTitle>{copy.couldNotSave}</AlertTitle><AlertDescription>{actionError}</AlertDescription></Alert> : null}
       {notice ? <Alert><AlertDescription>{notice}</AlertDescription></Alert> : null}
-      {!workspace && !error ? <p className="type-body text-muted-foreground">Reading the budget.</p> : null}
-      {workspace ? <CutoverBody devices={devices} onRun={run} workspace={workspace} /> : null}
+      {workspace ? <fieldset className="contents" disabled={!actionsReady}><CutoverBody devices={devices} onRun={run} workspace={workspace} /></fieldset> : null}
     </div>
   )
 }

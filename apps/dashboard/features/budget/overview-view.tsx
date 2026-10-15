@@ -1,6 +1,8 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useState } from "react"
+import { useResource } from "@/hooks/use-resource"
+import { ResourceFeedback } from "./read-feedback"
 import Link from "next/link"
 import { PageHeader } from "@/components/patterns/page-header"
 import { Button } from "@/components/ui/button"
@@ -20,7 +22,7 @@ import { addMonths, currentCycle } from "@/domain/budget/cycle"
 import { projectBudget, type BeneficiaryFilter, type BudgetOverview, type PurposeRow } from "@/domain/budget/overview"
 import { agreementHref, projectRoutine, routineHref, type HouseholdRoutine } from "@/domain/budget/routine"
 import { MoveMoneyDialog } from "./move-dialog"
-import { getBudgetSource, type BudgetSource } from "./queries"
+import { getBudgetSource } from "./queries"
 
 const TOUCH = "pointer-coarse:h-9 pointer-coarse:px-3"
 
@@ -88,26 +90,13 @@ function PurposeTable({ rows }: { rows: PurposeRow[] }) {
   )
 }
 
-export function BudgetView() {
-  const [source, setSource] = useState<BudgetSource | null>(null)
-  const [error, setError] = useState<string | null>(null)
+export function BudgetView({ loadSource = getBudgetSource }: { loadSource?: typeof getBudgetSource } = {}) {
   const [filter, setFilter] = useState<BeneficiaryFilter>({ kind: "household" })
-  const [reloadKey, setReloadKey] = useState(0)
   const [cycleStart, setCycleStart] = useState(() => currentCycle().start)
-
-  useEffect(() => {
-    let cancelled = false
-    void getBudgetSource(cycleStart)
-      .then((next) => {
-        if (!cancelled) setSource(next)
-      })
-      .catch((caught: unknown) => {
-        if (!cancelled) setError(caught instanceof Error ? caught.message : copy.couldNotRead)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [reloadKey, cycleStart])
+  const [saved, setSaved] = useState(false)
+  const load = useCallback(() => loadSource(cycleStart), [cycleStart, loadSource])
+  const resource = useResource({ key: `budget:overview:${cycleStart}`, load, retainData: true })
+  const source = resource.hasData ? resource.data! : null
 
   const view = source ? projectBudget({ ...source, filter }) : null
   const routine = source ? projectRoutine(source) : null
@@ -126,20 +115,15 @@ export function BudgetView() {
         description={view?.cycleLabel ?? copy.pageDescription}
         title={copy.pageTitle}
       />
-      {error ? (
-        <Alert>
-          <AlertTitle>{copy.couldNotRead}</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
-      {!view && !error ? <p className="type-body text-muted-foreground">Reading the budget.</p> : null}
+      <ResourceFeedback resource={resource} title={copy.couldNotRead} loading="Reading the budget." saved={saved} />
       {view && routine ? (
         <BudgetBody
           cycleStart={cycleStart}
           filterValue={filter.kind === "member" ? filter.memberId : filter.kind}
-          onCycle={setCycleStart}
+          onCycle={(next) => { setSaved(false); setCycleStart(next) }}
           onFilter={setFilter}
-          onSaved={() => setReloadKey((key) => key + 1)}
+          onSaved={() => { setSaved(true); void resource.reload() }}
+          fresh={resource.status === "ready"}
           routine={routine}
           view={view}
         />
@@ -150,6 +134,7 @@ export function BudgetView() {
 
 function BudgetBody({
   cycleStart,
+  fresh,
   filterValue,
   onCycle,
   onFilter,
@@ -158,6 +143,7 @@ function BudgetBody({
   view,
 }: {
   cycleStart: string
+  fresh: boolean
   filterValue: string
   onCycle: (cycleStart: string) => void
   onFilter: (filter: BeneficiaryFilter) => void
@@ -280,7 +266,7 @@ function BudgetBody({
         title={copy.purposes}
       >
         <MoveMoneyDialog
-          canAssign={view.canAssign}
+          canAssign={fresh && view.canAssign}
           funds={[...view.purposes, ...view.commitments, ...view.retired].map((row) => ({
             id: row.fundId,
             name: row.name,

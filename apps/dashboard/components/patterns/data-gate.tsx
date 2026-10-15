@@ -1,8 +1,8 @@
 "use client"
 
-import { useEffect, useState, type ReactNode } from "react"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Button } from "@/components/ui/button"
+import { type ReactNode } from "react"
+import { useResource } from "@/hooks/use-resource"
+import { ResourceFeedback } from "./resource-feedback"
 import { Skeleton } from "@/components/ui/skeleton"
 
 // `load` is a dependency. Pass a stable function (module-level or useCallback).
@@ -14,45 +14,10 @@ export function DataGate<T>({
   children: (data: T) => ReactNode
   load: () => Promise<T>
 }) {
-  const [data, setData] = useState<T | null>(null)
-  const [dataError, setDataError] = useState<string | null>(null)
-  const [attempt, setAttempt] = useState(0)
+  const resource = useResource({ key: "data-gate", load })
+  if (resource.status === "error") return <ResourceFeedback resource={resource} />
 
-  useEffect(() => {
-    let cancelled = false
-    setData(null)
-    setDataError(null)
-    void load()
-      .then((next) => {
-        if (!cancelled) setData(next)
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setDataError(
-            "Household data could not be read. Check the Supabase schema exposure and read policies.",
-          )
-        }
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [load, attempt])
-
-  if (dataError) {
-    return (
-      <Alert variant="destructive">
-        <AlertTitle>Household data is unavailable</AlertTitle>
-        <AlertDescription className="space-y-3">
-          <p>{dataError}</p>
-          <Button onClick={() => setAttempt((count) => count + 1)} size="sm" variant="outline">
-            Try again
-          </Button>
-        </AlertDescription>
-      </Alert>
-    )
-  }
-
-  if (!data) {
+  if (!resource.hasData) {
     return (
       <div className="space-y-3" aria-busy="true">
         <Skeleton className="h-8 w-48" />
@@ -62,5 +27,5 @@ export function DataGate<T>({
     )
   }
 
-  return children(data)
+  return children(resource.data as T)
 }

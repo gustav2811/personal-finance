@@ -17,7 +17,8 @@ It is unavailable in production and makes no live data requests.
 | No readings for a chart | `ChartEmpty` | Title and optional explanation; consistent minimum footprint. Not a loading or error state. |
 | Standard series tooltip | `ui/ChartTooltipContent` | First choice; already owns series labels and indicators. |
 | Domain-specific tooltip | `ChartTooltipSurface` | Composition-only surface; children and native div props. Caller owns payload guard and formatting. |
-| Feature load + retry | `DataGate` | Stable module loader or useCallback; render function receives data. Currently for non-null results, initial load, and blocking retry only. |
+| Feature load + retry | `DataGate` | Stable module loader or useCallback; render function receives successful data, including null. Initial load and blocking retry only. |
+| Read lifecycle | `hooks/use-resource` + `ResourceFeedback` | Explicit key + stable loader. Latest request wins; identity changes hide previous data immediately. Same-resource retention is opt-in; features block dependent actions until ready. Retry repeats the read only. |
 | A date or common time window | `DateField`, `RangeControl`, `HistoryControl` | Controlled values; labels and primitive keyboard behavior stay built in. |
 
 ```tsx

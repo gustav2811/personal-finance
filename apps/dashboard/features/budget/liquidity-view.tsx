@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useResource } from "@/hooks/use-resource"
+import { ResourceFeedback } from "./read-feedback"
 import { FactGrid } from "@/components/patterns/fact-grid"
 import { PageHeader } from "@/components/patterns/page-header"
 import { Section } from "@/components/patterns/section"
@@ -16,7 +17,6 @@ import {
 import { copy } from "@/domain/budget/copy"
 import { formatDayMonth } from "@/domain/budget/cycle"
 import { projectLiquidity, type LiquidityProjection } from "@/domain/budget/liquidity"
-import type { MemberRef } from "@/domain/budget/members"
 import { readMemberDirectory } from "./members"
 import { readLiquidity } from "./rpc"
 
@@ -29,29 +29,14 @@ function shownDate(value: string | null): string {
   return formatDayMonth(value)
 }
 
-export function LiquidityView() {
-  const [wire, setWire] = useState<unknown>(undefined)
-  const [members, setMembers] = useState<MemberRef[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
+async function loadLiquidity() {
+  const [wire, members] = await Promise.all([readLiquidity(), readMemberDirectory()])
+  return { wire, members }
+}
 
-  useEffect(() => {
-    let cancelled = false
-    void Promise.all([readLiquidity(), readMemberDirectory()])
-      .then(([nextWire, nextMembers]) => {
-        if (!cancelled) {
-          setWire(nextWire)
-          setMembers(nextMembers)
-        }
-      })
-      .catch((caught: unknown) => {
-        if (!cancelled) setError(caught instanceof Error ? caught.message : copy.couldNotRead)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  const view = members !== null ? projectLiquidity(wire, members) : null
+export function LiquidityView({ load = loadLiquidity }: { load?: typeof loadLiquidity } = {}) {
+  const resource = useResource({ key: "budget:liquidity", load, retainData: true })
+  const view = resource.hasData ? projectLiquidity(resource.data!.wire, resource.data!.members) : null
 
   return (
     <div className="@container/liquidity space-y-10">
@@ -63,13 +48,7 @@ export function LiquidityView() {
         description={copy.liquidityDetail}
         title={copy.cashInEachAccount}
       />
-      {error ? (
-        <Alert>
-          <AlertTitle>{copy.couldNotRead}</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
-      {!view && !error ? <p className="type-body text-muted-foreground">Reading the budget.</p> : null}
+      <ResourceFeedback resource={resource} title={copy.couldNotRead} loading="Reading the budget." />
       {view ? <LiquidityBody view={view} /> : null}
     </div>
   )

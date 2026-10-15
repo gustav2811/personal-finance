@@ -204,7 +204,7 @@ export function SpendingTimeline({
         </div>
       </div>
       {lastAvailable < 0 ? (
-        <div className={styles.empty}>
+        <div className={`type-body text-muted-foreground ${styles.empty}`}>
           No{" "}
           {item.id === "electricity"
             ? "closed-day usage charges"
@@ -214,7 +214,7 @@ export function SpendingTimeline({
       ) : (
         <>
           <div
-            className={styles.dateReadout}
+            className={`type-caption type-numeric ${styles.dateReadout}`}
             aria-live="polite"
             aria-atomic="true"
           >
