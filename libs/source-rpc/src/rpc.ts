@@ -9,7 +9,11 @@ export async function callServiceRoleRpc<T>(
     method: "POST",
     headers: {
       apikey: serviceKey,
-      Authorization: `Bearer ${serviceKey}`,
+      // Modern Supabase secret keys are opaque API keys, not JWTs. Sending
+      // them as a bearer token hides the JWT role claim from PostgREST.
+      ...(!serviceKey.startsWith("sb_secret_")
+        ? { Authorization: `Bearer ${serviceKey}` }
+        : {}),
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
