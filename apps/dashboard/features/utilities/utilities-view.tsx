@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { DataGate } from "@/components/patterns/data-gate"
 import { HistoryControl } from "@/components/patterns/history-control"
 import { PageHeader } from "@/components/patterns/page-header"
@@ -9,26 +10,40 @@ import type { HistoryWindow } from "@/lib/range"
 import { EnergyPanel } from "@/features/utilities/energy-panel"
 import { getEnergyData } from "@/features/utilities/queries"
 import { WaterPanel } from "@/features/utilities/water-panel"
+import { WalletView } from "@/features/utilities/wallet-view"
 
-type Utility = "electricity" | "water"
+type UtilityTab = "electricity" | "water" | "wallet"
 
-export function UtilitiesView() {
+export function UtilitiesView({
+  initialTab = "electricity",
+}: {
+  initialTab?: UtilityTab
+}) {
+  const router = useRouter()
   const [window, setWindow] = useState<HistoryWindow>(6)
-  const [utility, setUtility] = useState<Utility>("electricity")
+  const [tab, setTab] = useState<UtilityTab>(initialTab)
+
+  useEffect(() => setTab(initialTab), [initialTab])
 
   return (
     <div className="@container/utilities space-y-6">
       <PageHeader title="Utilities" />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <ToggleGroup
-          aria-label="Utility"
+          aria-label="Utilities view"
           onValueChange={(next) => {
-            if (next === "electricity" || next === "water") setUtility(next)
+            if (next === "electricity" || next === "water" || next === "wallet") {
+              setTab(next)
+              router.push(
+                next === "electricity" ? "/utilities" : `/utilities?tab=${next}`,
+                { scroll: false },
+              )
+            }
           }}
           size="sm"
           spacing={0}
           type="single"
-          value={utility}
+          value={tab}
           variant="outline"
         >
           <ToggleGroupItem className="pointer-coarse:h-9 pointer-coarse:px-3" value="electricity">
@@ -37,18 +52,25 @@ export function UtilitiesView() {
           <ToggleGroupItem className="pointer-coarse:h-9 pointer-coarse:px-3" value="water">
             Water
           </ToggleGroupItem>
+          <ToggleGroupItem className="pointer-coarse:h-9 pointer-coarse:px-3" value="wallet">
+            Wallet
+          </ToggleGroupItem>
         </ToggleGroup>
-        <HistoryControl onChange={setWindow} value={window} />
+        {tab === "wallet" ? null : <HistoryControl onChange={setWindow} value={window} />}
       </div>
-      <DataGate load={getEnergyData}>
-        {(data) =>
-          utility === "electricity" ? (
-            <EnergyPanel data={data} window={window} />
-          ) : (
-            <WaterPanel data={data} window={window} />
-          )
-        }
-      </DataGate>
+      {tab === "wallet" ? (
+        <WalletView />
+      ) : (
+        <DataGate load={getEnergyData}>
+          {(data) =>
+            tab === "electricity" ? (
+              <EnergyPanel data={data} window={window} />
+            ) : (
+              <WaterPanel data={data} window={window} />
+            )
+          }
+        </DataGate>
+      )}
     </div>
   )
 }

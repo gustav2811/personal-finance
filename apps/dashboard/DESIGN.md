@@ -12,8 +12,7 @@ components/shell/       app shell, sidebar, auth, providers, theme
 components/patterns/    domain-neutral: PageHeader, Section, DateField, RangeControl, HistoryControl, DataGate
 domain/consumption/     energy and money charts, source list, series helpers
 features/overview/      page, queries.ts
-features/utilities/    electricity and water page, queries.ts, dev mock fixture
-features/money/
+features/utilities/    electricity, water, and wallet views and queries, dev mock fixture
 features/analysis/      financial breakdowns, trends, flow, and period comparison
 features/sources/
 features/transactions/  ledger feed, inline category, inspector
@@ -102,11 +101,10 @@ Operational reads name their columns. Do not use `select("*")` on feeds the dash
 ```text
 Household
   Overview        /
-  Money           /money
   Analysis        /analysis
   Transactions    /transactions
 Home
-  Utilities       /utilities
+  Utilities       /utilities (electricity, water, wallet exploration)
 Record
   Sources         /sources
 ```
