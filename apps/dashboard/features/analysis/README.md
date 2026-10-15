@@ -69,3 +69,7 @@ DASHBOARD_DEMO_MODE=true DASHBOARD_ANALYSIS_SAMPLE=true yarn dev --hostname 127.
 ```
 
 The snapshot is read-only and displays its Supabase provenance and capture date. It does not refresh from the database automatically. Host-header rejection is an additional check; loopback binding is the access boundary for the unauthenticated private preview.
+
+## Transaction review
+
+Select a transaction in any analysis drill-down to open the shared ledger review editor. Edits use the same member review RPC and revision checks as Transactions. Successful saves update the drill-down and charts immediately; closing flushes pending changes. Failed saves retain the draft with Retry and explicit Discard changes actions. Private snapshot rows remain read-only.

@@ -50,6 +50,8 @@ import {
   AnalysisBars,
   CashFlowChart,
 } from "@/domain/analysis/charts"
+import { TransactionReviewDialog } from "@/features/transactions/review-dialog"
+import type { TransactionFeedItem } from "@/lib/finance/transaction-model"
 import { demoEnabled } from "@/lib/demo/transactions"
 import {
   aggregateBreakdown,
@@ -370,6 +372,8 @@ function AnalysisWorkspace({
     title: string
     items: AnalysisTransaction[]
   } | null>(null)
+  const [edits, setEdits] = useState<Record<string, TransactionFeedItem>>({})
+  const [reviewItem, setReviewItem] = useState<TransactionFeedItem | null>(null)
   const [search, setSearch] = useState("")
   const [refineOpen, setRefineOpen] = useState(false)
   const [showAll, setShowAll] = useState(false)
@@ -385,7 +389,7 @@ function AnalysisWorkspace({
         : metric === "expensesGross"
           ? "Spending"
           : "Net outflow"
-  const enriched = useMemo(() => enrichTransactions(data), [data])
+  const enriched = useMemo(() => enrichTransactions({ ...data, transactions: data.transactions.map((item) => edits[item.id] ?? item) }), [data, edits])
   const transactions = useMemo(
     () => filterTransactions(enriched, { ...filters, currencyCode: currency }),
     [enriched, filters, currency],
@@ -468,7 +472,7 @@ function AnalysisWorkspace({
     ...new Set([currency, ...data.transactions.map((t) => t.currencyCode)]),
   ]
   const shown =
-    drill?.items.filter((t) =>
+    drill?.items.map((item) => enriched.find((current) => current.id === item.id) ?? item).filter((t) =>
       `${t.description} ${t.merchant.name ?? ""} ${t.account.name} ${t.category.name ?? ""}`
         .toLowerCase()
         .includes(search.toLowerCase()),
@@ -1016,14 +1020,14 @@ function AnalysisWorkspace({
               </TableHeader>
               <TableBody>
                 {shown.map((t) => (
-                  <TableRow key={t.id}>
+                  <TableRow key={t.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setReviewItem(t)}>
                     <TableCell className="whitespace-nowrap">
                       {t.occurredOn}
                     </TableCell>
                     <TableCell className="max-w-80">
-                      <p className="font-medium">
+                      <button type="button" className="text-left font-medium underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring" aria-label={`Review ${t.merchant.name ?? t.description}`} onClick={(event) => { event.stopPropagation(); setReviewItem(t) }}>
                         {t.merchant.name ?? t.description}
-                      </p>
+                      </button>
                       {t.merchant.name && (
                         <p className="type-caption">{t.description}</p>
                       )}
@@ -1047,6 +1051,7 @@ function AnalysisWorkspace({
           </div>
         </DialogContent>
       </Dialog>
+      {reviewItem && <TransactionReviewDialog key={reviewItem.id} item={reviewItem} categories={data.categories} readOnly={Boolean(data.sample)} onClose={() => setReviewItem(null)} onSaved={(item) => setEdits((current) => ({ ...current, [item.id]: item }))} />}
     </div>
   )
 }

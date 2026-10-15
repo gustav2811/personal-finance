@@ -115,6 +115,11 @@ test("data leads while refinements stay functional and Other opens its exact tra
       { target: { value: "Merchant 9" } },
     )
     assert.equal(within(dialog).getAllByRole("row").length, 2)
+    fireEvent.click(within(dialog).getByRole("button", { name: "Review Merchant 9" }))
+    assert.ok(await screen.findByRole("button", { name: "Close transaction review" }))
+    assert.ok(screen.getByRole("textbox", { name: "Description" }))
+    fireEvent.click(screen.getByRole("button", { name: "Close transaction review" }))
+    await screen.findByRole("textbox", { name: "Search transactions" })
     fireEvent.click(within(dialog).getByRole("button", { name: "Close" }))
     fireEvent.click(screen.getByRole("radio", { name: "Cash flow" }))
     fireEvent.click(screen.getByRole("button", { name: /^Other \(3\):/ }))

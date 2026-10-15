@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, type ReactNode } from "react"
+import { useEffect, useState, useRef, useImperativeHandle, type Ref, type ReactNode } from "react"
 import { ArrowLeftRight, Copy } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -18,8 +18,12 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { shortDate } from "@/lib/format/date"
 import { rankCategories, useCategoryRanking } from "./category-suggest"
 import type { CategoryOption, TransactionFeedItem, TransactionInspection } from "./model"
+import { createSaveGate } from "./save-gate"
+import { reviewNature } from "./review-nature"
 import { getTransaction } from "./queries"
 import { formatAmount, moneyDirection, subject } from "./copy"
+
+export type InspectorSave = { flush: () => Promise<boolean> }
 
 export function Inspector({
   categories,
@@ -27,8 +31,11 @@ export function Inspector({
   item,
   onConfirm,
   onUndo,
+  onDiscard,
   onDirtyChange,
-  pending,
+  saveRef,
+  pending: saving,
+  readOnly = false,
   undo,
   budget,
 }: {
@@ -42,18 +49,21 @@ export function Inspector({
     categoryId: string | null
     description: string
     notes: string | null
-  }) => Promise<string | null>
+  }, options?: { advance?: boolean }) => Promise<string | null>
+  saveRef: Ref<InspectorSave>
   onDirtyChange: (dirty: boolean) => void
   onUndo: () => void
+  onDiscard?: () => void
   pending: boolean
+  readOnly?: boolean
   undo: boolean
   budget?: ReactNode
 }) {
+  const pending = saving || readOnly
   const [isTransfer, setIsTransfer] = useState<boolean | null>(item.treatment.isTransfer)
   const [excludeFromSpend, setExcludeFromSpend] = useState<boolean | null>(
     item.treatment.excludeFromSpend,
   )
-  const [nature, setNature] = useState(item.treatment.nature ?? "")
   const [treatmentError, setTreatmentError] = useState<string | null>(null)
   const [treatmentSaved, setTreatmentSaved] = useState(false)
   const [savingTreatment, setSavingTreatment] = useState(false)
@@ -62,6 +72,7 @@ export function Inspector({
   const [selectedCategory, setSelectedCategory] = useState(() => categoryValue(categories, item))
   const [description, setDescription] = useState(item.description)
   const [notes, setNotes] = useState(item.notes ?? "")
+  const nature = reviewNature(item, { categoryId: selectedCategory?.id ?? null, isTransfer, excludeFromSpend })
   const categoryItems = selectedCategory && !categories.some((entry) => entry.id === selectedCategory.id)
     ? [selectedCategory, ...categories]
     : categories
@@ -69,30 +80,11 @@ export function Inspector({
   const categoryQuery = selectedCategory && categoryInput === categoryLabel(selectedCategory) ? "" : categoryInput
   const { loading: ranking, ranking: categoryRanking } = useCategoryRanking(categoryQuery)
   const { items: matchedCategories, probabilityById } = rankCategories(categoryItems, categoryQuery, categoryRanking)
-  const treatmentKey = [
-    item.id,
-    item.revision.confirmedTreatmentId ?? "",
-    item.revision.proposedTreatmentId ?? "",
-    String(item.treatment.isTransfer),
-    String(item.treatment.excludeFromSpend),
-    item.treatment.nature ?? "",
-  ].join(":")
-
   const dirty = description.trim() !== item.description || (notes.trim() || null) !== (item.notes ?? null)
     || (selectedCategory?.id ?? null) !== item.category.id
     || isTransfer !== item.treatment.isTransfer || excludeFromSpend !== item.treatment.excludeFromSpend
+    || nature !== item.treatment.nature
   useEffect(() => { onDirtyChange(dirty) }, [dirty, onDirtyChange])
-
-  useEffect(() => {
-    setIsTransfer(item.treatment.isTransfer)
-    setExcludeFromSpend(item.treatment.excludeFromSpend)
-    setNature(item.treatment.nature ?? "")
-    setTreatmentError(null)
-  }, [treatmentKey, item.treatment.excludeFromSpend, item.treatment.isTransfer, item.treatment.nature])
-
-  useEffect(() => {
-    setTreatmentSaved(false)
-  }, [item.id])
 
   useEffect(() => {
     let cancelled = false
@@ -109,27 +101,41 @@ export function Inspector({
     }
   }, [item.id, item.revision.confirmedClassificationId])
 
-  async function saveTreatment() {
-    if (!description.trim()) return
-    setSavingTreatment(true)
-    setTreatmentError(null)
-    try {
-      const error = await onConfirm({
-        excludeFromSpend,
-        isTransfer,
-        categoryId: selectedCategory?.id ?? null,
-        description: description.trim(),
-        notes: notes.trim() || null,
-        nature: nature.trim() || null,
-      })
-      setTreatmentError(error)
-      setTreatmentSaved(error == null)
-    } catch (error) {
-      setTreatmentError(error instanceof Error ? error.message : "Treatment could not be saved.")
-    } finally {
-      setSavingTreatment(false)
-    }
+  const saveGate = useRef(createSaveGate())
+  const draftKey = JSON.stringify([description, notes, selectedCategory?.id, isTransfer, excludeFromSpend, nature])
+
+  function saveTreatment(confirm = false): Promise<boolean> {
+    return saveGate.current(async () => {
+      if (!dirty && !confirm) return true
+      if (!description.trim()) {
+        setTreatmentError("Enter a description before leaving this transaction.")
+        return false
+      }
+      setSavingTreatment(true)
+      setTreatmentError(null)
+      try {
+        const error = await onConfirm({
+          excludeFromSpend, isTransfer, categoryId: selectedCategory?.id ?? null,
+          description: description.trim(), notes: notes.trim() || null, nature,
+        }, { advance: confirm })
+        setTreatmentError(error)
+        setTreatmentSaved(error == null)
+        return error == null
+      } catch (error) {
+        setTreatmentError(error instanceof Error ? error.message : "Changes could not be saved.")
+        return false
+      } finally {
+        setSavingTreatment(false)
+      }
+    })
   }
+
+  useImperativeHandle(saveRef, () => ({ flush: () => treatmentError ? Promise.resolve(false) : saveTreatment() }))
+  useEffect(() => {
+    if (!dirty || pending || savingTreatment || treatmentError) return
+    const timer = window.setTimeout(() => { void saveTreatment() }, 650)
+    return () => window.clearTimeout(timer)
+  }, [draftKey, dirty, pending, savingTreatment, treatmentError])
 
   async function copyDescription() {
     await navigator.clipboard.writeText(item.description)
@@ -138,60 +144,19 @@ export function Inspector({
   const lines = provenanceLines(item, inspection)
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-start gap-2 pr-8">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="flex shrink-0 items-start gap-2 pb-3">
         <h2 className="min-w-0 flex-1 text-base font-medium text-balance">{subject(item)}</h2>
         <Button aria-label="Copy description" onClick={() => void copyDescription()} size="icon-sm" variant="ghost">
           <Copy />
         </Button>
       </div>
 
-      <div className="divide-y rounded-lg border">
-        <div className="space-y-2 px-3 py-2">
-          <Label htmlFor="transaction-description">Description</Label>
-          <Input id="transaction-description" value={description} onChange={(event) => { setDescription(event.target.value); setTreatmentSaved(false) }} disabled={savingTreatment} />
-          {item.originalDescription && item.originalDescription !== description ? <p className="type-caption text-muted-foreground">Original: {item.originalDescription}</p> : null}
-        </div>
-        <div className="space-y-2 px-3 py-2">
-          <Label htmlFor="transaction-notes">Notes</Label>
-          <Textarea rows={3} id="transaction-notes" placeholder="Add a note about this transaction" value={notes} onChange={(event) => { setNotes(event.target.value); setTreatmentSaved(false) }} disabled={savingTreatment} />
-        </div>
-        <Fact label="Merchant" value={item.merchant.name ?? "None"} />
-        <Fact label="Posted" value={shortDate(item.occurredOn)} />
-        <Fact label="Account" value={item.account.name} />
-        <Fact
-          label="Amount"
-          value={
-            <span className={direction === "in" ? "text-electric-cyan-700" : "text-shocking-pink-700"}>
-              <span className="sr-only">{direction === "out" ? "Money out" : "Money in"}</span>
-              {formatAmount(item.amount, item.currencyCode)}
-            </span>
-          }
-        />
+      <div className="mb-3 flex shrink-0 items-baseline justify-between gap-3 type-caption">
+        <span className="text-muted-foreground">{shortDate(item.occurredOn)} · {item.account.name}</span>
+        <span className="type-numeric">{formatAmount(item.amount, item.currencyCode)}</span>
       </div>
-
-      {lines.length > 0 ? (
-        <div className="divide-y rounded-lg border">
-          {lines.map((line) => (
-            <Fact key={line.label} label={line.label} value={line.value} />
-          ))}
-          {inspection && inspection.runs.length > 0 ? (
-            <details className="px-3 py-2">
-              <summary className="cursor-pointer text-muted-foreground">Classifier runs</summary>
-              <ul className="mt-2 space-y-1">
-                {inspection.runs.map((run, index) => (
-                  <li className="type-caption text-muted-foreground" key={`${run.classifier}-${index}`}>
-                    {run.classifier} · {run.status}
-                    {run.categoryName ? ` · ${run.categoryName}` : ""}
-                    {run.confidence != null ? ` · ${Math.round(run.confidence * 100)}%` : ""}
-                  </li>
-                ))}
-              </ul>
-            </details>
-          ) : null}
-        </div>
-      ) : null}
-
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
       <div className="divide-y rounded-lg border">
         <div className="grid grid-cols-[8rem_minmax(0,1fr)] items-center gap-3 px-3 py-2" data-category-for={item.id}>
           <span className="text-muted-foreground">Category</span>
@@ -204,7 +169,7 @@ export function Inspector({
             isItemEqualToValue={(first, second) => first.id === second.id}
             onInputValueChange={setCategoryInput}
             onValueChange={(category) => {
-              if (category) { setSelectedCategory(category); setTreatmentSaved(false) }
+              if (category) { setSelectedCategory(category); setTreatmentSaved(false); setTreatmentError(null) }
             }}
             value={selectedCategory}
           >
@@ -262,7 +227,7 @@ export function Inspector({
                 disabled={savingTreatment || pending}
                 aria-label="Transfer"
                 onValueChange={(value) => {
-                  if (value === "yes" || value === "no") setIsTransfer(value === "yes")
+                  if (value === "yes" || value === "no") { setIsTransfer(value === "yes"); setTreatmentError(null); setTreatmentSaved(false) }
                 }}
                 size="sm"
                 spacing={0}
@@ -283,7 +248,7 @@ export function Inspector({
                 disabled={savingTreatment || pending}
                 aria-label="Spend"
                 onValueChange={(value) => {
-                  if (value === "include" || value === "exclude") setExcludeFromSpend(value === "exclude")
+                  if (value === "include" || value === "exclude") { setExcludeFromSpend(value === "exclude"); setTreatmentError(null); setTreatmentSaved(false) }
                 }}
                 size="sm"
                 spacing={0}
@@ -295,24 +260,69 @@ export function Inspector({
                 <ToggleGroupItem value="exclude">Exclude</ToggleGroupItem>
               </ToggleGroup>
             </div>
-            {showNature(nature) ? (
-              <div className="grid grid-cols-[8rem_minmax(0,1fr)] items-center gap-3 px-3 py-2">
-                <span className="text-muted-foreground">Nature</span>
-                <span className="text-right">{nature}</span>
-              </div>
-            ) : null}
           </>
         )}
       </div>
-      <p className="type-caption text-muted-foreground">{item.reviewState === "confirmed" ? "Reviewed" : "Not reviewed"} · Changes are saved when you select Save.</p>
-      <div className="flex items-center justify-end gap-2">
+      <div className="divide-y rounded-lg border">
+        <div className="space-y-2 px-3 py-2">
+          <Label htmlFor="transaction-description">Description</Label>
+          <Input id="transaction-description" value={description} onChange={(event) => { setDescription(event.target.value); setTreatmentSaved(false); setTreatmentError(null) }} disabled={pending || savingTreatment} />
+        </div>
+        <div className="space-y-2 px-3 py-2">
+          <Label htmlFor="transaction-notes">Notes</Label>
+          <Textarea rows={2} id="transaction-notes" placeholder="Add a note about this transaction" value={notes} onChange={(event) => { setNotes(event.target.value); setTreatmentSaved(false); setTreatmentError(null) }} disabled={pending || savingTreatment} />
+        </div>
+      </div>
+      <details className="rounded-lg border px-3 py-2">
+        <summary className="cursor-pointer type-caption text-muted-foreground">Transaction details</summary>
+        <div className="mt-2 divide-y">
+        <Fact label="Merchant" value={item.merchant.name ?? "None"} />
+        <Fact label="Posted" value={shortDate(item.occurredOn)} />
+        <Fact label="Account" value={item.account.name} />
+        <Fact
+          label="Amount"
+          value={
+            <span className={direction === "in" ? "text-electric-cyan-700" : "text-shocking-pink-700"}>
+              <span className="sr-only">{direction === "out" ? "Money out" : "Money in"}</span>
+              {formatAmount(item.amount, item.currencyCode)}
+            </span>
+          }
+        />
+          {item.originalDescription ? <Fact label="Original" value={item.originalDescription} /> : null}
+        </div>
+      {lines.length > 0 ? (
+      <div className="divide-y rounded-lg border">
+          {lines.map((line) => (
+            <Fact key={line.label} label={line.label} value={line.value} />
+          ))}
+          {inspection && inspection.runs.length > 0 ? (
+            <details className="px-3 py-2">
+              <summary className="cursor-pointer text-muted-foreground">Classifier runs</summary>
+              <ul className="mt-2 space-y-1">
+                {inspection.runs.map((run, index) => (
+                  <li className="type-caption text-muted-foreground" key={`${run.classifier}-${index}`}>
+                    {run.classifier} · {run.status}
+                    {run.categoryName ? ` · ${run.categoryName}` : ""}
+                    {run.confidence != null ? ` · ${Math.round(run.confidence * 100)}%` : ""}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
+        </div>
+      ) : null}
+
+        </details>
+      {budget ? <details className="rounded-lg border px-3 py-2"><summary className="cursor-pointer type-caption text-muted-foreground">Budget</summary><div className="mt-2">{budget}</div></details> : null}
+      </div>
+      <div className="flex shrink-0 items-center justify-end gap-2 border-t pt-3 mt-3" aria-live="polite">
         {categoryError && categoryError !== treatmentError ? (
           <p className="type-caption text-destructive" role="status">
             {categoryError}
           </p>
         ) : null}
         {undo ? (
-          <Button disabled={pending || savingTreatment} onClick={onUndo} size="sm" variant="ghost">
+          <Button disabled={pending || savingTreatment || dirty} onClick={onUndo} size="sm" variant="ghost">
             Undo
           </Button>
         ) : null}
@@ -320,20 +330,22 @@ export function Inspector({
           <p className="type-caption text-destructive" role="status">
             {treatmentError}
           </p>
-        ) : treatmentSaved ? (
-          <p className="type-caption" role="status">
-            Saved
-          </p>
         ) : null}
-        <Button
-            disabled={pending || savingTreatment || !description.trim()}
-            onClick={() => void saveTreatment()}
-            size="sm"
-          >
-            {savingTreatment ? "Saving…" : item.reviewState === "confirmed" || !selectedCategory ? "Save changes" : "Save & mark reviewed"}
-          </Button>
+        {treatmentError && onDiscard ? <Button disabled={pending || savingTreatment} onClick={onDiscard} size="sm" variant="ghost">Discard changes</Button> : null}
+        {readOnly ? (
+          <span className="type-caption text-muted-foreground">Local snapshot · read only</span>
+        ) : treatmentError ? (
+          <Button disabled={pending || savingTreatment} onClick={() => void saveTreatment(true)} size="sm" variant="outline">Retry</Button>
+        ) : pending || savingTreatment ? (
+          <span className="type-caption text-muted-foreground">Saving…</span>
+        ) : dirty ? (
+          <Button onClick={() => void saveTreatment(true)} size="sm">Save</Button>
+        ) : treatmentSaved ? (
+          <span className="type-caption text-muted-foreground">Saved</span>
+        ) : item.reviewState !== "confirmed" && selectedCategory ? (
+          <Button onClick={() => void saveTreatment(true)} size="sm" variant="outline">Mark reviewed</Button>
+        ) : null}
       </div>
-      {budget}
     </div>
   )
 }
@@ -385,11 +397,6 @@ function provenanceLines(
     lines.push({ label: "You", value: item.category.name })
   }
   return lines
-}
-
-function showNature(nature: string): boolean {
-  const value = nature.trim().toLowerCase()
-  return value !== "" && value !== "purchase" && value !== "other"
 }
 
 function Fact({ label, value }: { label: string; value: ReactNode }) {
