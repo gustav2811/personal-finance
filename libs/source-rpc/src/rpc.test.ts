@@ -26,4 +26,24 @@ describe("callServiceRoleRpc", () => {
     expect(seen?.init.method).toBe("POST");
     expect(seen?.init.body).toBe(JSON.stringify({ p_payload: { devices: [] } }));
   });
+
+  it("does not send an opaque secret API key as a bearer token", async () => {
+    let seen: RequestInit | undefined;
+    const fetchImpl: typeof fetch = async (_input, init) => {
+      seen = init ?? {};
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    };
+
+    await callServiceRoleRpc(
+      "https://example.supabase.co",
+      "sb_secret_test-key",
+      "ingest_consumption_batch",
+      { p_payload: { devices: [] } },
+      fetchImpl,
+    );
+
+    const headers = new Headers(seen?.headers);
+    expect(headers.get("apikey")).toBe("sb_secret_test-key");
+    expect(headers.has("Authorization")).toBe(false);
+  });
 });
