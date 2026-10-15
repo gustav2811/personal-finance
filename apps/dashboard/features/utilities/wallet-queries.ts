@@ -2,7 +2,7 @@ import type { DeviceRead, LedgerRead, SnapshotRead } from "@/lib/supabase/rows"
 import { getBrowserClient, type BrowserClient } from "@/lib/supabase/browser"
 import { countTransactions, readDevices, readLatestSnapshot, readLedger } from "@/lib/supabase/read"
 
-export type MoneyData = {
+export type WalletData = {
   devices: DeviceRead[]
   ledgerEntries: LedgerRead[]
   financialTransactionCount: number
@@ -11,7 +11,7 @@ export type MoneyData = {
   fetchedAt: string
 }
 
-export async function loadMoneyData(client: BrowserClient): Promise<MoneyData> {
+export async function loadWalletData(client: BrowserClient): Promise<WalletData> {
   const [devices, ledgerEntries, counted, latest] = await Promise.all([
     readDevices(client),
     readLedger(client),
@@ -28,6 +28,6 @@ export async function loadMoneyData(client: BrowserClient): Promise<MoneyData> {
   }
 }
 
-export function getMoneyData(): Promise<MoneyData> {
-  return loadMoneyData(getBrowserClient())
+export function getWalletData(): Promise<WalletData> {
+  return loadWalletData(getBrowserClient())
 }

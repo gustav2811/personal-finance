@@ -2,7 +2,6 @@
 
 import { Gauge } from "lucide-react"
 import { useMemo, useState } from "react"
-import { PageHeader } from "@/components/patterns/page-header"
 import { RangeControl } from "@/components/patterns/range-control"
 import { DataGate } from "@/components/patterns/data-gate"
 import { Section } from "@/components/patterns/section"
@@ -16,12 +15,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { getMoneyData, type MoneyData } from "@/features/money/queries"
+import { getWalletData, type WalletData } from "@/features/utilities/wallet-queries"
 import { shortDate } from "@/lib/format/date"
 import { formatMoney, sum } from "@/lib/format/money"
 import { buildMoneySeries, isWithinRange, type RangeDays } from "@/domain/consumption/model"
 
-function MoneyBody({ data, days }: { data: MoneyData; days: RangeDays }) {
+function WalletBody({ data, days }: { data: WalletData; days: RangeDays }) {
   const moneySeries = useMemo(
     () => buildMoneySeries(data.ledgerEntries, days),
     [data.ledgerEntries, days],
@@ -120,17 +119,21 @@ function MoneyBody({ data, days }: { data: MoneyData; days: RangeDays }) {
   )
 }
 
-export function MoneyView() {
+export function WalletView() {
   const [days, setDays] = useState<RangeDays>(90)
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        actions={<RangeControl onChange={setDays} value={days} />}
-        description="Wallet movement, utility charges, and the financial record behind the usage."
-        title="Money"
-      />
-      <DataGate load={getMoneyData}>{(data) => <MoneyBody data={data} days={days} />}</DataGate>
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-1">
+          <h2 className="type-section-title text-foreground">Utility wallet</h2>
+          <p className="type-body max-w-2xl text-muted-foreground">
+            Explore wallet charges and the ledger behind utility usage.
+          </p>
+        </div>
+        <RangeControl onChange={setDays} value={days} />
+      </header>
+      <DataGate load={getWalletData}>{(data) => <WalletBody data={data} days={days} />}</DataGate>
     </div>
   )
 }
