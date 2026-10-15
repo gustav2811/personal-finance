@@ -54,6 +54,11 @@ import { TransactionReviewDialog } from "@/features/transactions/review-dialog"
 import type { TransactionFeedItem } from "@/lib/finance/transaction-model"
 import { demoEnabled } from "@/lib/demo/transactions"
 import {
+  addMonths as addBudgetMonths,
+  currentCycle,
+  dayBefore,
+} from "@/domain/budget/cycle"
+import {
   aggregateBreakdown,
   aggregateTable,
   aggregateTrend,
@@ -226,16 +231,17 @@ export function AnalysisView({
   initialCategoryIds?: string[]
 } = {}) {
   const settings = useAnalysisSettings(initialCategoryIds)
+  const thisCycle = currentCycle()
   const today = new Date(
     new Intl.DateTimeFormat("en-CA", {
       timeZone: "Africa/Johannesburg",
     }).format(new Date()) + "T12:00:00",
   )
   const [from, setFrom] = useState(
-    () => initialRange?.from ?? iso(startOfMonth(today)),
+    () => initialRange?.from ?? thisCycle.start,
   )
   const [to, setTo] = useState(
-    () => initialRange?.to ?? iso(endOfMonth(today)),
+    () => initialRange?.to ?? dayBefore(thisCycle.endExclusive),
   )
   const load = useCallback(() => loadAnalysisData(from, to), [from, to])
   const rangeStart = new Date(`${from}T12:00:00`)
@@ -305,10 +311,12 @@ export function AnalysisView({
                     size="sm"
                     variant="secondary"
                     onClick={() => {
-                      setFrom(
-                        iso(startOfMonth(addMonths(today, 1 - Number(months)))),
+                      const start = addBudgetMonths(
+                        thisCycle.start,
+                        1 - Number(months),
                       )
-                      setTo(iso(endOfMonth(today)))
+                      setFrom(start)
+                      setTo(dayBefore(thisCycle.endExclusive))
                     }}
                   >
                     {label}

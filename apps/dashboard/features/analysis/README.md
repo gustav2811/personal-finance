@@ -23,7 +23,7 @@ The distill pass was verified through build, types, and component/presentation t
 
 ## Date and selection state
 
-The initial range is the current calendar month in `Africa/Johannesburg` (the “This month” shortcut). Previous/next selects the adjacent calendar month. The three-month and six-month shortcuts include the current month. The range is sent as ledger dates, not browser-local timestamps.
+The initial range is the current budget cycle in `Africa/Johannesburg` (the 23rd through the 22nd). The budget-month shortcuts include the current cycle and can extend the range to three or six cycles. The range is sent as ledger dates, not browser-local timestamps.
 
 View, dimension, measure, granularity, currency, and filter selections remain stable while the Analysis workspace is mounted and data is reloaded. They are not persisted across a full page reload or a new visit; add persistence only as a deliberate feature change.
 
