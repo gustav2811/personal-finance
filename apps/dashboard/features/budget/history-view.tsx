@@ -1,9 +1,10 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useState } from "react"
 import { PageHeader } from "@/components/patterns/page-header"
+import { ResourceFeedback } from "./read-feedback"
 import { Section } from "@/components/patterns/section"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { useResource } from "@/hooks/use-resource"
 import {
   Select,
   SelectContent,
@@ -177,58 +178,29 @@ function HistoryTable({ rows }: { rows: HistoryRow[] }) {
 }
 
 export function HistoryView() {
-  const [versions, setVersions] = useState<VersionHeader[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [loaded, setLoaded] = useState<Loaded | null>(null)
-  const [members, setMembers] = useState<MemberRef[]>([])
   const [filter, setFilter] = useState<BeneficiaryFilter>({ kind: "household" })
-  const [error, setError] = useState<string | null>(null)
-  const [reading, setReading] = useState(true)
 
-  useEffect(() => {
-    let cancelled = false
-    void Promise.all([loadVersionHeaders(), readMemberDirectory()])
-      .then(([headers, people]) => {
-        if (cancelled) return
-        setVersions(headers)
-        setMembers(people)
-        setSelectedId(headers[0]?.id ?? null)
-        if (headers.length === 0) setReading(false)
-      })
-      .catch((caught: unknown) => {
-        if (cancelled) return
-        setError(caught instanceof Error ? caught.message : copy.couldNotRead)
-        setReading(false)
-      })
-    return () => {
-      cancelled = true
-    }
+  const loadList = useCallback(async (_signal: AbortSignal) => {
+    const [versions, members] = await Promise.all([loadVersionHeaders(), readMemberDirectory()])
+    return { versions, members }
   }, [])
-
-  useEffect(() => {
-    if (!selectedId) return
-    let cancelled = false
-    setReading(true)
-    setError(null)
-    setLoaded(null)
-    void loadComparison(selectedId)
-      .then((next) => {
-        if (cancelled) return
-        setLoaded(next)
-        setReading(false)
-      })
-      .catch((caught: unknown) => {
-        if (cancelled) return
-        setLoaded(null)
-        setError(caught instanceof Error ? caught.message : copy.couldNotRead)
-        setReading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [selectedId])
-
-  const view = loaded ? projectHistory({ ...loaded, filter }) : null
+  const listResource = useResource({ key: "budget:history-list", load: loadList })
+  const listData = listResource.data
+  const versions = listData?.versions ?? []
+  const members = listData?.members ?? []
+  const selectedVersion = selectedId && versions.some((version) => version.id === selectedId) ? selectedId : versions[0]?.id ?? null
+  const loadComparisonResource = useCallback(async (_signal: AbortSignal) => {
+    if (!selectedVersion) throw new Error(copy.couldNotRead)
+    return await loadComparison(selectedVersion)
+  }, [selectedVersion])
+  const comparisonResource = useResource({
+    key: `budget:history-comparison:${selectedVersion ?? "none"}`,
+    load: loadComparisonResource,
+    enabled: selectedVersion !== null,
+  })
+  const comparisonData = comparisonResource.data
+  const view = comparisonData ? projectHistory({ ...comparisonData, filter }) : null
   const filterValue = filter.kind === "member" ? filter.memberId : filter.kind
   const namedMembers = members.map((member) => ({
     id: member.id,
@@ -242,19 +214,15 @@ export function HistoryView() {
         description={copy.planChangeIsNotCorrection}
         title="History"
       />
-      {error ? (
-        <Alert>
-          <AlertTitle>{copy.couldNotRead}</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
+      <ResourceFeedback resource={listResource} title="Budget history could not be loaded" loading="Reading budget history…" />
+      {listResource.hasData ? <ResourceFeedback resource={comparisonResource} title="This revision could not be loaded" loading="Reading the selected revision…" /> : null}
       {versions.length > 0 ? (
         <div className="flex flex-wrap items-end justify-between gap-3">
           <Select
             onValueChange={(next) => {
               if (next) setSelectedId(next)
             }}
-            value={selectedId ?? undefined}
+            value={selectedVersion ?? undefined}
           >
             <SelectTrigger aria-label={copy.revision} className="w-72 pointer-coarse:h-9">
               <SelectValue placeholder={copy.revision} />
@@ -293,8 +261,8 @@ export function HistoryView() {
           </ToggleGroup>
         </div>
       ) : null}
-      {reading && !view ? <p className="type-body text-muted-foreground">Reading the budget.</p> : null}
-      {!reading && versions.length === 0 && !error ? (
+      {!listResource.hasData && listResource.status !== "error" ? <p className="type-body text-muted-foreground">Reading the budget.</p> : null}
+      {listResource.status === "ready" && versions.length === 0 ? (
         <p className="type-body text-muted-foreground">{copy.noPublishedPlan}</p>
       ) : null}
       {view ? <HistoryBody view={view} /> : null}

@@ -57,6 +57,7 @@ import { EnergyPanel } from "@/features/utilities/energy-panel"
 import { buildMockEnergyData } from "@/features/utilities/mock-data"
 import { WaterPanel } from "@/features/utilities/water-panel"
 import type { RangeDays, HistoryWindow } from "@/lib/range"
+import { ResourceExamples } from "./resource-examples"
 
 const SWATCHES = [
   ["shocking-pink", "bg-shocking-pink-500"],
@@ -100,6 +101,8 @@ export function UiGallery() {
           { label: "Daily average", value: "16.8 kWh" },
         ]} />
       </Section>
+
+      <ResourceExamples />
 
       <Section title="Chart states" description="Use ChartTooltipContent for ordinary series. Use the shared surface only when the content needs a custom layout.">
         <div className="grid min-w-0 gap-4 sm:grid-cols-2">

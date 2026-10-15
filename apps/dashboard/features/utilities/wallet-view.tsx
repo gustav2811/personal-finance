@@ -3,7 +3,9 @@
 import { Gauge } from "lucide-react"
 import { useMemo, useState } from "react"
 import { RangeControl } from "@/components/patterns/range-control"
-import { DataGate } from "@/components/patterns/data-gate"
+import { useResource } from "@/hooks/use-resource"
+import { ResourceFeedback } from "@/components/patterns/resource-feedback"
+import { Button } from "@/components/ui/button"
 import { Section } from "@/components/patterns/section"
 import { MoneyChart } from "@/domain/consumption/money-chart"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -20,7 +22,7 @@ import { shortDate } from "@/lib/format/date"
 import { formatMoney, sum } from "@/lib/format/money"
 import { buildMoneySeries, isWithinRange, type RangeDays } from "@/domain/consumption/model"
 
-function WalletBody({ data, days }: { data: WalletData; days: RangeDays }) {
+export function WalletBody({ data, days, onRetry, refreshing = false }: { data: WalletData; days: RangeDays; onRetry: () => Promise<void>; refreshing?: boolean }) {
   const moneySeries = useMemo(
     () => buildMoneySeries(data.ledgerEntries, days),
     [data.ledgerEntries, days],
@@ -43,10 +45,10 @@ function WalletBody({ data, days }: { data: WalletData; days: RangeDays }) {
     <div className="space-y-6">
       {data.financialError ? (
         <Alert>
-          <AlertTitle>Financial tables need a read policy</AlertTitle>
+          <AlertTitle>Some financial information is unavailable</AlertTitle>
           <AlertDescription>
-            Utility wallet data is available. Existing transaction and snapshot tables are
-            not exposed to this authenticated role yet.
+            Utility wallet data is available. Some transaction or balance information could not be loaded.
+            <Button className="mt-2" disabled={refreshing} onClick={() => void onRetry()} size="sm" variant="outline">Retry financial information</Button>
           </AlertDescription>
         </Alert>
       ) : null}
@@ -97,12 +99,13 @@ function WalletBody({ data, days }: { data: WalletData; days: RangeDays }) {
       </Section>
       <Section
         description={
-          data.financialTransactionCount > 0
+          data.financialTransactionCount === null ? "Transaction counts are unavailable." : data.financialTransactionCount > 0
             ? `${data.financialTransactionCount} imported transaction records are available to connect to this view.`
-            : "No transactional records are visible to this role yet."
+            : "No transaction records in this window."
         }
         title="Transactional finance"
       >
+        {data.financialSnapshotUnavailable ? <p className="type-body-small text-muted-foreground">Tracked balances are unavailable.</p> : null}
         {latestSnapshot ? (
           <p className="flex items-center gap-2 text-sm">
             <Gauge className="size-4 text-muted-foreground" />
@@ -121,6 +124,7 @@ function WalletBody({ data, days }: { data: WalletData; days: RangeDays }) {
 
 export function WalletView() {
   const [days, setDays] = useState<RangeDays>(90)
+  const resource = useResource({ key: "utilities:wallet", load: getWalletData, retainData: true })
 
   return (
     <div className="space-y-6">
@@ -133,7 +137,8 @@ export function WalletView() {
         </div>
         <RangeControl onChange={setDays} value={days} />
       </header>
-      <DataGate load={getWalletData}>{(data) => <WalletBody data={data} days={days} />}</DataGate>
+      <ResourceFeedback resource={resource} title="Wallet information could not be loaded" />
+      {resource.hasData ? <WalletBody data={resource.data!} days={days} onRetry={resource.reload} refreshing={resource.status === "refreshing"} /> : null}
     </div>
   )
 }

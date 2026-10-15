@@ -1,7 +1,7 @@
 import { JSDOM } from "jsdom"
 
 const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost", pretendToBeVisual: true })
-for (const key of ["window", "document", "navigator", "HTMLElement", "Element", "Node", "HTMLInputElement", "HTMLTextAreaElement", "MutationObserver", "getComputedStyle"] as const) {
+for (const key of ["window", "self", "document", "navigator", "HTMLElement", "Element", "Node", "HTMLInputElement", "HTMLTextAreaElement", "MutationObserver", "getComputedStyle"] as const) {
   Object.defineProperty(globalThis, key, { configurable: true, value: dom.window[key] })
 }
 Object.assign(globalThis, {

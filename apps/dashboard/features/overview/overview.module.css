@@ -22,9 +22,7 @@
 .ringCaption {
   margin: 0.25rem auto 0;
   max-width: 26rem;
-  color: var(--muted-foreground);
   text-align: center;
-  font-size: 0.75rem;
   line-height: 1.5;
   text-wrap: balance;
 }
@@ -112,16 +110,11 @@
 .percentage {
   align-self: center;
   text-align: right;
-  color: var(--muted-foreground);
-  font-size: 0.75rem;
-  font-variant-numeric: tabular-nums;
 }
 .provenance {
   border-top: 1px solid var(--border);
   margin-top: 2rem;
   padding-top: 1rem;
-  color: var(--muted-foreground);
-  font-size: 0.75rem;
   line-height: 1.6;
 }
 .provenance summary {

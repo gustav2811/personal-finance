@@ -1,7 +1,8 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { PageHeader } from "@/components/patterns/page-header"
+import { ResourceFeedback } from "./read-feedback"
 import { Section } from "@/components/patterns/section"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -25,6 +26,7 @@ import { centsToRandsInput, formatCents, isCents } from "@/domain/budget/money"
 import { moveReason, randsToCents } from "@/domain/budget/move"
 import { forecastGap } from "@/domain/budget/v1"
 import { localDateKey } from "@/lib/format/date"
+import { useResource } from "@/hooks/use-resource"
 import {
   blankLine,
   cloneLines,
@@ -73,6 +75,11 @@ type PublishHold = {
   } | null
 }
 
+export type PlanEditorResourceData = {
+  agreement: { headers: VersionHeader[]; plans: Map<string, PublishedPlan> }
+  workspace: CutoverWorkspace | null
+}
+
 async function loadAgreement(): Promise<{ headers: VersionHeader[]; plans: Map<string, PublishedPlan> }> {
   const headers: VersionHeader[] = []
   let cursor: string | null = null
@@ -105,12 +112,22 @@ function planFor(
   return selected.applicable ? plans.get(selected.applicable.versionId) ?? null : null
 }
 
-export function PlanEditor({ initialChoice = "this" }: { initialChoice?: CycleChoice }) {
-  const [reloadKey, setReloadKey] = useState(0)
-  const [loaded, setLoaded] = useState(false)
-  const [loadError, setLoadError] = useState<string | null>(null)
+async function defaultPlanEditorResource(_signal: AbortSignal): Promise<PlanEditorResourceData> {
+  const [agreement, cutover] = await Promise.all([loadAgreement(), loadCutover().catch(() => null)])
+  return { agreement, workspace: cutover ? readCutover(cutover) : null }
+}
+
+export function PlanEditor({ initialChoice = "this", loadResource = defaultPlanEditorResource }: {
+  initialChoice?: CycleChoice
+  loadResource?: (signal: AbortSignal) => Promise<PlanEditorResourceData>
+}) {
+  return <PlanEditorSession initialChoice={initialChoice} key={initialChoice} loadResource={loadResource} />
+}
+
+function PlanEditorSession({ initialChoice, loadResource }: { initialChoice: CycleChoice; loadResource: (signal: AbortSignal) => Promise<PlanEditorResourceData> }) {
   const [actionError, setActionError] = useState<string | null>(null)
   const [publishFailed, setPublishFailed] = useState(false)
+  const [savedAwaitingRefresh, setSavedAwaitingRefresh] = useState(false)
   const [headers, setHeaders] = useState<VersionHeader[]>([])
   const [plans, setPlans] = useState<Map<string, PublishedPlan>>(new Map())
   const [published, setPublished] = useState<PublishedPlan | null>(null)
@@ -127,39 +144,35 @@ export function PlanEditor({ initialChoice = "this" }: { initialChoice?: CycleCh
   const [pending, setPending] = useState(false)
   const pendingRef = useRef(false)
   const publishHold = useRef<PublishHold | null>(null)
+  const dirtyRef = useRef(false)
+  const appliedResource = useRef<PlanEditorResourceData | null>(null)
+  const load = useCallback((signal: AbortSignal) => loadResource(signal), [loadResource])
+  const resource = useResource({ key: "budget-plan-editor", load, retainData: true })
+  const snapshotReady = resource.hasData && (resource.data === appliedResource.current || dirtyRef.current)
+  const actionsReady = (resource.status === "ready" || Boolean(publishHold.current?.uncertain))
 
   useEffect(() => {
-    let cancelled = false
-    setLoaded(false)
-    setLoadError(null)
-    void Promise.all([loadAgreement(), loadCutover().catch(() => null)])
-      .then(([agreement, cutover]) => {
-        if (cancelled) return
-        const next = planFor(agreement.headers, agreement.plans, initialChoice)
-        setHeaders(agreement.headers)
-        setPlans(agreement.plans)
-        setPublished(next)
-        setWorkspace(cutover ? readCutover(cutover) : null)
-        setLines(next ? cloneLines(next.lines) : [])
-        setIncome(next ? next.incomeAssumptions.map((entry) => ({ ...entry })) : [])
-        setChoice(initialChoice)
-        setReason("")
-        setDraft(null)
-        setActionError(null)
-        setPublishFailed(false)
-        setLoaded(true)
-      })
-      .catch((caught: unknown) => {
-        if (cancelled) return
-        setPublished(null)
-        setLines([])
-        setLoadError(message(caught, copy.couldNotRead))
-        setLoaded(true)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [initialChoice, reloadKey])
+    const data = resource.data
+    if (!resource.hasData || !data || data === appliedResource.current || dirtyRef.current) return
+    const { agreement, workspace: nextWorkspace } = data
+    const next = planFor(agreement.headers, agreement.plans, initialChoice)
+    appliedResource.current = data
+    setHeaders(agreement.headers)
+    setPlans(agreement.plans)
+    setPublished(next)
+    setWorkspace(nextWorkspace)
+    setLines(next ? cloneLines(next.lines) : [])
+    setIncome(next ? next.incomeAssumptions.map((entry) => ({ ...entry })) : [])
+    setChoice(initialChoice)
+    setReason("")
+    setDraft(null)
+    setPublishFailed(false)
+    setSavedAwaitingRefresh(false)
+  }, [initialChoice, resource.data, resource.hasData])
+
+  useEffect(() => {
+    if (resource.status === "ready") setSavedAwaitingRefresh(false)
+  }, [resource.status])
 
   async function onCreateFund(name: string) {
     const trimmed = name.trim()
@@ -174,6 +187,7 @@ export function PlanEditor({ initialChoice = "this" }: { initialChoice?: CycleCh
       const record = result && typeof result === "object" ? (result as { fund_id?: string }) : null
       const fundId = record?.fund_id
       if (!fundId) throw new Error(copy.couldNotSave)
+      dirtyRef.current = true
       setLines((current) => [...current, blankLine({ fundId, name: trimmed, stableLineId: crypto.randomUUID() })])
     } catch (caught) {
       setActionError(message(caught, copy.couldNotSave))
@@ -189,6 +203,7 @@ export function PlanEditor({ initialChoice = "this" }: { initialChoice?: CycleCh
       return
     }
     const plan = planFor(headers, plans, next)
+    dirtyRef.current = false
     setChoice(next)
     setPublished(plan)
     setLines(plan ? cloneLines(plan.lines) : [])
@@ -258,10 +273,11 @@ export function PlanEditor({ initialChoice = "this" }: { initialChoice?: CycleCh
       setPending(false)
     }
     publishHold.current = null
+    dirtyRef.current = false
+    setSavedAwaitingRefresh(true)
     setPublished(null)
     setLines([])
-    setLoaded(false)
-    setReloadKey((key) => key + 1)
+    void resource.reload()
   }
 
   async function onPublish() {
@@ -340,14 +356,9 @@ export function PlanEditor({ initialChoice = "this" }: { initialChoice?: CycleCh
       <PageHeader
         breadcrumbs={[{ href: "/budget", label: copy.pageTitle }, { label: choice === "next" ? copy.reviewNextCycle : copy.thisCycle }]}
         description={copy.contributionDoesNotMove}
-        title={!loaded || published || choice === "next" ? copy.agreementQuestion : copy.createThisCycle}
+        title={!snapshotReady || published || choice === "next" ? copy.agreementQuestion : copy.createThisCycle}
       />
-      {loadError ? (
-        <Alert>
-          <AlertTitle>{copy.couldNotRead}</AlertTitle>
-          <AlertDescription>{loadError}</AlertDescription>
-        </Alert>
-      ) : null}
+      <ResourceFeedback loading="Reading the budget." resource={resource} saved={savedAwaitingRefresh} title="Budget plan could not be loaded" />
       {actionError ? (
         <Alert>
           <AlertTitle>{copy.couldNotSave}</AlertTitle>
@@ -357,14 +368,14 @@ export function PlanEditor({ initialChoice = "this" }: { initialChoice?: CycleCh
           </AlertDescription>
         </Alert>
       ) : null}
-      {!loaded && !loadError ? <p className="type-body text-muted-foreground">Reading the budget.</p> : null}
-      {loaded && !loadError && !published ? (
+      {snapshotReady && !published ? (
         <Alert>
           <AlertTitle>{copy.noPublishedPlan}</AlertTitle>
           <AlertDescription>Create the first plan here. Publishing it does not assign opening cash.</AlertDescription>
         </Alert>
       ) : null}
-      {loaded && !loadError ? (
+      {snapshotReady ? (
+        <fieldset className="contents" disabled={!actionsReady}>
         <PlanBody
           choice={choice}
           income={income}
@@ -380,15 +391,16 @@ export function PlanEditor({ initialChoice = "this" }: { initialChoice?: CycleCh
           workspace={workspace}
           onChoice={chooseCycle}
           onCreateFund={(name) => void onCreateFund(name)}
-          onIncome={setIncome}
-          onLines={setLines}
-          onMoveAmount={setMoveAmount}
-          onMoveFrom={setMoveFrom}
-          onMoveMoney={setMoveMoney}
-          onMoveTo={setMoveTo}
+          onIncome={(next) => { dirtyRef.current = true; setIncome(next) }}
+          onLines={(next) => { dirtyRef.current = true; setLines(next) }}
+          onMoveAmount={(next) => { dirtyRef.current = true; setMoveAmount(next) }}
+          onMoveFrom={(next) => { dirtyRef.current = true; setMoveFrom(next) }}
+          onMoveMoney={(next) => { dirtyRef.current = true; setMoveMoney(next) }}
+          onMoveTo={(next) => { dirtyRef.current = true; setMoveTo(next) }}
           onPublish={() => void onPublish()}
-          onReason={setReason}
+          onReason={(next) => { dirtyRef.current = true; setReason(next) }}
         />
+        </fieldset>
       ) : null}
     </div>
   )

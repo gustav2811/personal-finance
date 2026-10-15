@@ -5,8 +5,9 @@ import { countTransactions, readDevices, readLatestSnapshot, readLedger } from "
 export type WalletData = {
   devices: DeviceRead[]
   ledgerEntries: LedgerRead[]
-  financialTransactionCount: number
+  financialTransactionCount: number | null
   financialSnapshots: SnapshotRead[]
+  financialSnapshotUnavailable: boolean
   financialError: string | null
   fetchedAt: string
 }
@@ -21,8 +22,9 @@ export async function loadWalletData(client: BrowserClient): Promise<WalletData>
   return {
     devices,
     ledgerEntries,
-    financialTransactionCount: counted.count,
+    financialTransactionCount: counted.error ? null : counted.count,
     financialSnapshots: latest.snapshot ? [latest.snapshot] : [],
+    financialSnapshotUnavailable: latest.error !== null,
     financialError: counted.error ?? latest.error,
     fetchedAt: new Date().toISOString(),
   }

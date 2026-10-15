@@ -58,6 +58,7 @@ import {
   relativeDay,
   subject,
 } from "./copy"
+import { shortDate } from "@/lib/format/date"
 
 type ReviewFilter = "all" | "needs_review"
 
@@ -128,6 +129,10 @@ export function TransactionsView({ initialTransactionId = null }: { initialTrans
   const [overlays, setOverlays] = useState<Record<string, RowOverlay>>({})
   const [signInHint, setSignInHint] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
+  const openerRefs = useRef(new Map<string, HTMLButtonElement>())
+  const initiatingTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const inspectorCloseRef = useRef<HTMLButtonElement | null>(null)
+  const searchRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
     try {
@@ -202,6 +207,10 @@ export function TransactionsView({ initialTransactionId = null }: { initialTrans
       return next
     })
   }, [selected?.id, seenKey])
+  useEffect(() => {
+    if (!selectedId) return
+    window.requestAnimationFrame(() => inspectorCloseRef.current?.focus())
+  }, [selectedId])
   const activeCategories = [...categories.filter((category) => category.lifecycleStatus === "active")].sort(
     (first, second) => recentRank(first.id) - recentRank(second.id),
   )
@@ -262,7 +271,9 @@ export function TransactionsView({ initialTransactionId = null }: { initialTrans
         const index = visibleItems.findIndex((entry) => entry.id === item.id)
         setItems((current) => current.filter((entry) => entry.id !== item.id))
         setEditorDirty(false)
-        setSelectedId(visibleItems[index + 1]?.id ?? visibleItems[index - 1]?.id ?? null)
+        const nextId = visibleItems[index + 1]?.id ?? visibleItems[index - 1]?.id ?? null
+        setSelectedId(nextId)
+        if (!nextId) window.requestAnimationFrame(() => searchRef.current?.focus())
       }
       return null
     } catch (error) {
@@ -311,18 +322,34 @@ export function TransactionsView({ initialTransactionId = null }: { initialTrans
     }
   }
 
-  async function selectTransaction(id: string | null) {
-    if (navigating.current) return
+  async function selectTransaction(id: string | null): Promise<boolean> {
+    if (navigating.current) return false
     navigating.current = true
     try {
-      if (inspectorSave.current && !await inspectorSave.current.flush()) return
+      if (inspectorSave.current && !await inspectorSave.current.flush()) return false
       if (review === "needs_review" && editorItemRef.current?.reviewState === "confirmed" && id !== editorItemRef.current.id) {
         const reviewedId = editorItemRef.current.id
         setItems((current) => current.filter((entry) => entry.id !== reviewedId))
       }
       setEditorDirty(false)
       setSelectedId(id)
+      return true
     } finally { navigating.current = false }
+  }
+
+  async function closeTransaction() {
+    if (!await selectTransaction(null)) return
+    const initiating = initiatingTriggerRef.current
+    const selectedTrigger = selectedId ? openerRefs.current.get(selectedId) : null
+    window.requestAnimationFrame(() => {
+      if (initiating?.isConnected) initiating.focus()
+      else if (selectedTrigger?.isConnected) selectedTrigger.focus()
+      else {
+        const fallback = [...openerRefs.current.values()].find((trigger) => trigger.isConnected)
+        if (fallback) fallback.focus()
+        else searchRef.current?.focus()
+      }
+    })
   }
 
   function clearFilters() {
@@ -378,6 +405,7 @@ export function TransactionsView({ initialTransactionId = null }: { initialTrans
               aria-label="Search"
               className="h-8 w-44 pl-7"
               id="ledger-search"
+              ref={searchRef}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search"
               value={search}
@@ -512,7 +540,15 @@ export function TransactionsView({ initialTransactionId = null }: { initialTrans
                   <MovementRow
                     item={item}
                     key={item.id}
-                    onOpen={() => selectTransaction(item.id)}
+                    onOpen={(trigger) => {
+                      openerRefs.current.set(item.id, trigger)
+                      initiatingTriggerRef.current = trigger
+                      void selectTransaction(item.id)
+                    }}
+                    registerTrigger={(trigger) => {
+                      if (trigger) openerRefs.current.set(item.id, trigger)
+                      else openerRefs.current.delete(item.id)
+                    }}
                     pending={Boolean(overlays[item.id]?.pending)}
                     unseen={!seenIds.has(item.id) && item.reviewState !== "confirmed"}
                   />
@@ -533,7 +569,7 @@ export function TransactionsView({ initialTransactionId = null }: { initialTrans
           ) : null}
         </div>
       </div>
-      <TransactionReviewFrame open={Boolean(selected)} title={selected ? subject(selected) : "Movement"} onClose={() => void selectTransaction(null)}>
+      <TransactionReviewFrame open={Boolean(selected)} title={selected ? subject(selected) : "Movement"} onClose={() => void closeTransaction()}>
           {selected ? (
             <div className="mb-2 flex shrink-0 items-center justify-end gap-1">
               <Button
@@ -562,7 +598,7 @@ export function TransactionsView({ initialTransactionId = null }: { initialTrans
               >
                 <ChevronRight />
               </Button>
-              <Button aria-label="Close" onClick={() => void selectTransaction(null)} size="icon-sm" variant="ghost"><X /></Button>
+              <Button aria-label="Close" ref={inspectorCloseRef} onClick={() => void closeTransaction()} size="icon-sm" variant="ghost"><X /></Button>
             </div>
           ) : null}
           {inspector}
@@ -580,11 +616,13 @@ function AccountMark({ type }: { type: string | null }) {
 function MovementRow({
   item,
   onOpen,
+  registerTrigger,
   pending,
   unseen,
 }: {
   item: TransactionFeedItem
-  onOpen: () => void
+  onOpen: (trigger: HTMLButtonElement) => void
+  registerTrigger: (trigger: HTMLButtonElement | null) => void
   pending: boolean
   unseen: boolean
 }) {
@@ -595,16 +633,12 @@ function MovementRow({
   return (
     <TableRow
       aria-busy={pending || undefined}
-      aria-haspopup="dialog"
       className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      onClick={onOpen}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault()
-          onOpen()
-        }
+      onClick={(event) => {
+        if (event.target instanceof HTMLButtonElement) return
+        const trigger = event.currentTarget.querySelector<HTMLButtonElement>("[data-transaction-opener]")
+        if (trigger) onOpen(trigger)
       }}
-      tabIndex={0}
     >
       <TableCell className="type-caption text-muted-foreground">
         <time dateTime={item.occurredOn}>{relativeDay(item.occurredOn)}</time>
@@ -612,7 +646,21 @@ function MovementRow({
       <TableCell className="max-w-56">
         <span className="flex min-w-0 items-center gap-1.5">
           {unseen ? <span className="size-1.5 shrink-0 rounded-full bg-info" role="img" aria-label="Unseen transaction" title="Unseen transaction" /> : null}
-          <span className={unseen ? "truncate font-semibold" : "truncate font-medium"}>{merchant}</span>
+          <Button
+            aria-haspopup="dialog"
+            aria-label={`Review ${merchant} transaction, ${shortDate(item.occurredOn)}, ${formatAmount(item.amount, item.currencyCode)}`}
+            className={unseen ? "h-auto min-w-0 justify-start truncate p-0 font-semibold" : "h-auto min-w-0 justify-start truncate p-0 font-medium"}
+            data-transaction-opener
+            ref={registerTrigger}
+            onClick={(event) => {
+              event.stopPropagation()
+              onOpen(event.currentTarget)
+            }}
+            size="sm"
+            variant="link"
+          >
+            {merchant}
+          </Button>
           {item.source.isPending ? <Clock aria-label="Pending" className="size-3.5 text-muted-foreground" /> : null}
           {item.treatment.isTransfer ? (
             <ArrowLeftRight aria-label="Transfer" className="size-3.5 text-muted-foreground" />
