@@ -47,7 +47,12 @@ export function AnalysisRing({
         <PieChart>
           <ChartTooltip
             content={
-              <ChartTooltipContent formatter={(v) => format(Number(v))} />
+              <ChartTooltipContent
+                labelFormatter={(_, payload) =>
+                  String(payload?.[0]?.payload?.name ?? "")
+                }
+                formatter={(v) => format(Number(v))}
+              />
             }
           />
           <Pie
