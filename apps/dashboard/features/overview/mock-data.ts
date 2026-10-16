@@ -64,6 +64,7 @@ export function mockOverviewData(cycleStart: string): OverviewData {
       id,
       label: labels[id],
       spent,
+      reserved: 0,
       budget,
       remaining: budget - spent,
       categoryIds: id === "electricity" ? [] : [`demo-${id}`],

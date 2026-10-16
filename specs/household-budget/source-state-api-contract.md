@@ -1,6 +1,7 @@
 # Stage 3 source-state execution contract
 
-Primary-frozen 2026-10-01. Authority: behaviour and data-and-delivery specifications.
+Primary-frozen 2026-10-01. Pending-reservation behaviour revised by explicit
+household approval on 2026-10-16. Authority: behaviour and data-and-delivery specifications.
 Source-baseline proof clarified 2026-10-05 during integration acceptance.
 Stack on funding PR #41. Additive migrations only; no Workers, dashboard, generated
 types, deployment workflow changes, production writes or financial activation.
@@ -64,12 +65,44 @@ archived/missing pending evidence stays incomplete. No blanket removal of drift.
 
 An unreviewed posted outflow incurred on or after the opening cutover remains
 purpose_exposure_unresolved (even when a plan match exists, including rows already
-reflected in the balance); pending gives pending_activity_provisional and blocks
-funding. These states may have useful explicitly provisional totals. Posted fully
+reflected in the balance). A proved pending debit is a reservation, not a blocker
+for posted reconciliation or ordinary funding. `pending_activity_provisional`
+is a diagnostic warning when conservative arithmetic, identity and balance
+reflection are known; unresolved amount, identity, source facts, stale coverage
+or currency/sign remain blocking. Posted fully
 reviewed activity after the frozen activity_through may adjust resources and become
 complete when all other evidence is sound. Positive post-observation activity never
 creates extra spendable resources: income_after_observation_unreconciled until a
 fresh observed balance is reconciled. No future salary/refund/unused credit.
+
+### Working budget with pending reservations (2026-10-16)
+
+When source exposure is arithmetically known and pending activity is the only
+remaining reconciliation finding, the read model returns `complete: true` and
+`working_complete: true` for the usable household budget, with pending diagnostics
+under `warnings`. `posted_reconciliation_complete` remains false until the
+authorisations settle and are represented in posted evidence. Unknown source
+identity, amount, account, freshness, or sign remains a hard blocker. Clients
+trust the server flag for each endpoint independently; they never infer safety
+from a reason code or override another endpoint's false flag.
+
+Pending is excluded from posted actuals. Per-purpose availability deducts its
+proved reservation, while posted journal balances remain intact. A unique plan
+category match is valid only for a shared purpose or a purpose belonging to the
+member who owns the source account. Member ownership is not guessed for a shared
+account. A known amount without a proved purpose still reduces unassigned
+household cash; it does not invent a fund claim.
+
+Cash already reflecting an authorisation is not debited again. Net fund claims,
+unassigned cash, movement backing checks and release/reallocation limits use the
+same reservation treatment, so a reservation cannot be counted twice or moved
+out of its purpose while it remains outstanding.
+
+On settlement, a proved continuation retains conservative backing until its
+posted allocation replaces the reservation. That replacement recognises the
+expense once. Explicit cancellation may release an unreviewed authorisation;
+missing or ambiguous identity is not cancellation. Reads never post allocations,
+rewrite provider pending flags or mutate financial history.
 
 ## Identity, timing and money
 
@@ -175,7 +208,8 @@ Deadlock detection may abort a conflicting writer; never retry by bypassing lock
 Funding retains its household-first lock and reevaluates sources AFTER acquiring it.
 
 Prove real two-connection overlap (PgSleep first, Lock second), not sequential calls:
-source-first inserted pending -> funding budget_incomplete, no receipt/movement;
+source-first inserted pending -> funding sees and reserves the debit, then writes
+one movement and receipt when capacity remains;
 source-first snapshot reduction/replacement -> funding budget_incomplete;
 funding-first -> source write blocks, funding sees its serialized prior evidence,
 then later reads see drift. Include mutation of existing amount and new account

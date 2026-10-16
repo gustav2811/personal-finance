@@ -68,6 +68,107 @@ function overview(overrides: Record<string, unknown> = {}) {
 }
 
 describe("projectBudget", () => {
+  it("keeps the budget usable while reserving pending charges once", () => {
+    const view = projectBudget({
+      overview: overview({
+        complete: false,
+        working_complete: true,
+        reasons: [{ code: "pending_activity_provisional" }],
+        pending_reservations: [{ transaction_id: "pending-grocery", fund_id: GROCERIES, amount_cents: "25000" }],
+        funds: [{
+          fund_id: GROCERIES,
+          name: "Groceries",
+          status: "active",
+          beneficiary_scope: "shared",
+          balance_cents: "140000",
+          liquid_cents: "140000",
+          restricted_cents: "0",
+          pending_reserved_cents: "25000",
+          available_cents: "115000",
+        }],
+      }),
+      actuals: { entries: [], next_cursor: null, household_totals: { by_group: {} } },
+      liquidity: { complete: false, working_complete: true, reasons: [{ code: "pending_activity_provisional" }], accounts: [] },
+      members,
+      filter: { kind: "household" },
+    })
+
+    assert.equal(view.complete, true)
+    assert.equal(view.purposes[0]?.spent, "R0")
+    assert.equal(view.purposes[0]?.pendingReserved, "R250")
+    assert.equal(view.purposes[0]?.available, "R1 150")
+    assert.equal(view.pendingReservations[0]?.amount, "R250")
+    assert.equal(view.canAssign, true)
+  })
+
+  it("does not infer a usable budget from an unsafe pending reason", () => {
+    const view = projectBudget({
+      overview: overview({
+        complete: false,
+        reasons: [{ code: "pending_identity_ambiguous" }],
+        pending_reservations: [{ transaction_id: "ambiguous", fund_id: GROCERIES, amount_cents: "25000" }],
+        funds: [{ ...overview().funds[0], pending_reserved_cents: "25000", available_cents: "115000" }],
+      }),
+      actuals: { entries: [], next_cursor: null, household_totals: { by_group: {} } },
+      liquidity: { complete: false, working_complete: false, reasons: [{ code: "pending_identity_ambiguous" }], accounts: [] },
+      members,
+      filter: { kind: "household" },
+    })
+
+    assert.equal(view.complete, false)
+    assert.equal(view.purposes[0]?.available, copy.needsReconciliation)
+    assert.equal(view.canAssign, false)
+  })
+
+  it("keeps monetary fields withheld when pending status is unverified", () => {
+    const view = projectBudget({
+      overview: overview({ complete: false, reasons: [{ code: "pending_source_unverified" }], unassigned_cents: "800000" }),
+      actuals: { entries: [], next_cursor: null, household_totals: { by_group: {} } },
+      liquidity: { complete: false, working_complete: false, reasons: [{ code: "pending_source_unverified" }], accounts: [{ account_id: "cash", normalized_cash_cents: "800000" }] },
+      members,
+      filter: { kind: "household" },
+    })
+
+    assert.equal(view.complete, false)
+    assert.equal(view.unassigned.amount, null)
+    assert.equal(view.accounts.length, 0)
+  })
+
+  it("does not let one endpoint's working flag override the other", () => {
+    const base = {
+      actuals: { entries: [], next_cursor: null, household_totals: { by_group: {} } },
+      members,
+      filter: { kind: "household" } as const,
+    }
+    const overviewWorking = projectBudget({
+      ...base,
+      overview: overview({ complete: false, working_complete: true }),
+      liquidity: { complete: false, working_complete: false, accounts: [] },
+    })
+    const liquidityWorking = projectBudget({
+      ...base,
+      overview: overview({ complete: false, working_complete: false }),
+      liquidity: { complete: false, working_complete: true, accounts: [] },
+    })
+
+    assert.equal(overviewWorking.complete, false)
+    assert.equal(liquidityWorking.complete, false)
+  })
+
+  it("ignores non-pending adjustment rows", () => {
+    const view = projectBudget({
+      overview: overview({
+        pending_adjustments: [{ kind: "posted_after_observation", transaction_id: "posted", amount_cents: "25000" }],
+      }),
+      actuals: { entries: [], next_cursor: null, household_totals: { by_group: {} } },
+      liquidity: { complete: true, accounts: [] },
+      members,
+      filter: { kind: "household" },
+    })
+
+    assert.equal(view.pendingReservations.length, 0)
+  })
+
   it("withholds a spendable unassigned total when the read is incomplete", () => {
     const view = projectBudget({
       overview: overview({

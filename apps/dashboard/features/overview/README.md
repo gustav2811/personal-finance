@@ -46,13 +46,14 @@ The five categories are not a total household-spend measure.
 
 ## Budget and unknown-state rules
 
-Remaining is sourced from the linked fund balance: liquid balance when the fund
-has restricted money, otherwise balance. A category budget is only shown when
-one unambiguous fund maps to that category, the budget response and actuals are
-complete, and the actuals reconcile with displayed spend. Shared utilities,
-multiple-category funds, missing mappings, future periods, source failures, and
-unreconciled actuals stay unknown with an explanatory no-category-budget note.
-The implementation does not turn a plan target or a shared balance into an invented allocation.
+The category allowance comes from the current published plan's monthly line
+contribution, matched to one category. Remaining is that allowance less posted
+spend and known pending card reservations. Pending charges count against the
+ring and remaining amount, while the large amount shown remains posted spend.
+Reconciliation and linked cash balances belong to Budget; an unfinished cash
+cutover does not hide a known category allowance. Shared categories, missing
+or ambiguous plan mappings, future periods, and unavailable plan data remain
+unknown with an explanatory note.
 
 Open financial periods include spending through today. Electricity includes
 known incurred usage through the last available closed day; missing usage days

@@ -24,10 +24,20 @@ export type PurposeRow = {
   assigned: string
   spent: string
   available: string
+  pendingReserved: string | null
   nextNeed: string
   disclosure: string[]
   deficit: boolean
 }
+
+export type PendingReservation = {
+  id: string
+  purpose: string
+  amount: string
+  date: string | null
+}
+
+type PendingReservationWire = PendingReservation & { amountCents: string }
 
 export type PurchaseRow = {
   id: string
@@ -93,6 +103,8 @@ export type BudgetOverview = {
   reconciliationId: string | null
   reconciliationFingerprint: string | null
   members: Array<{ id: string; name: string }>
+  pendingReservations: PendingReservation[]
+  pendingReserved: string | null
 }
 
 type Line = {
@@ -121,6 +133,8 @@ type Fund = {
   plannedPayerMemberId: string | null
   suggestion: string | null
   dueNow: boolean
+  pendingReservedCents: string | null
+  availableCents: string | null
 }
 
 function scalar(record: Record<string, unknown>, key: string): string | null {
@@ -182,6 +196,8 @@ function fundOf(value: unknown): Fund | null {
     plannedPayerMemberId: readString(record, "planned_payer_member_id"),
     suggestion: suggestion ? parseCents(suggestion.suggested_contribution_cents) : null,
     dueNow: suggestion?.due_now === true,
+    pendingReservedCents: parseCents(record.pending_reserved_cents ?? record.pending_reservation_cents),
+    availableCents: parseCents(record.available_cents ?? record.available_after_pending_cents),
   }
 }
 
@@ -229,7 +245,11 @@ function beneficiaryLabel(scope: string | null, memberId: string | null, members
 
 function rowFor(fund: Fund, line: Line | undefined, original: Line | undefined, spent: string | null, members: readonly MemberRef[], provisional: boolean): PurposeRow {
   const restricted = fund.restrictedCents !== null && fund.restrictedCents !== "0"
-  const availableCents = restricted ? fund.liquidCents : fund.balanceCents
+  const balance = restricted ? fund.liquidCents : fund.balanceCents
+  const pendingReserved = fund.pendingReservedCents
+  const availableCents = fund.availableCents ?? (balance !== null && pendingReserved !== null
+    ? (BigInt(balance) - BigInt(pendingReserved)).toString()
+    : balance)
   const deficit = availableCents !== null && isNegativeCents(availableCents)
   const sentences = disclosure(line, original, fund, members)
   if (provisional) sentences.push(`${copy.needsReconciliation}. ${copy.needsReconciliationDetail}`)
@@ -239,6 +259,7 @@ function rowFor(fund: Fund, line: Line | undefined, original: Line | undefined, 
     plan: formatCents(line?.contributionCents ?? null),
     assigned: formatCents(fund.assignedCents),
     spent: spent === null ? copy.withheld : formatCents(spent),
+    pendingReserved: pendingReserved === null ? null : formatCents(pendingReserved),
     available: provisional
       ? copy.needsReconciliation
       : deficit
@@ -248,6 +269,40 @@ function rowFor(fund: Fund, line: Line | undefined, original: Line | undefined, 
     disclosure: sentences,
     deficit,
   }
+}
+
+function pendingReservationOf(value: unknown, names: ReadonlyMap<string, string>): PendingReservationWire | null {
+  const record = readRecord(value)
+  if (!record) return null
+  const id = readString(record, "transaction_id") ?? readString(record, "id")
+  const amount = parseCents(record.amount_cents ?? record.amount ?? record.pending_reserved_cents)
+  if (!id || !amount) return null
+  const fundId = readString(record, "fund_id")
+  const purpose = readString(record, "purpose") ?? readString(record, "name") ?? (fundId ? names.get(fundId) : null) ?? copy.withheld
+  const positiveAmount = amount.startsWith("-") ? amount.slice(1) : amount
+  return { id, purpose, amount: formatCents(positiveAmount), amountCents: positiveAmount, date: readString(record, "occurred_on") ?? readString(record, "date") }
+}
+
+function pendingReservations(overview: Record<string, unknown>, liquidity: Record<string, unknown>, names: ReadonlyMap<string, string>): PendingReservationWire[] {
+  const sources = [
+    ...readArray(overview.pending_reservations),
+    ...readArray(liquidity.pending_reservations),
+    ...readArray(overview.pending_adjustments).filter((value) => readRecord(value)?.kind === "pending"),
+    ...readArray(liquidity.pending_adjustments).filter((value) => readRecord(value)?.kind === "pending"),
+  ]
+  const seen = new Set<string>()
+  return sources.flatMap((value) => {
+    const row = pendingReservationOf(value, names)
+    if (!row || seen.has(row.id)) return []
+    seen.add(row.id)
+    return [row]
+  })
+}
+
+function workingComplete(record: Record<string, unknown>): boolean | null {
+  if (typeof record.working_complete === "boolean") return record.working_complete
+  if (typeof record.workingComplete === "boolean") return record.workingComplete
+  return null
 }
 
 function spendByFund(entries: unknown[], completeList: boolean): Map<string, string> | null {
@@ -341,7 +396,6 @@ export function projectBudget(input: {
   const overview = readRecord(input.overview) ?? {}
   const actuals = readRecord(input.actuals) ?? {}
   const liquidity = readRecord(input.liquidity) ?? {}
-  const complete = readComplete(overview)
   const current = readRecord(overview.current_plan)
   const original = readRecord(overview.original_plan)
   const currentLines = readArray(current?.lines).flatMap((entry) => {
@@ -364,7 +418,11 @@ export function projectBudget(input: {
   const listPartial = readString(actuals, "next_cursor") !== null
   const spent = spendByFund(entries, !listPartial)
   const reasons = [...readReasons(overview.reasons), ...readReasons(liquidity.reasons)]
+  const overviewUsable = workingComplete(overview) ?? readComplete(overview)
+  const liquidityUsable = workingComplete(liquidity) ?? readComplete(liquidity)
+  const working = overviewUsable && liquidityUsable
   const reasonLabels = [...new Set(reasons.map((reason) => reasonSentence(reason.code)))]
+  const pendingRows = pendingReservations(overview, liquidity, names)
 
   const purposes: PurposeRow[] = []
   const commitments: PurposeRow[] = []
@@ -380,7 +438,7 @@ export function projectBudget(input: {
       originalLines.get(fund.fundId),
       spent?.get(fund.fundId) ?? (spent ? "0" : null),
       input.members,
-      !complete,
+      !working,
     )
     if (!line || fund.status === "retired") retired.push(row)
     else if (line.kind === "debt_commitment" || line.kind === "contribution") commitments.push(row)
@@ -404,11 +462,11 @@ export function projectBudget(input: {
   const versionId = readString(overview, "current_version_id")
   const reconciliationId = resources ? readString(resources, "reconciliation_id") : null
   const reconciliationFingerprint = resources ? readString(resources, "reconciliation_fingerprint") : null
-  const unassignedCents = complete ? parseCents(overview.unassigned_cents) : null
+  const unassignedCents = working ? parseCents(overview.unassigned_cents) : null
   const forecastCents = parseCents(overview.forecast_gap_cents)
   const forecastRecord = readRecord(liquidity.forecast)
   const uncertainty = uncertaintyCodes(forecastRecord?.uncertainty_reasons)
-  const liquidityComplete = readComplete(liquidity)
+  const liquidityComplete = liquidityUsable
   const cashAccounts = liquidityComplete
     ? readArray(liquidity.accounts).flatMap((entry) => {
         const record = readRecord(entry)
@@ -470,7 +528,7 @@ export function projectBudget(input: {
   const cycleEnd = readString(overview, "end_exclusive")
 
   return {
-    complete,
+    complete: working,
     cycleLabel: cycleStart && cycleEnd ? cycleLabel(cycleStart, cycleEnd) : copy.withheld,
     revisionLabel,
     asOfLabel: `${copy.asOf} ${formatAsOf(readString(overview, "as_of") ?? "")}`,
@@ -481,7 +539,7 @@ export function projectBudget(input: {
     purchases,
     householdConsumption: householdConsumption === null ? null : formatCents(householdConsumption),
     listPartial,
-    unassigned: complete
+    unassigned: working
       ? {
           label: copy.unassigned,
           amount: formatCents(unassignedCents),
@@ -549,10 +607,12 @@ export function projectBudget(input: {
     }),
     provisional: provisionalSentence(parseCents(overview.provisional_unassigned_cents)),
     transfers: projectTransfers(entries, input.members),
-    canAssign: complete && versionId !== null && reconciliationId !== null && reconciliationFingerprint !== null && unassignedCents !== null,
+    canAssign: working && versionId !== null && reconciliationId !== null && reconciliationFingerprint !== null && unassignedCents !== null,
     versionId,
     reconciliationId,
     reconciliationFingerprint,
     members: input.members.map((member) => ({ id: member.id, name: memberName(input.members, member.id) ?? "A household member" })),
+    pendingReservations: pendingRows.map(({ amountCents: _amountCents, ...row }) => row),
+    pendingReserved: pendingRows.length === 0 ? null : pendingRows.reduce((sum, row) => (BigInt(sum) + BigInt(row.amountCents)).toString(), "0"),
   }
 }

@@ -51,6 +51,7 @@ function PurposeTable({ rows }: { rows: PurposeRow[] }) {
             <TableHead className="text-right">{copy.plan}</TableHead>
             <TableHead className="text-right">{copy.assigned}</TableHead>
             <TableHead className="text-right">{copy.spent}</TableHead>
+            <TableHead className="text-right">{copy.pendingReserved}</TableHead>
             <TableHead className="text-right">{copy.available}</TableHead>
             <TableHead>{copy.nextNeed}</TableHead>
           </TableRow>
@@ -78,6 +79,7 @@ function PurposeTable({ rows }: { rows: PurposeRow[] }) {
               <TableCell className="type-numeric text-right">{row.plan}</TableCell>
               <TableCell className="type-numeric text-right">{row.assigned}</TableCell>
               <TableCell className="type-numeric text-right">{row.spent}</TableCell>
+              <TableCell className="type-numeric text-right">{row.pendingReserved ?? "—"}</TableCell>
               <TableCell className={`type-numeric text-right ${row.deficit ? "text-warning" : ""}`}>
                 {row.available}
               </TableCell>
@@ -174,6 +176,19 @@ function BudgetBody({
 
       <Section title={copy.spendQuestion}>
         <Answer answer={routine.spend} />
+        {view.pendingReservations.length > 0 ? (
+          <div className="mt-3 rounded-lg border px-4 py-3">
+            <p className="type-body-small">{copy.pendingReservationsDetail}</p>
+            <ul className="mt-2 space-y-1">
+              {view.pendingReservations.map((reservation) => (
+                <li className="type-caption flex justify-between gap-4" key={reservation.id}>
+                  <span>{reservation.purpose}{reservation.date ? ` · ${reservation.date}` : ""}</span>
+                  <span className="type-numeric">{reservation.amount}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </Section>
 
       <Section title={copy.cashQuestion}>

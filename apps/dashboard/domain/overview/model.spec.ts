@@ -258,16 +258,23 @@ it("uses the full budget cycle, includes today's spending, and leaves future/mis
   )
 })
 
-it("uses only selected-period actuals with the authoritative remaining balance", () => {
+it("shows planned allowance and reserves pending charges while reconciliation is incomplete", () => {
   const input = {
     cycleStart: "2026-09-23",
     now: new Date("2026-10-15T12:00:00Z"),
     categories: [category("groceries", "Groceries")],
-    transactions: [transaction()],
+    transactions: [
+      transaction(),
+      transaction({
+        id: "pending",
+        amount: "-25",
+        source: { ...transaction().source, isPending: true },
+      }),
+    ],
     ledgerEntries: [],
   }
   const budget = {
-    complete: true,
+    complete: false,
     actualsComplete: true,
     actuals: [
       {
@@ -278,7 +285,7 @@ it("uses only selected-period actuals with the authoritative remaining balance",
       },
     ],
     current_plan: {
-      lines: [{ fund_id: "g", name: "Food", category_id: "groceries" }],
+      lines: [{ fund_id: "g", name: "Groceries", category_id: "groceries", contribution_cents: "30000" }],
     },
     funds: [
       {
@@ -294,7 +301,8 @@ it("uses only selected-period actuals with the authoritative remaining balance",
   let groceries = buildOverviewData({ ...input, budget }).items.find(
     (item) => item.id === "groceries",
   )!
-  assert.equal(groceries.remaining, 200)
+  assert.equal(groceries.reserved, 25)
+  assert.equal(groceries.remaining, 175)
   assert.equal(groceries.budget, 300)
   groceries = buildOverviewData({
     ...input,
@@ -323,7 +331,7 @@ it("uses only selected-period actuals with the authoritative remaining balance",
       ],
     },
   }).items.find((item) => item.id === "groceries")!
-  assert.equal(groceries.budget, null)
+  assert.equal(groceries.budget, 300)
 })
 
 it("reconciles signed refunds inside the selected budget period", () => {
@@ -359,7 +367,7 @@ it("reconciles signed refunds inside the selected budget period", () => {
       },
     ],
     current_plan: {
-      lines: [{ fund_id: "g", name: "Food", category_id: "groceries" }],
+      lines: [{ fund_id: "g", name: "Groceries", category_id: "groceries", contribution_cents: "20000" }],
     },
     funds: [
       {

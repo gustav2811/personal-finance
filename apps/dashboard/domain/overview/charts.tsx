@@ -68,8 +68,8 @@ export function OrbitChart({
         >
           {data.items.map((item, index) => {
             const share =
-              item.spent !== null && item.budget !== null && item.budget > 0
-                ? Math.min(1, Math.max(0, item.spent / item.budget))
+                item.spent !== null && item.budget !== null && item.budget > 0
+                ? Math.min(1, Math.max(0, (item.spent + item.reserved) / item.budget))
                 : null
             const outer = 96 - index * 12
             return (
@@ -94,7 +94,7 @@ export function OrbitChart({
                   opacity={selected === item.id ? 1 : 0.85}
                   role="button"
                   tabIndex={share !== null && share > 0 ? 0 : -1}
-                  aria-label={`${item.label}: ${share === null ? "budget unavailable" : `${Math.round(((item.spent ?? 0) / (item.budget ?? 1)) * 100)}% of budget used`}. Show spending timeline`}
+                  aria-label={`${item.label}: ${share === null ? "budget unavailable" : `${Math.round(share * 100)}% used or reserved`}. Show spending timeline`}
                   aria-pressed={selected === item.id}
                   onClick={() => onSelect(item.id)}
                   onKeyDown={(event) => {

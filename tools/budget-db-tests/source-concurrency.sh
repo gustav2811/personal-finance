@@ -105,6 +105,14 @@ SQL
   cat >> "$tmp_dir/$name-second.sql" <<SQL
 do \$race\$
 begin
+ if '$name'='pending' then
+  perform public.budget_move_funds_v1('$command_id','$payload'::jsonb);
+  if (select count(*) from finance.fund_movements where household_id='$h')<>1
+     or (select count(*) from finance.budget_commands where household_id='$h' and kind='budget_move_funds_v1')<>1 then
+    raise exception 'pending reservation did not serialize with one movement and receipt';
+  end if;
+  raise notice 'EXPECTED_PENDING_RESERVED';
+ else
  begin
   perform public.budget_move_funds_v1('$command_id','$payload'::jsonb);
   raise exception 'unexpected funding winner in $name source race';
@@ -112,6 +120,7 @@ begin
   if sqlerrm not like 'budget_incomplete:%' then raise; end if;
   raise notice 'EXPECTED_SOURCE_INCOMPLETE';
  end;
+ end if;
 end \$race\$;
 rollback;
 SQL
@@ -120,10 +129,15 @@ SQL
   docker exec -i "$container_id" psql -X -v ON_ERROR_STOP=1 -U supabase_admin -d postgres < "$tmp_dir/$name-second.sql" > "$tmp_dir/$name-second.out" 2>&1 & local p2=$!
   if ! wait_overlap "source-$name-first" "source-$name-funding"; then wait_sessions "$name" "$p1" "$p2" || true; return 1; fi
   wait_sessions "$name" "$p1" "$p2"
-  grep -q EXPECTED_SOURCE_INCOMPLETE "$tmp_dir/$name-second.out"
+  if [[ "$name" == pending ]]; then
+    grep -q EXPECTED_PENDING_RESERVED "$tmp_dir/$name-second.out"
+    printf '%s\n' "ok source-first pending (lock overlap, reserved debit, one movement and receipt)"
+  else
+    grep -q EXPECTED_SOURCE_INCOMPLETE "$tmp_dir/$name-second.out"
+    printf '%s\n' "ok source-first $name (lock overlap, exact incomplete, no movement or receipt)"
+  fi
   [[ "$(psql_admin -Atqc "select count(*) from finance.fund_movements where household_id='$h'")" == 0 ]]
   [[ "$(psql_admin -Atqc "select count(*) from finance.budget_commands where household_id='$h' and kind='budget_move_funds_v1'")" == 0 ]]
-  printf '%s\n' "ok source-first $name (lock overlap, exact incomplete, no movement or receipt)"
 }
 
 run_source_first pending 00000000-0000-4000-8000-00000000d501 00000000-0000-4000-8000-00000000d502 00000000-0000-4000-8000-00000000d503 00000000-0000-4000-8000-00000000d504 00000000-0000-4000-8000-00000000d505 00000000-0000-4000-8000-00000000d50a "set local role service_role; insert into public.transactions(id,account_id,date,occurred_on,details,household_id,source_system,source_is_pending,source_is_archived,amount,currency_code,raw_payload_hash) values ('00000000-0000-4000-8000-00000000d509','00000000-0000-4000-8000-00000000d503',now(),current_date,'{}','00000000-0000-4000-8000-00000000d501','source-race',true,false,-1000,'ZAR','pending');"

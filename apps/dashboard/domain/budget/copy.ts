@@ -21,6 +21,8 @@ export const copy = {
   assigned: "Assigned",
   assignedDetail: "Money moved into this purpose. Not this cycle's plan.",
   spent: "Spent",
+  pendingReserved: "Pending reserved",
+  pendingReservationsDetail: "Pending charges are reserved once so they reduce what is available, while posted spending stays unchanged.",
   spentDetail: "Recognised this cycle. Not a spending limit for an accumulating fund.",
   available: "Available",
   nextNeed: "Next need",

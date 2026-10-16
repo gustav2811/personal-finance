@@ -131,6 +131,22 @@ function source(overrides: {
 }
 
 describe("household routine", () => {
+  it("subtracts pending reservations from everyday money without withholding the routine", () => {
+    const routine = projectRoutine(source({
+      overview: {
+        complete: false,
+        working_complete: true,
+        reasons: [{ code: "pending_activity_provisional" }],
+        pending_reservations: [{ transaction_id: "pending-grocery", fund_id: GROCERIES, amount_cents: "25000" }],
+        funds: [fund({ pending_reserved_cents: "25000", available_cents: "115000" }), fund({ fund_id: GIFTS, name: "Gifts", balance_cents: "300000", liquid_cents: "300000" }), fund({ fund_id: RETIREMENT, name: "Retirement", balance_cents: "500000", liquid_cents: "500000" })],
+      },
+      liquidity: { complete: false, working_complete: true, reasons: [{ code: "pending_activity_provisional" }], accounts: [] },
+    }))
+
+    assert.equal(routine.spend.amount, formatCents("115000"))
+    assert.equal(routine.spend.sentence.includes("can't say"), false)
+  })
+
   it("says what is still spendable after commitments and sinking funds, without adding unassigned cash", () => {
     const routine = projectRoutine(source())
 

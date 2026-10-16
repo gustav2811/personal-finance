@@ -24,6 +24,7 @@ export type OverviewItem = {
   id: OverviewId
   label: string
   spent: number | null
+  reserved: number
   budget: number | null
   remaining: number | null
   categoryIds: string[]
@@ -66,19 +67,18 @@ const CATEGORY_NAMES: Record<OverviewId, string[]> = {
 }
 
 type SourceErrors = { finance?: boolean; utility?: boolean; budget?: boolean }
-type PlanLine = { fundId: string; name: string; categoryIds: string[] }
+type PlanLine = {
+  fundId: string
+  name: string
+  categoryIds: string[]
+  contribution: number | null
+}
 type Fund = {
   id: string
   name: string
   balance: number | null
   liquid: number | null
   restricted: number
-}
-type Actual = {
-  fundId: string
-  categoryId: string | null
-  effectKind: string
-  amount: number
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -154,6 +154,18 @@ function includedSpend(item: TransactionFeedItem): number {
   if (amount < 0) return -amount
   return isRefund(item) ? -amount : 0
 }
+function includedReservation(item: TransactionFeedItem): number {
+  if (
+    item.currencyCode !== "ZAR" ||
+    item.source.isPending !== true ||
+    item.source.isArchived ||
+    item.treatment.excludeFromSpend === true ||
+    item.treatment.isTransfer === true ||
+    item.source.isTransfer === true
+  ) return 0
+  const amount = Number(item.amount)
+  return Number.isFinite(amount) && amount < 0 ? -amount : 0
+}
 export function transactionCategorySpend(
   items: TransactionFeedItem[],
   categoryIds: readonly string[],
@@ -176,6 +188,23 @@ export function transactionCategorySpend(
   }
   return result
 }
+function transactionCategoryReservations(
+  items: TransactionFeedItem[],
+  categoryIds: readonly string[],
+  start: string,
+  endExclusive: string,
+  through = dayBefore(endExclusive),
+): number {
+  const ids = new Set(categoryIds)
+  return items.reduce((sum, item) => {
+    if (
+      !ids.has(item.category.id ?? "") ||
+      item.occurredOn < start || item.occurredOn >= endExclusive ||
+      item.occurredOn > through
+    ) return sum
+    return sum + includedReservation(item)
+  }, 0)
+}
 
 function planLines(source: BudgetSource): PlanLine[] {
   const lines = Array.isArray(record(source.current_plan).lines)
@@ -189,6 +218,7 @@ function planLines(source: BudgetSource): PlanLine[] {
       {
         fundId,
         name: text(row.name) ?? "",
+        contribution: cents(row.contribution_cents),
         categoryIds: [
           text(row.category_id),
           text(row.match_category_id),
@@ -214,24 +244,6 @@ function funds(source: BudgetSource): Fund[] {
     ]
   })
 }
-function actuals(source: BudgetSource): Actual[] {
-  return (Array.isArray(source.actuals) ? source.actuals : []).flatMap(
-    (entry) => {
-      const row = record(entry),
-        fundId = text(row.fund_id),
-        amount = cents(row.signed_amount_cents ?? row.amount_cents)
-      if (!fundId || amount === null) return []
-      return [
-        {
-          fundId,
-          categoryId: text(row.category_id),
-          effectKind: text(row.effect_kind) ?? "",
-          amount,
-        },
-      ]
-    },
-  )
-}
 function sameCategoryLine(
   line: PlanLine,
   id: OverviewId,
@@ -248,6 +260,7 @@ function budgetFor(
   id: OverviewId,
   categoryIds: string[],
   spent: number | null,
+  reserved: number,
   source: BudgetSource,
 ): Pick<OverviewItem, "budget" | "remaining" | "budgetNote"> {
   if (source.future)
@@ -255,12 +268,6 @@ function budgetFor(
       budget: null,
       remaining: null,
       budgetNote: "Budget position is unavailable for a future period",
-    }
-  if (source.complete !== true)
-    return {
-      budget: null,
-      remaining: null,
-      budgetNote: "Budget position is still being reconciled",
     }
   const lines = planLines(source),
     allFunds = funds(source)
@@ -303,61 +310,25 @@ function budgetFor(
       remaining: null,
       budgetNote: "Multiple categories share this budget",
     }
-  const fund = allFunds.find((entry) => entry.id === fundId)
-  if (!fund)
+  const allowanceLines = candidates.filter((line) => line.fundId === fundId)
+  const budgetCents = allowanceLines.reduce(
+    (sum, line) => sum + (line.contribution ?? 0),
+    0,
+  )
+  if (spent === null || allowanceLines.some((line) => line.contribution === null))
     return {
       budget: null,
       remaining: null,
-      budgetNote: "Budget position is unavailable",
+      budgetNote: "Budget allowance is unavailable",
     }
-  const remaining = fund.restricted > 0 ? fund.liquid : fund.balance
-  if (remaining === null || spent === null)
-    return {
-      budget: null,
-      remaining,
-      budgetNote: "Budget position is unavailable",
-    }
-  if (source.actualsComplete !== true)
-    return {
-      budget: null,
-      remaining,
-      budgetNote: "Budget spend is still being reconciled",
-    }
-  const fundActuals = actuals(source).filter(
-    (actual) =>
-      actual.fundId === fundId &&
-      (actual.effectKind === "consumption" || actual.effectKind === "refund"),
-  )
-  if (
-    fundActuals.some(
-      (actual) =>
-        actual.categoryId === null || !categoryIds.includes(actual.categoryId),
-    )
-  ) {
-    return {
-      budget: null,
-      remaining,
-      budgetNote: "Budget spend is still being reconciled",
-    }
-  }
-  const actualSpent = -fundActuals.reduce(
-    (sum, actual) => sum + actual.amount,
-    0,
-  )
-  if (Math.abs(actualSpent - spent) > 0.01) {
-    return {
-      budget: null,
-      remaining,
-      budgetNote: "Budget spend is still being reconciled",
-    }
-  }
-  // This is the period spend plus the authoritative balance at the selected as-of point.
-  // It includes any carried assigned balance; it is deliberately not the plan target.
-  const budget = spent + remaining
+  // The Overview answers a plan question: how much of this cycle's allowance
+  // has been used? Reconciliation and fund cash balances are shown on Budget;
+  // they must not hide a known allowance from this spending view.
+  const budget = budgetCents
   return {
-    budget: Number.isFinite(budget) && budget > 0 ? budget : null,
-    remaining,
-    budgetNote: null,
+    budget: budget > 0 ? budget : null,
+    remaining: budget > 0 ? budget - spent - reserved : null,
+    budgetNote: budget > 0 ? null : "No category budget linked",
   }
 }
 
@@ -447,13 +418,20 @@ export function buildOverviewData(input: {
         cumulative: value === null ? null : cumulative,
       }
     })
+    const reserved = transactionCategoryReservations(
+      input.transactions,
+      categoryIds,
+      input.cycleStart,
+      endExclusive,
+      financeThrough,
+    )
     const budget = input.sourceErrors?.budget
       ? {
           budget: null,
           remaining: null,
           budgetNote: "Budget position is unavailable",
         }
-      : budgetFor(id, categoryIds, spent, input.budget)
+      : budgetFor(id, categoryIds, spent, reserved, input.budget)
     if (spent === null && !unavailable)
       warnings.push(`${LABELS[id]} data is unavailable for this period`)
     const missingDays =
@@ -471,6 +449,7 @@ export function buildOverviewData(input: {
       id,
       label: LABELS[id],
       spent,
+      reserved,
       categoryIds,
       points,
       coverageThrough,

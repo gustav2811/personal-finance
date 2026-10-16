@@ -1,5 +1,5 @@
 begin;
-select plan(46);
+select plan(51);
 
 select has_function('finance','budget_resources','uuid, timestamptz');
 select has_function('public','budget_get_overview_v1','date, timestamptz');
@@ -170,8 +170,26 @@ begin
     'known pending preserves the unassigned remainder');
   raise notice '%', ok((r->'pending_adjustments') @> '[{"kind":"pending","amount_cents":"60000"}]'::jsonb,
     'member read exposes the bounded pending adjustment');
+  raise notice '%', ok((r->>'complete')::boolean,
+    'proved pending activity keeps the working budget complete');
+  raise notice '%', is(r->>'net_liquid_cents','1640000',
+    'working resources reserve an unreflected pending debit once');
+  raise notice '%', is(r->'pending_fund_reservations'->>'00000000-0000-4000-8000-00000000e804','-60000',
+    'proved pending purpose reserves the matched fund');
   execute 'reset role';
   update public.transactions set source_is_pending=false where id='source-read-pending';
+  perform set_config('request.jwt.claims',jsonb_build_object(
+    'sub','00000000-0000-4000-8000-00000000e803','role','authenticated')::text,true);
+  perform set_config('request.jwt.claim.sub','00000000-0000-4000-8000-00000000e803',true);
+  perform set_config('request.jwt.claim.role','authenticated',true);
+  execute 'set local role authenticated';
+  r := public.budget_get_overview_v1(date '2026-09-23','2026-09-30 12:00+00');
+  raise notice '%', ok((r->>'complete')::boolean
+    and r->'provenance'->'resources'->'warnings' @> '[{"code":"posted_awaiting_allocation"}]'::jsonb,
+    'same-source posting retains the reservation until its posted allocation exists');
+  raise notice '%', is(r->'provenance'->'resources'->'pending_fund_reservations'->>'00000000-0000-4000-8000-00000000e804','-60000',
+    'same-source posting cannot release the pending fund reservation early');
+  execute 'reset role';
   snap := finance.budget_source_snapshot('00000000-0000-4000-8000-00000000e801','source-read-pending');
   -- Direct fixture assembly follows the command path's invariant: create the
   -- set, attach every component, then write its command receipt last while

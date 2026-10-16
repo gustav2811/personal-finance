@@ -15,7 +15,17 @@ export type LiquidityAccount = {
   owner: string
   cash: string | null
   note: string | null
+  pendingReserved: string | null
 }
+
+export type PendingLiquidityReservation = {
+  id: string
+  amount: string
+  purpose: string
+  date: string | null
+}
+
+type PendingLiquidityReservationWire = PendingLiquidityReservation & { amountCents: string }
 
 export type LiquidityEntry = {
   label: string
@@ -39,6 +49,8 @@ export type LiquidityProjection = {
     label: string
     detail: string
   }
+  pendingReservations: PendingLiquidityReservation[]
+  pendingReserved: string | null
 }
 
 function money(complete: boolean, value: unknown): string | null {
@@ -85,12 +97,41 @@ function accountOf(value: unknown, members: readonly MemberRef[], complete: bool
   const record = readRecord(value)
   const id = record ? readString(record, "account_id") : null
   if (!record || !id) return null
+  const pendingReserved = parseCents(record.pending_reserved_cents ?? record.pending_reservation_cents)
+  const reported = parseCents(record.available_cents ?? record.available_after_pending_cents)
+  const posted = parseCents(record.normalized_cash_cents)
+  const available = reported ?? (posted !== null && pendingReserved !== null ? (BigInt(posted) - BigInt(pendingReserved)).toString() : posted)
   return {
     id,
     owner: ownerLabel(record, members),
-    cash: money(complete, record.normalized_cash_cents),
+    cash: money(complete, available),
     note: accountNote(readString(record, "resource_class")),
+    pendingReserved: pendingReserved === null ? null : formatCents(pendingReserved),
   }
+}
+
+function workingComplete(record: Record<string, unknown>): boolean | null {
+  if (typeof record.working_complete === "boolean") return record.working_complete
+  if (typeof record.workingComplete === "boolean") return record.workingComplete
+  return null
+}
+
+function pendingReservations(record: Record<string, unknown>): PendingLiquidityReservationWire[] {
+  const rows = [
+    ...readArray(record.pending_reservations),
+    ...readArray(record.pending_adjustments).filter((value) => readRecord(value)?.kind === "pending"),
+  ]
+  const seen = new Set<string>()
+  return rows.flatMap((value) => {
+    const row = readRecord(value)
+    if (!row) return []
+    const id = readString(row, "transaction_id") ?? readString(row, "id")
+    const amount = parseCents(row.amount_cents ?? row.amount ?? row.pending_reserved_cents)
+    if (!id || !amount || seen.has(id)) return []
+    seen.add(id)
+    const positive = amount.startsWith("-") ? amount.slice(1) : amount
+    return [{ id, amount: formatCents(positive), amountCents: positive, purpose: readString(row, "purpose") ?? readString(row, "name") ?? copy.withheld, date: readString(row, "occurred_on") ?? readString(row, "date") }]
+  })
 }
 
 function readIsoDate(value: unknown): string | null {
@@ -119,9 +160,9 @@ function entryOf(value: unknown, complete: boolean): LiquidityEntry | null {
 
 export function projectLiquidity(wire: unknown, members: readonly MemberRef[]): LiquidityProjection {
   const record = readRecord(wire) ?? {}
-  const complete = readComplete(record)
   const forecast = readRecord(record.forecast)
   const uncertainty = uncertaintyCodes(forecast?.uncertainty_reasons)
+  const complete = workingComplete(record) ?? readComplete(record)
   const accounts = readArray(record.accounts).flatMap((entry) => {
     const account = accountOf(entry, members, complete)
     return account ? [account] : []
@@ -162,5 +203,7 @@ export function projectLiquidity(wire: unknown, members: readonly MemberRef[]): 
       label: copy.moveCash,
       detail: copy.moveCashDetail,
     },
+    pendingReservations: pendingReservations(record).map(({ amountCents: _amountCents, ...row }) => row),
+    pendingReserved: pendingReservations(record).length === 0 ? null : pendingReservations(record).reduce((sum, row) => (BigInt(sum) + BigInt(row.amountCents)).toString(), "0"),
   }
 }

@@ -67,9 +67,12 @@ function whenLabel(iso: string | null): string | null {
 }
 
 function availableCents(record: Record<string, unknown>): string | null {
+  const reported = parseCents(record.available_cents ?? record.available_after_pending_cents)
+  if (reported !== null) return reported
   const restricted = parseCents(record.restricted_cents)
-  if (restricted && restricted !== "0") return parseCents(record.liquid_cents)
-  return parseCents(record.balance_cents)
+  const balance = restricted && restricted !== "0" ? parseCents(record.liquid_cents) : parseCents(record.balance_cents)
+  const pending = parseCents(record.pending_reserved_cents ?? record.pending_reservation_cents)
+  return balance !== null && pending !== null ? (BigInt(balance) - BigInt(pending)).toString() : balance
 }
 
 type SpendLine = {
@@ -280,13 +283,12 @@ export function projectRoutine(input: {
 }): HouseholdRoutine {
   const overview = readRecord(input.overview) ?? {}
   const liquidity = readRecord(input.liquidity) ?? {}
-  const complete = readComplete(overview)
   const codes = [...readReasons(overview.reasons), ...readReasons(liquidity.reasons)].map((reason) => reason.code)
   const reasonLabels = [...new Set(codes.map((code) => reasonSentence(code)))]
   const view = projectBudget({ ...input, filter: { kind: "household" } })
   const attention = attentionAnswer(input.review, input.members)
   return {
-    spend: spendAnswer(overview, complete, reasonLabels),
+    spend: spendAnswer(overview, view.complete, reasonLabels),
     cash: cashAnswer(view),
     attention,
     agreement: codes.includes("plan_missing")

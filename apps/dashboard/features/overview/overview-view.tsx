@@ -65,7 +65,7 @@ export function OverviewBody({
             const Icon = ICONS[item.id]
             const percentage =
               item.budget !== null && item.budget > 0 && item.spent !== null
-                ? Math.max(0, (item.spent / item.budget) * 100)
+                ? Math.max(0, ((item.spent + item.reserved) / item.budget) * 100)
                 : null
             return (
               <Button
@@ -92,6 +92,11 @@ export function OverviewBody({
                   {item.dataNote ? (
                     <span className="type-caption text-warning">
                       {item.dataNote}
+                    </span>
+                  ) : null}
+                  {item.reserved > 0 ? (
+                    <span className="type-caption text-muted-foreground">
+                      {formatMoney(item.reserved)} pending · included in left
                     </span>
                   ) : null}
                 </span>

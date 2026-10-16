@@ -95,6 +95,7 @@ function LiquidityBody({ view }: { view: LiquidityProjection }) {
                   <TableCell>
                     <p>{account.owner}</p>
                     {account.note ? <p className="type-caption text-muted-foreground">{account.note}</p> : null}
+                    {account.pendingReserved ? <p className="type-caption text-muted-foreground">{copy.pendingReserved}: {account.pendingReserved}</p> : null}
                   </TableCell>
                   <TableCell className="type-numeric text-right">{shownAmount(account.cash)}</TableCell>
                 </TableRow>
@@ -106,6 +107,19 @@ function LiquidityBody({ view }: { view: LiquidityProjection }) {
           {copy.cardDebt}: <span className="type-numeric text-foreground">{shownAmount(view.cardDebt.amount)}</span>
           . {copy.cardDebtDetail}
         </p>
+        {view.pendingReservations.length > 0 ? (
+          <div className="mt-3 rounded-lg border px-4 py-3">
+            <p className="type-body-small">{copy.pendingReservationsDetail}</p>
+            <ul className="mt-2 space-y-1">
+              {view.pendingReservations.map((reservation) => (
+                <li className="type-caption flex justify-between gap-4" key={reservation.id}>
+                  <span>{reservation.purpose}{reservation.date ? ` · ${reservation.date}` : ""}</span>
+                  <span className="type-numeric">{reservation.amount}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </Section>
 
       <Section description={copy.forecastDetail} title={copy.forecast}>
