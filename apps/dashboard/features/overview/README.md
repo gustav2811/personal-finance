@@ -36,8 +36,9 @@ client:
   to `posted_at` only when the incurred date is missing, as Utilities does.
   Only ZAR debit `usage_charge` entries with `utility_type = electricity`
   contribute to incurred usage cost.
-- Budget reads call `budget_get_overview_v1` with an as-of timestamp clamped to
-  the period end, then follow cursor-paginated `budget_get_actuals_v1` pages.
+- Budget reads select the published plan version that applies to the period and
+  fetch its lines directly. Reconciliation, liquidity, and allocation checks
+  stay on the Budget page and do not block category positions on Overview.
 
 Financial spend excludes archived, pending, transfer, and explicitly excluded
 rows. Recognised `refund` and `card_refund` treatment natures offset spend.

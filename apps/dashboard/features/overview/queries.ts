@@ -28,11 +28,6 @@ function utcBoundary(date: string): string {
 function cycleEnd(start: string): string {
   return addMonths(start, 1)
 }
-export function budgetAsOf(endExclusive: string, fetchedAt: Date): string {
-  const end = new Date(`${endExclusive}T00:00:00+02:00`).getTime() - 1
-  return new Date(Math.min(fetchedAt.getTime(), end)).toISOString()
-}
-
 export async function readLedger(
   cycleStart: string,
   endExclusive: string,
@@ -100,76 +95,75 @@ export async function readFinancePages(
   }
 }
 
-type ActualsPage = {
-  entries: unknown[]
-  nextCursor: string | null
-  complete: boolean
-}
-function actualsPage(value: unknown): ActualsPage {
-  const record =
-    value && typeof value === "object" && !Array.isArray(value)
-      ? (value as Record<string, unknown>)
-      : {}
-  return {
-    entries: Array.isArray(record.entries) ? record.entries : [],
-    nextCursor:
-      typeof record.next_cursor === "string" && record.next_cursor.length > 0
-        ? record.next_cursor
-        : null,
-    complete: record.complete === true,
-  }
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {}
 }
 
-export async function readBudgetActualsPages(
-  fetchPage: (cursor: string | null) => Promise<ActualsPage>,
-): Promise<{ entries: unknown[]; complete: boolean }> {
-  const entries: unknown[] = []
-  const seen = new Set<string>()
-  let cursor: string | null = null
-  let complete = true
-  while (true) {
-    const page = await fetchPage(cursor)
-    entries.push(...page.entries)
-    complete = complete && page.complete
-    if (!page.nextCursor) return { entries, complete }
-    if (seen.has(page.nextCursor))
-      throw new Error("The budget actuals returned a repeated cursor.")
-    seen.add(page.nextCursor)
-    cursor = page.nextCursor
-  }
+export function publishedVersionForCycle(
+  versions: unknown[],
+  cycleStart: string,
+): Record<string, unknown> | null {
+  const eligible = versions
+    .map(record)
+    .filter(
+      (version) =>
+        version.state === "published" &&
+        typeof version.version_id === "string" &&
+        typeof version.starts_on_cycle === "string" &&
+        version.starts_on_cycle <= cycleStart,
+    )
+  eligible.sort((a, b) => {
+    const startOrder = String(b.starts_on_cycle).localeCompare(
+      String(a.starts_on_cycle),
+    )
+    if (startOrder !== 0) return startOrder
+    return String(b.published_at ?? "").localeCompare(
+      String(a.published_at ?? ""),
+    )
+  })
+  return eligible[0] ?? null
 }
 
 export async function readBudget(
   cycleStart: string,
-  endExclusive = cycleEnd(cycleStart),
+  _endExclusive = cycleEnd(cycleStart),
   fetchedAt = new Date(),
 ): Promise<BudgetSource> {
   if (cycleStart > currentCycle(fetchedAt).start) return { future: true }
   const client = getBrowserClient()
-  const asOf = budgetAsOf(endExclusive, fetchedAt)
-  const { data, error } = await client.rpc(
-    "budget_get_overview_v1" as never,
-    { p_cycle_start: cycleStart, p_as_of: asOf } as never,
+  const { data: versionList, error: listError } = await client.rpc(
+    "budget_list_versions_v1" as never,
+    { p_cursor: null, p_limit: 200 } as never,
   )
-  if (error) throw new Error("Unable to read the budget position.")
-  const actuals = await readBudgetActualsPages(async (cursor) => {
-    const { data: page, error: pageError } = await client.rpc(
-      "budget_get_actuals_v1" as never,
-      {
-        p_filters: { from: cycleStart, to: endExclusive },
-        p_cursor: cursor,
-        p_limit: 200,
-      } as never,
-    )
-    if (pageError) throw new Error("Unable to read budget actuals.")
-    return actualsPage(page)
-  })
-  const overview =
-    data && typeof data === "object" ? (data as BudgetSource) : {}
+  if (listError) throw new Error("Unable to read published budget plans.")
+  const versionListRecord = record(versionList)
+  const version = publishedVersionForCycle(
+    Array.isArray(versionListRecord.versions) ? versionListRecord.versions : [],
+    cycleStart,
+  )
+  if (!version)
+    throw new Error("No published budget plan applies to this period.")
+  const { data, error } = await client.rpc(
+    "budget_get_version_v1" as never,
+    { p_version_id: version.version_id } as never,
+  )
+  if (error) throw new Error("Unable to read the published budget plan.")
+  const plan = record(record(data).version)
+  const lines = Array.isArray(plan.lines) ? plan.lines : []
+  const funds = new Map<string, { fund_id: string; name: string }>()
+  for (const value of lines) {
+    const line = record(value)
+    if (typeof line.fund_id === "string")
+      funds.set(line.fund_id, {
+        fund_id: line.fund_id,
+        name: typeof line.name === "string" ? line.name : "",
+      })
+  }
   return {
-    ...overview,
-    actuals: actuals.entries,
-    actualsComplete: actuals.complete,
+    current_plan: plan,
+    funds: [...funds.values()],
   }
 }
 

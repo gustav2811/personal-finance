@@ -3,10 +3,9 @@ import { describe, it } from "node:test"
 import type { TransactionFeedItem } from "@/lib/finance/transaction-model"
 import type { LedgerRead } from "@/lib/supabase/rows"
 import {
-  budgetAsOf,
   loadOverviewDataWithReaders,
-  readBudgetActualsPages,
   readFinancePages,
+  publishedVersionForCycle,
   type OverviewReaders,
 } from "./queries"
 
@@ -102,43 +101,22 @@ describe("overview source loading", () => {
       /repeated cursor/,
     )
   })
-  it("reads every actuals page and fails on a repeated cursor", async () => {
-    let calls = 0
-    const actuals = await readBudgetActualsPages(async () => {
-      calls += 1
-      return calls === 1
-        ? {
-            entries: [{ allocation_id: "one" }],
-            nextCursor: "next",
-            complete: true,
-          }
-        : {
-            entries: [{ allocation_id: "two" }],
-            nextCursor: null,
-            complete: true,
-          }
-    })
-    assert.equal(actuals.entries.length, 2)
-    assert.equal(actuals.complete, true)
-    await assert.rejects(
-      () =>
-        readBudgetActualsPages(async () => ({
-          entries: [],
-          nextCursor: "same",
-          complete: true,
-        })),
-      /repeated cursor/,
-    )
-  })
-  it("caps historical budget reads at the Johannesburg end-of-period boundary", () => {
+  it("selects the published plan that applies to the selected cycle", () => {
+    const versions = [
+      { version_id: "old", state: "published", starts_on_cycle: "2026-08-23" },
+      { version_id: "draft", state: "draft", starts_on_cycle: "2026-09-23" },
+      { version_id: "current", state: "published", starts_on_cycle: "2026-09-23" },
+      { version_id: "future", state: "published", starts_on_cycle: "2026-10-23" },
+    ]
     assert.equal(
-      budgetAsOf("2026-09-23", new Date("2026-10-15T12:00:00Z")),
-      "2026-09-22T21:59:59.999Z",
+      publishedVersionForCycle(versions, "2026-09-23")?.version_id,
+      "current",
     )
     assert.equal(
-      budgetAsOf("2026-10-23", new Date("2026-10-15T12:00:00Z")),
-      "2026-10-15T12:00:00.000Z",
+      publishedVersionForCycle(versions, "2026-08-23")?.version_id,
+      "old",
     )
+    assert.equal(publishedVersionForCycle(versions, "2026-07-23"), null)
   })
   it("keeps the four finance cards when utility or budget reads fail", async () => {
     const data = await loadOverviewDataWithReaders(
