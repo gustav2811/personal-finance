@@ -170,6 +170,64 @@ describe("overview model", () => {
       null,
     )
   })
+  it("does not warn for the latest closed utility day while its daily close arrives", () => {
+    const nextDay = (date: string) => {
+      const next = new Date(`${date}T12:00:00Z`)
+      next.setUTCDate(next.getUTCDate() + 1)
+      return next.toISOString().slice(0, 10)
+    }
+    const ledgerThrough = (missingDay?: string) => {
+      const entries: LedgerRead[] = []
+      for (
+        let date = "2026-09-23";
+        date <= "2026-10-14";
+        date = nextDay(date)
+      ) {
+        if (date === missingDay) continue
+        entries.push(
+          ledger({
+            id: date,
+            occurred_at: `${date}T00:00:00+02:00`,
+          }),
+        )
+      }
+      return entries
+    }
+    const input = {
+      cycleStart: "2026-09-23",
+      now: new Date("2026-10-16T17:30:00Z"),
+      categories: [],
+      transactions: [],
+      budget: {},
+    }
+    const currentGap = buildOverviewData({
+      ...input,
+      ledgerEntries: ledgerThrough(),
+    })
+    const electricity = currentGap.items.find(
+      (item) => item.id === "electricity",
+    )!
+    assert.equal(electricity.dataNote, undefined)
+    assert.equal(
+      electricity.points.find((point) => point.date === "2026-10-15")?.daily,
+      null,
+    )
+    assert.equal(
+      currentGap.warnings.some((warning) =>
+        warning.includes("usage day missing"),
+      ),
+      false,
+    )
+
+    const olderGap = buildOverviewData({
+      ...input,
+      ledgerEntries: ledgerThrough("2026-10-10"),
+    })
+    assert.match(
+      olderGap.items.find((item) => item.id === "electricity")?.dataNote ?? "",
+      /1 usage day missing/,
+    )
+  })
   it("does not attribute a shared utilities fund to electricity", () => {
     const data = buildOverviewData({
       cycleStart: "2026-09-23",

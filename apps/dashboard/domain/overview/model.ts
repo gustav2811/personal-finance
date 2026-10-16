@@ -436,7 +436,7 @@ export function buildOverviewData(input: {
       warnings.push(`${LABELS[id]} data is unavailable for this period`)
     const missingDays =
       utility && !unavailable && spent !== null
-        ? days.filter((date) => date <= through && !daily.has(date)).length
+        ? days.filter((date) => date < through && !daily.has(date)).length
         : 0
     const dataNote = missingDays
       ? `${missingDays} usage ${missingDays === 1 ? "day" : "days"} missing · known charges only`
