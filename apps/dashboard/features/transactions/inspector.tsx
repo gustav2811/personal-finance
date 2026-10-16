@@ -2,13 +2,13 @@
 
 import { useEffect, useState, useRef, useImperativeHandle, type Ref, type ReactNode } from "react"
 import { ArrowLeftRight, Copy } from "lucide-react"
+import { Combobox as ComboboxPrimitive } from "@base-ui/react/combobox"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import {
   Combobox,
-  ComboboxContent,
   ComboboxEmpty,
   ComboboxInput,
   ComboboxItem,
@@ -59,6 +59,7 @@ export function Inspector({
   undo: boolean
   budget?: ReactNode
 }) {
+  const [popupContainer, setPopupContainer] = useState<HTMLDivElement | null>(null)
   const pending = saving || readOnly
   const [isTransfer, setIsTransfer] = useState<boolean | null>(item.treatment.isTransfer)
   const [excludeFromSpend, setExcludeFromSpend] = useState<boolean | null>(
@@ -144,7 +145,7 @@ export function Inspector({
   const lines = provenanceLines(item, inspection)
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+    <div ref={setPopupContainer} className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="flex shrink-0 items-start gap-2 pb-3">
         <h2 className="min-w-0 flex-1 text-base font-medium text-balance">{subject(item)}</h2>
         <Button aria-label="Copy description" onClick={() => void copyDescription()} size="icon-sm" variant="ghost">
@@ -185,32 +186,38 @@ export function Inspector({
               placeholder="Uncategorised"
               showClear={false}
             />
-            {/* The popup is portalled outside Radix Dialog, whose modal layer disables outside mouse events. */}
-            <ComboboxContent className="pointer-events-auto">
-              <ComboboxEmpty>{ranking ? "Matching…" : "No category"}</ComboboxEmpty>
-              <ComboboxList>
-                {(category: CategoryOption) => {
-                  const probability = probabilityById.get(category.id)
-                  return (
-                    <ComboboxItem key={category.id} value={category}>
-                      <span className="flex min-w-0 flex-1 items-baseline gap-2">
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate">{category.name}</span>
-                          {category.group ? (
-                            <span className="type-caption block truncate text-muted-foreground">{category.group}</span>
-                          ) : null}
-                        </span>
-                        {probability != null && probability >= 0.01 ? (
-                          <span className="type-caption shrink-0 text-muted-foreground tabular-nums">
-                            {Math.round(probability * 100)}%
-                          </span>
-                        ) : null}
-                      </span>
-                    </ComboboxItem>
-                  )
-                }}
-              </ComboboxList>
-            </ComboboxContent>
+            {/* Keep the popup inside the editor so the modal focus trap includes its options. */}
+            {popupContainer && (
+              <ComboboxPrimitive.Portal container={popupContainer}>
+                <ComboboxPrimitive.Positioner sideOffset={6} collisionBoundary={popupContainer} className="z-50">
+                  <ComboboxPrimitive.Popup className="max-h-[min(18rem,var(--available-height))] w-[var(--anchor-width)] overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md">
+                    <ComboboxEmpty>{ranking ? "Matching…" : "No category"}</ComboboxEmpty>
+                    <ComboboxList>
+                      {(category: CategoryOption) => {
+                        const probability = probabilityById.get(category.id)
+                        return (
+                          <ComboboxItem key={category.id} value={category}>
+                            <span className="flex min-w-0 flex-1 items-baseline gap-2">
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate">{category.name}</span>
+                                {category.group ? (
+                                  <span className="type-caption block truncate text-muted-foreground">{category.group}</span>
+                                ) : null}
+                              </span>
+                              {probability != null && probability >= 0.01 ? (
+                                <span className="type-caption shrink-0 text-muted-foreground tabular-nums">
+                                  {Math.round(probability * 100)}%
+                                </span>
+                              ) : null}
+                            </span>
+                          </ComboboxItem>
+                        )
+                      }}
+                    </ComboboxList>
+                  </ComboboxPrimitive.Popup>
+                </ComboboxPrimitive.Positioner>
+              </ComboboxPrimitive.Portal>
+            )}
           </Combobox>
         </div>
         {item.event ? (
